@@ -73,7 +73,7 @@ export class Board {
     const fromSockets = this.ctx.getWebSockets()
       .map(ws => { try { return (ws.deserializeAttachment() || {}).tv; } catch { return null; } })
       .filter(v => v !== null && v !== undefined);
-    const fromPolls = Object.keys(seen).filter(k => now - seen[k] < 12000).map(Number);
+    const fromPolls = Object.keys(seen).filter(k => now - seen[k] < 20000).map(Number);
     return [...new Set([...fromSockets.map(Number), ...fromPolls])]
       .filter(n => !isNaN(n)).sort((a, b) => a - b);
   }

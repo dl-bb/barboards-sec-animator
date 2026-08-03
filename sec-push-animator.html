@@ -494,6 +494,9 @@ var LINK = (function(){
     on:function(){ return !!this.url && !!this.room; }
   };
   var cli=null, ws=null, timer=null, onState=null, hello=null, retry=0, seen={}, queued=null;
+  var reports={};                       /* per-output self-report, keyed by tv index */
+  api.reports=function(){ return reports; };
+  api.report=null;                      /* an output installs this to describe itself */
 
   function isMQTT(u){ return /^(wss?|mqtts?):\/\//i.test(u); }
   function topic(sub){ return "barboards/"+api.room+"/"+sub; }
@@ -505,9 +508,15 @@ var LINK = (function(){
     api.seq=s.seq;
     if(onState) onState(s);
   }
+  /* Heartbeat is 3 s but the window is 20 s: a browser that has backgrounded an
+     output throttles its timers hard, and such a screen is still rendering
+     correctly — only reporting slowly. Dropping it off the panel after one
+     missed beat would cry wolf. */
   function pruneSeen(){
     var now=Date.now(), out=[];
-    Object.keys(seen).forEach(function(k){ if(now-seen[k]<9000) out.push(+k); });
+    Object.keys(seen).forEach(function(k){
+      if(now-seen[k]<20000) out.push(+k); else delete reports[k];
+    });
     api.outputs=out.sort(function(a,b){ return a-b; });
   }
 
@@ -529,7 +538,16 @@ var LINK = (function(){
     cli.onmessage=function(t,payload){
       var m; try{ m=JSON.parse(payload); }catch(e){ return; }
       if(t===topic("state")) rx(m,"mqtt");
-      else if(t===topic("hello")&&m&&m.tv!==undefined){ seen[m.tv]=Date.now(); pruneSeen(); }
+      else if(t===topic("hello")&&m&&m.tv!==undefined){
+        var rxAt=Date.now();
+        seen[m.tv]=rxAt;
+        /* offset is (their clock - mine) and INCLUDES one-way transit, so it is
+           an upper bound on skew, not a measurement of it. Good enough to catch
+           a device whose clock is minutes out; not a substitute for NTP. */
+        reports[m.tv]={t:m.t,offset:m.t?m.t-rxAt:null,ms:m.ms,u:m.u,ev:m.ev,
+                       period:m.period,rxAt:rxAt};
+        pruneSeen();
+      }
     };
     cli.onclose=function(){
       api.status="down";
@@ -541,7 +559,13 @@ var LINK = (function(){
     clearInterval(timer);
     timer=setInterval(function(){
       if(role==="tv"&&cli&&cli.connected)
-        cli.publish(topic("hello"), JSON.stringify({tv:hello,t:Date.now()}), false);
+        /* an output reports its own clock and its own position in the loop, so
+           the control panel can verify the wall is actually in step instead of
+           the operator having to take it on faith. A device with a wrong clock
+           is the ONE fault that genuinely desyncs this system — nothing else
+           can — so it has to be visible from the panel. */
+        cli.publish(topic("hello"), JSON.stringify(
+          Object.assign({tv:hello,t:Date.now()}, api.report?api.report():{})), false);
       if(role==="control") pruneSeen();
     }, 3000);
   }
@@ -2213,6 +2237,7 @@ function bootTV(){
      that is the case for a retained message replayed to a screen that just
      powered on, which should join immediately. */
   var pending=null, appliedAt=0, scheduledAt=0, applyErr=0;
+  var trace=[], TRACE_MAX=600;
   function applyState(s){
     /* recorded so an operator can prove the wall switched together: every output
        aims at the same `at`, and applyErr is how far this one actually missed it */
@@ -2250,6 +2275,13 @@ function bootTV(){
       }, dt);
     }else applyState(s);          /* already due — a retained message, usually */
   }
+  /* What this output tells the control panel about itself every few seconds.
+     ms/u are recomputed here rather than read from the last painted frame, so a
+     throttled tab still reports the truth about where it OUGHT to be. */
+  LINK.report=function(){
+    return {ms:Math.round(loopPos(ev.d)), u:+cl(loopPos(ev.d)/ev.d,0,1).toFixed(4),
+            ev:ev.id, period:ev.d+REST, vis:document.hidden?0:1};
+  };
   LINK.start("tv", rawIdx+1, arm);
   /* Coming back from hidden: settle any switch whose moment passed while the
      timer was throttled, then let the clock put us on the right frame. */
@@ -2298,6 +2330,8 @@ function bootTV(){
   });
 
   window.__BB={ LINK:LINK,
+                trace:function(){ return trace.slice(); },
+                epoch:function(){ return {EPOCH:EPOCH,REST:REST,SKEW:SKEW,period:period,d:ev.d}; },
                 seek:function(t){ hold=t; return paint(cl(t,0,period)); },
                 play:function(){ hold=null; },
                 set:function(o){ o=o||{};
@@ -2342,6 +2376,10 @@ function bootTV(){
     var f=frameAt(ev,L,p);
     paintCanvas(can,f.layers,W,H);
     paintScreen(ov, f.screens?f.screens[tvIdx]:null, SW, SH);
+    /* A ring buffer of frames ACTUALLY PAINTED, so sync can be checked against
+       what reached the glass rather than against what the maths intended. */
+    trace.push({t:Date.now(),ms:Math.round(p),u:+f.u.toFixed(5),ev:ev.id});
+    if(trace.length>TRACE_MAX) trace.shift();
     if(document.body.classList.contains("diag")){
       diag.textContent =
         "event   "+ev.id+"  ("+ev.name+")\n"+
@@ -2670,20 +2708,47 @@ function bootApp(){
                              down:"var(--tally)",off:"var(--dimmer)"}[st]||"var(--dimmer)";
     document.getElementById("linkStat").innerHTML=
       '<span style="color:'+dot+'">●</span> '+st+(LINK.mode!=="off"?(" · "+LINK.mode):"");
-    var live=LINK.outputs, n=state.L.cells.length, i, h="";
+    var live=LINK.outputs, rep=LINK.reports(), n=state.L.cells.length, i, h="";
+    /* Every output reports where it thinks it is in the loop. Because position is
+       a pure function of the clock, all of them must agree — so the spread across
+       outputs IS the sync error, measured rather than asserted. */
+    var drift=[], evs={};
+    live.forEach(function(v){
+      var R=rep[v]; if(!R||!R.period||R.ms===undefined) return;
+      evs[R.ev]=1;
+      var expect=((R.t-EPOCH)%R.period+R.period)%R.period;
+      var d=R.ms-expect; if(d>R.period/2) d-=R.period; if(d<-R.period/2) d+=R.period;
+      drift.push({tv:v,d:d,off:R.offset});
+    });
     for(i=1;i<=n;i++){
-      var on=live.indexOf(i)>=0;
-      h+='<span class="outdot'+(on?" on":"")+'" title="output '+i+(on?" · live":" · not seen")+'">'+i+'</span>';
+      var on=live.indexOf(i)>=0, R=rep[i];
+      var t="output "+i+(on?" · live":" · not seen");
+      if(R) t+="\nloop "+R.ms+" ms\nclock offset "+(R.offset>=0?"+":"")+R.offset+" ms (incl. transit)";
+      h+='<span class="outdot'+(on?" on":"")+'" title="'+t+'">'+i+'</span>';
     }
-    var extra=live.filter(function(v){ return v>n; });
-    extra.forEach(function(v){ h+='<span class="outdot warnx" title="output '+v+
-      ' is live but has no cell in this layout">'+v+'</span>'; });
+    live.filter(function(v){ return v>n; }).forEach(function(v){
+      h+='<span class="outdot warnx" title="output '+v+
+        ' is live but has no cell in this layout">'+v+'</span>'; });
     document.getElementById("outs").innerHTML=h||'<span class="lb">no outputs</span>';
+    var syncTxt="";
+    if(drift.length){
+      var maxd=0, maxo=0;
+      drift.forEach(function(x){ maxd=Math.max(maxd,Math.abs(x.d));
+                                 maxo=Math.max(maxo,Math.abs(x.off||0)); });
+      var agree=Object.keys(evs).length<=1;
+      syncTxt='<div style="margin-top:5px">frame spread <b style="color:'+
+        (maxd<50?"var(--good)":"var(--tally)")+'">±'+Math.round(maxd)+' ms</b>'+
+        ' · clock offset <b style="color:'+(maxo<400?"var(--good)":"var(--tally)")+'">±'+
+        Math.round(maxo)+' ms</b>'+
+        ' · cue '+(agree?'<b style="color:var(--good)">agreed</b>'
+                        :'<b style="color:var(--tally)">SPLIT</b>')+'</div>';
+    }
     var ms=armedUntil-Date.now();
     document.getElementById("linkNote").innerHTML =
       (ms>0 ? '<b style="color:var(--cue)">arming — outputs switch in '+Math.max(0,Math.round(ms))+' ms</b>'
             : (live.length? '<b>'+live.length+'</b> output'+(live.length===1?"":"s")+' listening · seq '+LINK.seq
                           : 'No outputs have checked in yet. Open a TV URL below.'))+
+      syncTxt+
       '<div style="margin-top:5px">Public broker — the room code is the only thing keeping strangers off '+
       'your wall. Deploy <code>worker/</code> and paste its https URL as the broker when this stops '+
       'being a prototype.</div>';
