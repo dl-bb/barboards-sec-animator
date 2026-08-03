@@ -49,8 +49,25 @@ input[type=range]{accent-color:var(--cue);height:16px}
 .hd{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--hair);background:#0E0B0A;flex:none}
 .hd h2{font-size:12.5px;letter-spacing:.02em}
 
+/* ══ school picker ══ */
+.teamgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:7px 8px;
+  border-bottom:1px solid var(--hair);background:#0C0A09;flex:none}
+.tchip{font-family:Anton,sans-serif;font-size:11px;letter-spacing:.01em;text-transform:uppercase;
+  border:1px solid transparent;padding:6px 0;border-radius:2px;cursor:pointer;opacity:.5;
+  transition:opacity .12s,box-shadow .12s;position:relative}
+.tchip:hover{opacity:.85}
+.tchip.on{opacity:1;box-shadow:inset 0 0 0 2px #fff, 0 0 0 1px var(--cue)}
+.tchip.opp{opacity:.9;box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}
+.tchip.opp::after{content:"";position:absolute;left:3px;bottom:2px;width:4px;height:4px;
+  border-radius:50%;background:rgba(255,255,255,.8)}
+.opprow{display:flex;align-items:center;gap:6px;padding:6px 9px;border-bottom:1px solid var(--hair);
+  background:#0C0A09;flex:none}
+.opprow select{flex:1;min-width:0}
+.grphd{font-family:"IBM Plex Mono",monospace;font-size:7.5px;letter-spacing:.19em;text-transform:uppercase;
+  color:var(--dimmer);padding:8px 10px 3px;background:#0C0A09;border-bottom:1px solid #191412;
+  position:sticky;top:0;z-index:2}
+
 /* ══ event list ══ */
-.filters{display:flex;flex-wrap:wrap;gap:3px;padding:7px 10px;border-bottom:1px solid var(--hair);background:#0C0A09}
 .chip{font-family:"IBM Plex Mono",monospace;font-size:8px;letter-spacing:.1em;text-transform:uppercase;
   background:#17120F;border:1px solid #2A211C;color:var(--dimmer);padding:3px 6px;border-radius:2px;cursor:pointer}
 .chip:hover{color:var(--bone)}
@@ -73,13 +90,17 @@ input[type=range]{accent-color:var(--cue);height:16px}
 
 /* ══ stage ══ */
 .stagewrap{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;min-height:0;position:relative}
-.stage{position:relative}
-.scr{position:absolute;background:#000;overflow:hidden;border-radius:2px;
-  box-shadow:0 0 0 2px #191512, 0 0 0 3px #2C2420, 0 8px 22px rgba(0,0,0,.6)}
+.stage{position:relative;box-shadow:0 0 0 1px #2C2420, 0 10px 30px rgba(0,0,0,.55)}
+/* Screens butt pixel to pixel. Every edge treatment is INSET so it costs no width
+   and cannot bleed onto a neighbour — the wall is a continuous surface. */
+.scr{position:absolute;background:#000;overflow:hidden}
+.stage.seams .scr{box-shadow:inset 0 0 0 1px rgba(150,132,118,.42)}
 .scr .canvas{position:absolute;overflow:hidden;transform:translateZ(0)}
-.scr .plate{position:absolute;left:0;right:0;bottom:-15px;text-align:center;
-  font-family:"IBM Plex Mono",monospace;font-size:7px;letter-spacing:.14em;color:#5A4E45;pointer-events:none}
-.scr.hi{box-shadow:0 0 0 2px var(--cue), 0 0 0 3px #2C2420, 0 8px 22px rgba(0,0,0,.6)}
+.scr .plate{position:absolute;left:0;right:0;bottom:2px;text-align:center;
+  font-family:"IBM Plex Mono",monospace;font-size:7px;letter-spacing:.14em;color:rgba(200,186,172,.30);
+  pointer-events:none;opacity:0;transition:opacity .15s}
+.stage.plates .scr .plate{opacity:1}
+.scr.hi{box-shadow:inset 0 0 0 2px var(--cue)!important;z-index:6}
 .L{position:absolute;pointer-events:none;will-change:transform,opacity}
 .L-word{font-family:Anton,"Arial Narrow",sans-serif;text-transform:uppercase;white-space:nowrap;line-height:.82;
   transform-origin:50% 50%}
@@ -176,20 +197,34 @@ body.diag #tvdiag{display:block}
   <span class="lb" style="color:#3A2D25">|</span>
   <label class="lb">Layout</label>
   <select id="selLayout"></select>
-  <label class="lb">Preview</label>
-  <button class="btn on" id="bPlay">Pause</button>
-  <button class="btn" id="bBezel">Bezels</button>
+  <label class="lb">Bezel gap</label>
+  <select id="selGap" title="Gap between panels, in screen widths. 0 = video wall, pixel to pixel.">
+    <option value="0">0 · pixel to pixel</option>
+    <option value="0.02">0.02 · hairline</option>
+    <option value="0.06">0.06 · thin bezel</option>
+    <option value="0.12">0.12 · thick bezel</option>
+    <option value="0.9">0.9 · spaced apart</option>
+  </select>
   <div class="sp"></div>
+  <button class="btn on" id="bPlay">Pause</button>
+  <button class="btn on" id="bSeams">Seams</button>
+  <button class="btn" id="bPlates">Labels</button>
   <span class="lb" id="clk">wall clock —</span>
   <button class="btn" id="bOpen">Open all TVs</button>
 </header>
 
 <div class="wrap">
 
-  <!-- ══ left: the 50 events ══ -->
+  <!-- ══ left: the two axes — school, then event type ══ -->
   <section class="col">
-    <div class="hd"><h2>Push events</h2><span class="lb" id="evcount">50</span></div>
-    <div class="filters" id="filters"></div>
+    <div class="hd"><h2>School</h2><span class="lb" id="schoolName">—</span></div>
+    <div class="teamgrid" id="teamgrid"></div>
+    <div class="opprow">
+      <span class="lb">vs</span>
+      <select id="selOpp"></select>
+      <button class="btn" id="bRival" title="Reset to the in-conference rivalry">rival</button>
+    </div>
+    <div class="hd"><h2>Push event</h2><span class="lb" id="evcount">—</span></div>
     <div class="scroll" id="evlist"></div>
   </section>
 
@@ -226,7 +261,12 @@ body.diag #tvdiag{display:block}
 
     <div class="sect">
       <div class="secthd"><h3>Sportradar push event</h3><span class="k">NCAAFB</span></div>
-      <div class="sectbody"><pre class="json" id="jsonBox">—</pre></div>
+      <div class="sectbody">
+        <div class="note" style="margin-bottom:7px;font-size:10px">Player names are
+          <b>synthetic</b> and deterministic per school — the payload reads like the feed
+          without attributing a play to a real player.</div>
+        <pre class="json" id="jsonBox">—</pre>
+      </div>
     </div>
 
     <div class="sect">
@@ -265,8 +305,12 @@ body.diag #tvdiag{display:block}
       <div class="sectbody">
         <dl class="kv">
           <dt>tv</dt><dd>1-based output index. Omit for the control room.</dd>
-          <dt>event</dt><dd>event id, e.g. <code>td-tex</code></dd>
+          <dt>event</dt><dd>event <b>type</b>, e.g. <code>td</code>, <code>pick6</code>, <code>chant</code></dd>
+          <dt>team</dt><dd>school, e.g. <code>TEX</code>. The two are independent.</dd>
+          <dt>opp</dt><dd>opponent. Defaults to the school's rival.</dd>
           <dt>layout</dt><dd>layout id, e.g. <code>row4</code></dd>
+          <dt>gap</dt><dd>bezel gap in screen widths. <code>0</code> = pixel to pixel.
+            Must match on every output in a wall.</dd>
           <dt>t0</dt><dd>epoch override in ms. Same value everywhere = same phase.</dd>
           <dt>rest</dt><dd>ms of lockup between loops. Default 2500.</dd>
           <dt>skew</dt><dd>per-device offset in ms, + runs ahead.</dd>
@@ -310,6 +354,14 @@ var Q = readParams();
 var EPOCH = +(Q.get("t0") || EPOCH_DEFAULT);
 var SKEW  = +(Q.get("skew") || 0);
 var REST  = Q.has("rest") ? +Q.get("rest") : 2500;
+
+/* Bezel gap, in 16×9 cell units, where 1.0 is a whole screen width.
+   0 = a true video wall: panels butt pixel to pixel and the canvas has no hidden
+   columns, so nothing is lost between outputs. Raise it only if the real screens
+   have physical bezels worth rendering behind. It is part of the canvas geometry,
+   so every output in a wall must carry the same value. */
+var GAP_DEFAULT = 0;
+var GAP = Q.has("gap") ? Math.max(0, Math.min(2, +Q.get("gap")||0)) : GAP_DEFAULT;
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -486,208 +538,274 @@ VAN:{ ab:"VAN", name:"Vanderbilt", nick:"Commodores",
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
-   2 · THE 50 EVENTS
-   16 touchdowns (one per school) · 16 chants (one per school) ·
-   18 rungs of the §8.4 event ladder, one school each.
-   amp / win / tier / reg come straight from the ladder. `sr` carries the
-   fields that actually distinguish the push event.
+   2 · EVENT TYPES × SCHOOLS
+   A push event has two independent axes: what happened, and who it happened to.
+   TYPES carries the first — the situation, the ladder numbers from §8.4 and the
+   Sportradar fields. TEAMS carries the second. makeEvent() crosses them, so all
+   20 types are available for all 16 schools against any opponent: 20 × 16 × 16,
+   not 50 welded rows.
    ══════════════════════════════════════════════════════════════════════════ */
-function td(id,tm,opp,hs,as,cl,per,pt,yds,desc,sr){
-  return {id:id,team:tm,opp:opp,hs:hs,as:as,clock:cl,period:per,grp:"td",cue:"runacross",d:8000,
-    name:TEAMS[tm].td, sub:TEAMS[tm].call, amp:75,win:150,tier:3,reg:"celebratory",
-    cat:"scoring_play", type:null, play:pt, yards:yds, desc:desc,
-    sr:Object.assign({scoring_play:true,"details.category":"touchdown",points:6},sr||{})};
+
+/* Default opponent per school — the in-conference rivalry. Overridable. */
+var RIVAL = {ALA:"AUB", ARK:"LSU", AUB:"ALA", FLA:"UGA", UGA:"FLA", UK:"TENN",
+             LSU:"ALA", MSST:"MISS", MIZ:"ARK", OU:"TEX", MISS:"MSST", SCAR:"UGA",
+             TENN:"ALA", TEX:"OU", TAMU:"LSU", VAN:"TENN"};
+
+/* Play descriptions need names. These are SYNTHETIC and deterministic — the same
+   school and slot always yield the same name — so a payload reads like the real
+   feed without putting a play in a real player's mouth.
+   Slots: 0 QB · 1 RB · 2 WR · 3 K · 4 DB · 5 LB · 6 DL · 7 returner. */
+var SURNAMES=["Alvarez","Bennett","Caldwell","Dupree","Ellison","Fontaine","Granger",
+  "Hollis","Ivey","Jennings","Kirkland","Lockhart","Merriweather","Nash","Okafor",
+  "Prescott","Quinn","Ramsey","Sinclair","Thibodeaux","Underwood","Vance","Whitaker",
+  "Youngblood","Baptiste","Chandler","Delacroix","Eastman","Fairchild","Garrison",
+  "Hargrove","Ashford"];
+var INITIALS="ABCDEFGHJKLMNPRSTVW";
+function playerOf(teamKey,slot){
+  var h=2166136261,i;
+  for(i=0;i<teamKey.length;i++){ h^=teamKey.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  h=(h^Math.imul(slot+1,2654435761))>>>0;
+  return INITIALS.charAt((h>>>11)%INITIALS.length)+". "+SURNAMES[h%SURNAMES.length];
 }
-function chant(id,tm,opp,hs,as,cl,per){
-  var T=TEAMS[tm], ms=0; T.beats.forEach(function(b){ ms += (b.ms||660); });
-  return {id:id,team:tm,opp:opp,hs:hs,as:as,clock:cl,period:per,grp:"chant",cue:"chant",
-    d:1200+ms+1600, name:T.chant.toUpperCase(), sub:T.call, amp:70,win:150,tier:3,reg:"celebratory",
-    cat:"scoring_play", type:null, play:"extra_point", yards:0,
-    desc:T.name+" crowd answers the score — "+T.chant,
-    sr:{"details.category":"extra point","extra_point.attempt":1,"extra_point.made":1,points:1}};
-}
-var EVENTS = [
-  /* ── 16 touchdowns ─────────────────────────────────────────────────── */
-  td("td-tex","TEX","OU","31","28","0:04",4,"rush",12,
-     "Q. Ewers 12 yd run (C. Bell kick), 0:04 4th quarter",{"rush.touchdown":1,"rush.yards":12}),
-  td("td-ou","OU","TEX","28","24","6:41",4,"pass",34,
-     "J. Hawkins 34 yd pass to N. Anderson (Z. Schmit kick)",{"pass.touchdown":1,"receive.touchdown":1,"pass.yards":34}),
-  td("td-ala","ALA","LSU","24","17","11:02",3,"rush",3,
-     "J. Haynes 3 yd run (G. Bernhardt kick)",{"rush.touchdown":1,"rush.yards":3,"drive.scoring_drive":true}),
-  td("td-lsu","LSU","ALA","21","17","2:19",2,"pass",41,
-     "G. Nussmeier 41 yd pass to K. Lacy (D. Ramos kick)",{"pass.touchdown":1,"pass.yards":41,"drive.inside_20":true}),
-  td("td-uga","UGA","TENN","20","13","8:55",3,"rush",1,
-     "T. Etienne 1 yd run (P. Woodring kick)",{"rush.touchdown":1,"end_situation.goaltogo":true}),
-  td("td-tenn","TENN","UGA","13","10","0:38",2,"pass",22,
-     "N. Iamaleava 22 yd pass to D. Matthews (M. Palmer kick)",{"pass.touchdown":1,"event_category_2":"two_minute"}),
-  td("td-fla","FLA","SCAR","17","14","4:27",4,"rush",18,
-     "D. Lagway 18 yd run (T. Chrestman kick)",{"rush.touchdown":1,"rush.broken_tackles":2}),
-  td("td-aub","AUB","MSST","28","21","13:44",2,"pass",9,
-     "P. Thorne 9 yd pass to K. Coleman (A. Carlson kick)",{"pass.touchdown":1,"end_situation.goaltogo":true}),
-  td("td-tamu","TAMU","ARK","31","24","1:11",4,"rush",7,
-     "M. Reed 7 yd run (R. Bond kick)",{"rush.touchdown":1,"drive.scoring_drive":true}),
-  td("td-ark","ARK","TAMU","24","31","7:53",4,"pass",63,
-     "T. Green 63 yd pass to A. Green (K. Little kick)",{"pass.touchdown":1,"pass.yards":63,"event_category_2":"big_play"}),
-  td("td-miss","MISS","MSST","35","14","9:31",3,"pass",28,
-     "J. Dart 28 yd pass to T. Harris (C. Blanchard kick)",{"pass.touchdown":1,"pass.yards":28}),
-  td("td-msst","MSST","MISS","14","35","3:08",3,"rush",5,
-     "M. Van Buren 5 yd run (K. Ryland kick)",{"rush.touchdown":1,"rush.yards":5}),
-  td("td-miz","MIZ","SCAR","27","20","10:16",4,"pass",15,
-     "B. Cook 15 yd pass to L. Burden III (B. Sanchez kick)",{"pass.touchdown":1,"receive.yards_after_catch":11}),
-  td("td-scar","SCAR","MIZ","20","27","5:02",4,"rush",44,
-     "L. Sellers 44 yd run (A. Hankerson kick)",{"rush.touchdown":1,"rush.yards":44,"event_category_2":"big_play"}),
-  td("td-uk","UK","VAN","17","20","12:37",3,"pass",11,
-     "B. Vandagriff 11 yd pass to D. Anthony (A. Raynor kick)",{"pass.touchdown":1}),
-  td("td-van","VAN","UK","20","17","0:52",4,"rush",2,
-     "D. Pavia 2 yd run (B. Sherwood kick)",{"rush.touchdown":1,"end_situation.goaltogo":true,"drive.scoring_drive":true}),
 
-  /* ── 16 chants ─────────────────────────────────────────────────────── */
-  chant("ch-tex","TEX","OU","31","28","0:04",4),
-  chant("ch-ou","OU","TEX","28","24","6:41",4),
-  chant("ch-ala","ALA","LSU","24","17","11:02",3),
-  chant("ch-lsu","LSU","ALA","21","17","2:19",2),
-  chant("ch-uga","UGA","TENN","20","13","8:55",3),
-  chant("ch-tenn","TENN","UGA","13","10","0:38",2),
-  chant("ch-fla","FLA","SCAR","17","14","4:27",4),
-  chant("ch-aub","AUB","MSST","28","21","13:44",2),
-  chant("ch-tamu","TAMU","ARK","31","24","1:11",4),
-  chant("ch-ark","ARK","TAMU","24","31","7:53",4),
-  chant("ch-miss","MISS","MSST","35","14","9:31",3),
-  chant("ch-msst","MSST","MISS","14","35","3:08",3),
-  chant("ch-miz","MIZ","SCAR","27","20","10:16",4),
-  chant("ch-scar","SCAR","MIZ","20","27","5:02",4),
-  chant("ch-uk","UK","VAN","17","20","12:37",3),
-  chant("ch-van","VAN","UK","20","17","0:52",4),
+/* Two schools can be near-identical in primary colour (Alabama and Arkansas are
+   nine RGB steps apart). Any cue that renders a team against its opponent has to
+   fall back to a neutral, or the read is lost. */
+function rgbOf(h){ var n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function colDist(a,b){ var x=rgbOf(a),y=rgbOf(b);
+  return Math.abs(x[0]-y[0])+Math.abs(x[1]-y[1])+Math.abs(x[2]-y[2]); }
+function against(teamCol,oppCol){ return colDist(teamCol,oppCol)<120 ? "#2E2724" : oppCol; }
 
-  /* ── 18 rungs of the event ladder ──────────────────────────────────── */
-  {id:"pick6-ala",team:"ALA",opp:"LSU",hs:"31",as:"17",clock:"9:44",period:3,grp:"turnover",
-   cue:"streak",d:7200,name:"PICK SIX",sub:"INTERCEPTED · 62 YARDS",amp:96,win:150,tier:3,reg:"celebratory",
-   cat:"turnover",type:null,play:"pass",yards:62,dir:1,
-   desc:"M. Woods 62 yd interception return (G. Bernhardt kick)",
-   sr:{"defense.int_touchdown":1,"defense.interceptions":1,"details.recovery.type":"interception",
-       "details.category":"touchdown","return.touchdown":1,"return.category":"interception",
-       scoring_play:true,points:6}},
+var TYPES=[
+/* ── scoring ─────────────────────────────────────────────────────────── */
+{id:"td", grp:"score", label:"Touchdown", cue:"runacross", d:8000,
+ amp:75,win:150,tier:3,reg:"celebratory", cat:"scoring_play",type:null,play:"rush",yards:12,
+ period:4,clock:"0:04",hs:31,as:28,
+ name:function(T){ return T.td; }, sub:function(T){ return T.call; },
+ desc:function(c){ return c.p(1)+" 12 yd run ("+c.p(3)+" kick)"; },
+ sr:{scoring_play:true,"details.category":"touchdown",points:6,
+     "rush.touchdown":1,"rush.yards":12,"drive.scoring_drive":true,
+     "drive.inside_20":true,"end_situation.goaltogo":true}},
 
-  {id:"scoop-uga",team:"UGA",opp:"TENN",hs:"27",as:"13",clock:"4:12",period:4,grp:"turnover",
-   cue:"streak",d:7200,name:"SCOOP AND SCORE",sub:"FUMBLE · 31 YARDS",amp:94,win:150,tier:3,reg:"celebratory",
-   cat:"turnover",type:null,play:"rush",yards:31,dir:-1,
-   desc:"J. Ingram-Dawkins 31 yd fumble return (P. Woodring kick)",
-   sr:{"fumble.opp_rec_td":1,"fumble.lost":1,"details.recovery.type":"fumble recovery",
-       "details.category":"touchdown","return.touchdown":1,scoring_play:true,points:6}},
+{id:"twopt", grp:"score", label:"Two-point conversion", cue:"card", d:4600,
+ amp:71,win:90,tier:2,reg:"celebratory", cat:"scoring_play",type:null,play:"conversion",yards:3,
+ period:4,clock:"3:44",hs:22,as:17,
+ name:"TWO-POINT CONVERSION", sub:function(T){ return "GOOD · "+T.call; },
+ desc:function(c){ return c.p(0)+" pass to "+c.p(2)+" for a two point conversion"; },
+ sr:{"conversion.attempt":1,"conversion.complete":1,"conversion.category":"pass",
+     "details.category":"two point conversion",scoring_play:true,points:2}},
 
-  {id:"kr-aub",team:"AUB",opp:"MSST",hs:"35",as:"21",clock:"0:01",period:4,grp:"kick",
-   cue:"streak",d:7600,name:"KICK RETURN TOUCHDOWN",sub:"109 YARDS · NO TIME LEFT",amp:97,win:150,tier:3,reg:"celebratory",
-   cat:"scoring_play",type:null,play:"field_goal",yards:109,dir:1,
-   desc:"C. Hunter 109 yd missed field goal return (A. Carlson kick)",
-   sr:{"return.touchdown":1,"return.category":"missed field goal","field_goal.missed":1,
-       "field_goal.att_yards":57,"details.category":"touchdown",
-       scoring_play:true,points:6,"game.expected_latency":2}},
+{id:"safety", grp:"score", label:"Safety", cue:"strike", d:6000,
+ amp:80,win:120,tier:3,reg:"celebratory", cat:"scoring_play",type:null,play:"rush",yards:-3,
+ period:4,clock:"7:22",hs:16,as:35,
+ name:"SAFETY", sub:function(T){ return "TWO POINTS · "+T.call; },
+ desc:function(c){ return c.q(0)+" sacked in end zone by "+c.p(6)+", safety"; },
+ sr:{"details.safety":true,"details.category":"safety","defense.safety":1,"defense.sack":1,
+     scoring_play:true,points:2}},
 
-  {id:"blk-lsu",team:"LSU",opp:"ALA",hs:"28",as:"24",clock:"1:47",period:4,grp:"kick",
-   cue:"streak",d:7200,name:"BLOCKED · RETURNED",sub:"FIELD GOAL BLOCKED · 47 YARDS",amp:93,win:140,tier:3,reg:"celebratory",
-   cat:"scoring_play",type:null,play:"field_goal",yards:47,dir:-1,
-   desc:"M. Perkins blocked FG, W. Campbell 47 yd return (D. Ramos kick)",
-   sr:{"block.category":"field_goal","defense.blocks":1,"details.recovery.type":"blocked kick recovery",
-       "details.category":"touchdown","return.touchdown":1,scoring_play:true,points:6}},
+/* ── kicking ─────────────────────────────────────────────────────────── */
+{id:"fg50", grp:"kick", label:"Field goal · 50+", cue:"arc", d:6400,
+ amp:68,win:120,tier:2,reg:"celebratory", cat:"scoring_play",type:null,play:"field_goal",yards:53,
+ period:4,clock:"0:03",hs:23,as:20,
+ name:"FIFTY-THREE YARDS", sub:"GOOD",
+ desc:function(c){ return c.p(3)+" 53 yd field goal is good"; },
+ sr:{"field_goal.made":1,"field_goal.att_yards":53,"field_goal.attempt":1,
+     "details.category":"field goal",scoring_play:true,points:3}},
 
-  {id:"safety-msst",team:"MSST",opp:"MISS",hs:"16",as:"35",clock:"7:22",period:4,grp:"score",
-   cue:"strike",d:6000,name:"SAFETY",sub:"TWO POINTS · HAIL STATE",amp:80,win:120,tier:3,reg:"celebratory",
-   cat:"scoring_play",type:null,play:"rush",yards:-3,
-   desc:"J. Dart sacked in end zone by K. Jackson, safety",
-   sr:{"details.safety":true,"details.category":"safety","defense.safety":1,"defense.sack":1,
-       scoring_play:true,points:2}},
+{id:"walkoff", grp:"kick", label:"Walk-off field goal", cue:"arc", d:8000,
+ amp:92,win:9999,tier:3,reg:"celebratory", cat:"scoring_play",type:"game_over",
+ play:"field_goal",yards:48,
+ period:4,clock:"0:00",hs:38,as:35,
+ name:"WALK-OFF FIELD GOAL", sub:"48 YARDS · GAME OVER",
+ desc:function(c){ return c.p(3)+" 48 yd field goal, no time remaining"; },
+ sr:{"field_goal.made":1,"field_goal.att_yards":48,"field_goal.attempt":1,
+     "details.category":"field goal",scoring_play:true,points:3,"game.status":"closed"}},
 
-  {id:"walkoff-miss",team:"MISS",opp:"MSST",hs:"38",as:"35",clock:"0:00",period:4,grp:"kick",
-   cue:"arc",d:8000,name:"WALK-OFF FIELD GOAL",sub:"48 YARDS · GAME OVER",amp:92,win:9999,tier:3,reg:"celebratory",
-   cat:"scoring_play",type:"game_over",play:"field_goal",yards:48,
-   desc:"C. Blanchard 48 yd field goal, no time remaining",
-   sr:{"field_goal.made":1,"field_goal.att_yards":48,"field_goal.attempt":1,
-       "details.category":"field goal",scoring_play:true,points:3,"game.status":"closed"}},
+/* ── return touchdowns ───────────────────────────────────────────────── */
+{id:"pick6", grp:"return", label:"Pick six", cue:"streak", d:7200, dir:1,
+ amp:96,win:150,tier:3,reg:"celebratory", cat:"turnover",type:null,play:"pass",yards:62,
+ period:3,clock:"9:44",hs:31,as:17,
+ name:"PICK SIX", sub:"INTERCEPTED · 62 YARDS",
+ desc:function(c){ return c.p(4)+" 62 yd interception return ("+c.p(3)+" kick)"; },
+ sr:{"defense.int_touchdown":1,"defense.interceptions":1,
+     "details.recovery.type":"interception","details.category":"touchdown",
+     "return.touchdown":1,"return.category":"interception",scoring_play:true,points:6}},
 
-  {id:"fake-ark",team:"ARK",opp:"TAMU",hs:"24",as:"31",clock:"11:08",period:4,grp:"special",
-   cue:"misdirect",d:5400,name:"FAKE PUNT",sub:"FIRST DOWN · FOURTH AND 4",amp:86,win:35,tier:2,reg:"celebratory",
-   cat:"big_play",type:null,play:"punt",yards:19,
-   desc:"Fake punt, D. Wagner 19 yd run for a first down",
-   sr:{fake_punt:true,"down_conversion.down":4,"down_conversion.attempt":1,"down_conversion.complete":1,
-       "start_situation.down":4,"start_situation.yfd":4}},
+{id:"scoop", grp:"return", label:"Scoop and score", cue:"streak", d:7200, dir:-1,
+ amp:94,win:150,tier:3,reg:"celebratory", cat:"turnover",type:null,play:"rush",yards:31,
+ period:4,clock:"4:12",hs:27,as:13,
+ name:"SCOOP AND SCORE", sub:"FUMBLE · 31 YARDS",
+ desc:function(c){ return c.p(6)+" 31 yd fumble return ("+c.p(3)+" kick)"; },
+ sr:{"fumble.opp_rec_td":1,"fumble.lost":1,"details.recovery.type":"fumble recovery",
+     "details.category":"touchdown","return.touchdown":1,scoring_play:true,points:6}},
 
-  {id:"downs-tamu",team:"TAMU",opp:"ARK",hs:"31",as:"24",clock:"2:41",period:4,grp:"turnover",
-   cue:"steal",d:5200,name:"TURNOVER ON DOWNS",sub:"STOPPED SHORT",amp:79,win:40,tier:2,reg:"celebratory",
-   cat:"turnover",type:null,play:"rush",yards:2,
-   desc:"Fourth and 3, R. Sanders stopped for a 2 yd gain",
-   sr:{"down_conversion.down":4,"down_conversion.attempt":1,"down_conversion.complete":0,
-       "end_situation.down":1,"end_situation.possession":"TAMU"}},
+{id:"kr", grp:"return", label:"Kick return touchdown", cue:"streak", d:7600, dir:1,
+ amp:97,win:150,tier:3,reg:"celebratory", cat:"scoring_play",type:null,
+ play:"field_goal",yards:109,
+ period:4,clock:"0:01",hs:35,as:21,
+ name:"KICK RETURN TOUCHDOWN", sub:"109 YARDS · NO TIME LEFT",
+ desc:function(c){ return c.p(7)+" 109 yd missed field goal return ("+c.p(3)+" kick)"; },
+ sr:{"return.touchdown":1,"return.category":"missed field goal","field_goal.missed":1,
+     "field_goal.att_yards":57,"details.category":"touchdown",
+     scoring_play:true,points:6,"game.expected_latency":2}},
 
-  {id:"int-fla",team:"FLA",opp:"SCAR",hs:"17","as":"14",clock:"6:19",period:4,grp:"turnover",
-   cue:"steal",d:5000,name:"INTERCEPTED",sub:"THE STEAL",amp:78,win:45,tier:2,reg:"celebratory",
-   cat:"turnover",type:null,play:"pass",yards:0,
-   desc:"L. Sellers pass intercepted by D. Marshall at the FLA 34",
-   sr:{"defense.interceptions":1,"details.recovery.type":"interception",
-       "pass.interceptions":1,"end_situation.possession":"FLA"}},
+{id:"blk", grp:"return", label:"Blocked kick returned", cue:"streak", d:7200, dir:-1,
+ amp:93,win:140,tier:3,reg:"celebratory", cat:"scoring_play",type:null,
+ play:"field_goal",yards:47,
+ period:4,clock:"1:47",hs:28,as:24,
+ name:"BLOCKED · RETURNED", sub:"FIELD GOAL BLOCKED · 47 YARDS",
+ desc:function(c){ return c.p(6)+" blocked FG, "+c.p(4)+" 47 yd return ("+c.p(3)+" kick)"; },
+ sr:{"block.category":"field_goal","defense.blocks":1,
+     "details.recovery.type":"blocked kick recovery","details.category":"touchdown",
+     "return.touchdown":1,scoring_play:true,points:6}},
 
-  {id:"fum-miz",team:"MIZ",opp:"SCAR",hs:"27",as:"20",clock:"13:05",period:4,grp:"turnover",
-   cue:"steal",d:5000,name:"FUMBLE LOST",sub:"THE STEAL",amp:76,win:45,tier:2,reg:"celebratory",
-   cat:"turnover",type:null,play:"rush",yards:4,
-   desc:"R. Rogers fumbles, recovered by J. Carnell at the SCAR 41",
-   sr:{"fumble.lost":1,"fumble.forced":1,"details.recovery.type":"fumble recovery",
-       "end_situation.possession":"MIZ"}},
+/* ── turnovers ───────────────────────────────────────────────────────── */
+{id:"int", grp:"turnover", label:"Interception", cue:"steal", d:5000,
+ amp:78,win:45,tier:2,reg:"celebratory", cat:"turnover",type:null,play:"pass",yards:0,
+ period:4,clock:"6:19",hs:17,as:14,
+ name:"INTERCEPTED", sub:"THE STEAL",
+ desc:function(c){ return c.q(0)+" pass intercepted by "+c.p(4)+" at the "+c.tk+" 34"; },
+ sr:function(c){ return {"defense.interceptions":1,"details.recovery.type":"interception",
+     "pass.interceptions":1,"end_situation.possession":c.tk}; }},
 
-  {id:"twopt-van",team:"VAN",opp:"UK",hs:"22",as:"17",clock:"3:44",period:4,grp:"score",
-   cue:"card",d:4600,name:"TWO-POINT CONVERSION",sub:"GOOD · ANCHOR DOWN",amp:71,win:90,tier:2,reg:"celebratory",
-   cat:"scoring_play",type:null,play:"conversion",yards:3,
-   desc:"D. Pavia pass to E. Sheppard for a two point conversion",
-   sr:{"conversion.attempt":1,"conversion.complete":1,"conversion.category":"pass",
-       "details.category":"two point conversion",scoring_play:true,points:2}},
+{id:"fum", grp:"turnover", label:"Fumble lost", cue:"steal", d:5000,
+ amp:76,win:45,tier:2,reg:"celebratory", cat:"turnover",type:null,play:"rush",yards:4,
+ period:4,clock:"13:05",hs:27,as:20,
+ name:"FUMBLE LOST", sub:"THE STEAL",
+ desc:function(c){ return c.q(1)+" fumbles, recovered by "+c.p(5)+" at the "+c.ok+" 41"; },
+ sr:function(c){ return {"fumble.lost":1,"fumble.forced":1,
+     "details.recovery.type":"fumble recovery","end_situation.possession":c.tk}; }},
 
-  {id:"fg50-uk",team:"UK",opp:"VAN",hs:"20",as:"20",clock:"0:03",period:4,grp:"kick",
-   cue:"arc",d:6400,name:"FIFTY-THREE YARDS",sub:"GOOD",amp:68,win:120,tier:2,reg:"celebratory",
-   cat:"scoring_play",type:null,play:"field_goal",yards:53,
-   desc:"A. Raynor 53 yd field goal is good",
-   sr:{"field_goal.made":1,"field_goal.att_yards":53,"field_goal.attempt":1,
-       "details.category":"field goal",scoring_play:true,points:3}},
+{id:"downs", grp:"turnover", label:"Turnover on downs", cue:"steal", d:5200,
+ amp:79,win:40,tier:2,reg:"celebratory", cat:"turnover",type:null,play:"rush",yards:2,
+ period:4,clock:"2:41",hs:31,as:24,
+ name:"TURNOVER ON DOWNS", sub:"STOPPED SHORT",
+ desc:function(c){ return "Fourth and 3, "+c.q(1)+" stopped for a 2 yd gain"; },
+ sr:function(c){ return {"down_conversion.down":4,"down_conversion.attempt":1,
+     "down_conversion.complete":0,"end_situation.down":1,"end_situation.possession":c.tk}; }},
 
-  {id:"big-ou",team:"OU",opp:"TEX",hs:"24",as:"24",clock:"9:12",period:3,grp:"big",
-   cue:"burst",d:2200,name:"EXPLOSIVE PLAY",sub:"47 YARDS",amp:64,win:0,tier:1,reg:"celebratory",
-   cat:"big_play",type:null,play:"pass",yards:47,
-   desc:"J. Hawkins 47 yd pass to D. Lawson to the TEX 21",
-   sr:{"pass.yards":47,"receive.yards_after_catch":22,"pass.att_yards":25,"drive.inside_20":false}},
+/* ── big plays ───────────────────────────────────────────────────────── */
+{id:"big", grp:"big", label:"Explosive play 40+", cue:"burst", d:2200,
+ amp:64,win:0,tier:1,reg:"celebratory", cat:"big_play",type:null,play:"pass",yards:47,
+ period:3,clock:"9:12",hs:24,as:24,
+ name:"EXPLOSIVE PLAY", sub:"47 YARDS",
+ desc:function(c){ return c.p(0)+" 47 yd pass to "+c.p(2)+" to the "+c.ok+" 21"; },
+ sr:{"pass.yards":47,"receive.yards_after_catch":22,"pass.att_yards":25,
+     "drive.inside_20":false}},
 
-  {id:"fourth-tenn",team:"TENN",opp:"UGA",hs:"13",as:"20",clock:"4:58",period:4,grp:"big",
-   cue:"burst",d:2000,name:"FOURTH DOWN CONVERTED",sub:"FOURTH AND 2",amp:62,win:0,tier:1,reg:"celebratory",
-   cat:"big_play",type:null,play:"rush",yards:6,
-   desc:"Fourth and 2, D. Sampson 6 yd run for a first down",
-   sr:{"down_conversion.down":4,"down_conversion.attempt":1,"down_conversion.complete":1,
-       "start_situation.down":4,"start_situation.yfd":2,"end_situation.down":1}},
+{id:"fourth", grp:"big", label:"Fourth-down conversion", cue:"burst", d:2000,
+ amp:62,win:0,tier:1,reg:"celebratory", cat:"big_play",type:null,play:"rush",yards:6,
+ period:4,clock:"4:58",hs:13,as:20,
+ name:"FOURTH DOWN CONVERTED", sub:"FOURTH AND 2",
+ desc:function(c){ return "Fourth and 2, "+c.p(1)+" 6 yd run for a first down"; },
+ sr:{"down_conversion.down":4,"down_conversion.attempt":1,"down_conversion.complete":1,
+     "start_situation.down":4,"start_situation.yfd":2,"end_situation.down":1}},
 
-  {id:"review-scar",team:"SCAR",opp:"MIZ",hs:"20",as:"27",clock:"2:56",period:4,grp:"state",
-   cue:"binary",d:7000,name:"UNDER REVIEW",sub:"RULING REVERSED",amp:60,win:180,tier:2,reg:"tense",
-   cat:"scoring_play",type:"comment",play:"pass",yards:19,
-   desc:"Ruling on the field is reversed — pass is complete, first down SCAR",
-   sr:{official:false,"review.result":"reversed","review.reversed":true,"review.type":"booth",
-       "event_type":"comment"}},
+{id:"fake", grp:"big", label:"Fake punt", cue:"misdirect", d:5400,
+ amp:86,win:35,tier:2,reg:"celebratory", cat:"big_play",type:null,play:"punt",yards:19,
+ period:4,clock:"11:08",hs:24,as:31,
+ name:"FAKE PUNT", sub:"FIRST DOWN · FOURTH AND 4",
+ desc:function(c){ return "Fake punt, "+c.p(1)+" 19 yd run for a first down"; },
+ sr:{fake_punt:true,"down_conversion.down":4,"down_conversion.attempt":1,
+     "down_conversion.complete":1,"start_situation.down":4,"start_situation.yfd":4}},
 
-  {id:"hold-tex",team:"TEX",opp:"OU",hs:"24",as:"28",clock:"1:12",period:4,grp:"state",
-   cue:"hold",d:8500,name:"FOURTH AND GOAL",sub:"THE HOLD · GOAL-LINE STAND",amp:58,win:40,tier:2,reg:"tense",
-   cat:"redzone",type:null,play:"rush",yards:0,
-   desc:"Fourth and goal at the TEX 2 — stopped at the line of scrimmage",
-   sr:{"start_situation.down":4,"start_situation.yfd":2,"end_situation.goaltogo":true,
-       "down_conversion.down":4,"down_conversion.complete":0,"drive.inside_20":true,
-       "drive.end_reason":"Downs"}},
+/* ── states and stoppages ────────────────────────────────────────────── */
+{id:"rz", grp:"state", label:"Red zone entry", cue:"edge", d:6000,
+ amp:54,win:0,tier:1,reg:"tense", cat:"redzone",type:null,play:"rush",yards:8,
+ period:3,clock:"7:41",hs:20,as:13,
+ name:"RED ZONE", sub:"SUSTAINED STATE · NOT AN EVENT",
+ desc:function(c){ return c.p(1)+" 8 yd run to the "+c.ok+" 17 — "+c.T.name+
+   " enters the red zone"; },
+ sr:function(c){ return {"drive.inside_20":true,"end_situation.yardline":17,
+     "end_situation.down":1,"end_situation.possession":c.tk}; }},
 
-  {id:"rz-uga",team:"UGA",opp:"TENN",hs:"20",as:"13",clock:"7:41",period:3,grp:"state",
-   cue:"edge",d:6000,name:"RED ZONE",sub:"SUSTAINED STATE · NOT AN EVENT",amp:54,win:0,tier:1,reg:"tense",
-   cat:"redzone",type:null,play:"rush",yards:8,
-   desc:"T. Etienne 8 yd run to the TENN 17 — Georgia enters the red zone",
-   sr:{"drive.inside_20":true,"end_situation.yardline":17,"end_situation.down":1,
-       "end_situation.possession":"UGA"}},
+{id:"twomin", grp:"state", label:"Two-minute warning", cue:"clockdown", d:4600,
+ amp:40,win:100,tier:2,reg:"tense", cat:"two_minute",type:"two_minute_warning",
+ play:null,yards:0,
+ period:4,clock:"2:00",hs:28,as:24,
+ name:"TWO MINUTE WARNING", sub:"SUBTRACT · NEVER CELEBRATE",
+ desc:function(){ return "Two minute warning, fourth quarter"; },
+ sr:{"event_type":"two_minute_warning","boxscore.home_timeouts_remaining":1,
+     "boxscore.away_timeouts_remaining":2,"clock":"2:00"}},
 
-  {id:"twomin-lsu",team:"LSU",opp:"ALA",hs:"28",as:"24",clock:"2:00",period:4,grp:"state",
-   cue:"clockdown",d:4600,name:"TWO MINUTE WARNING",sub:"SUBTRACT · NEVER CELEBRATE",amp:40,win:100,tier:2,reg:"tense",
-   cat:"two_minute",type:"two_minute_warning",play:null,yards:0,
-   desc:"Two minute warning, fourth quarter",
-   sr:{"event_type":"two_minute_warning","boxscore.home_timeouts_remaining":1,
-       "boxscore.away_timeouts_remaining":2,"clock":"2:00"}}
+{id:"hold", grp:"state", label:"Goal-line stand", cue:"hold", d:8500,
+ amp:58,win:40,tier:2,reg:"tense", cat:"redzone",type:null,play:"rush",yards:0,
+ period:4,clock:"1:12",hs:24,as:28,
+ name:"FOURTH AND GOAL", sub:"THE HOLD · GOAL-LINE STAND",
+ desc:function(c){ return "Fourth and goal at the "+c.tk+
+   " 2 — stopped at the line of scrimmage"; },
+ sr:{"start_situation.down":4,"start_situation.yfd":2,"end_situation.goaltogo":true,
+     "down_conversion.down":4,"down_conversion.complete":0,"drive.inside_20":true,
+     "drive.end_reason":"Downs"}},
+
+{id:"review", grp:"state", label:"Review overturned", cue:"binary", d:7000,
+ amp:60,win:180,tier:2,reg:"tense", cat:"scoring_play",type:"comment",play:"pass",yards:19,
+ period:4,clock:"2:56",hs:20,as:27,
+ name:"UNDER REVIEW", sub:"RULING REVERSED",
+ desc:function(c){ return "Ruling on the field is reversed — pass is complete, first down "+
+   c.tk; },
+ sr:{official:false,"review.result":"reversed","review.reversed":true,
+     "review.type":"booth","event_type":"comment"}},
+
+/* ── ritual ──────────────────────────────────────────────────────────── */
+{id:"chant", grp:"ritual", label:"Chant / call track", cue:"chant",
+ d:function(T){ var ms=0; T.beats.forEach(function(b){ ms+=(b.ms||660); }); return 1200+ms+1600; },
+ amp:70,win:150,tier:3,reg:"celebratory", cat:"scoring_play",type:null,
+ play:"extra_point",yards:0,
+ period:4,clock:"0:04",hs:31,as:28,
+ name:function(T){ return T.chant.toUpperCase(); }, sub:function(T){ return T.call; },
+ desc:function(c){ return c.T.name+" crowd answers the score — "+c.T.chant; },
+ sr:{"details.category":"extra point","extra_point.attempt":1,"extra_point.made":1,points:1}}
 ];
+
+var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
+var TYPE_GROUPS=[["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
+  ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
+  ["ritual","Ritual"]];
+var TEAMKEYS=Object.keys(TEAMS);
+
+/* Cross a type with a school. Everything downstream — grammars, payload, timing
+   tables — consumes this shape and never sees TYPES, so nothing else had to change. */
+function makeEvent(typeId,teamKey,oppKey){
+  var ty=TYPE_BY_ID[typeId]||TYPES[0];
+  var tk=TEAMS[teamKey]?teamKey:"TEX";
+  var ok=TEAMS[oppKey]?oppKey:(RIVAL[tk]||"OU");
+  if(ok===tk) ok = (RIVAL[tk]!==tk && RIVAL[tk]) || (tk==="TEX"?"OU":"TEX");
+  var T=TEAMS[tk], O=TEAMS[ok];
+  var c={T:T,O:O,tk:tk,ok:ok,
+         p:function(s){ return playerOf(tk,s); },
+         q:function(s){ return playerOf(ok,s); }};
+  return {
+    id:ty.id+":"+tk+":"+ok, typeId:ty.id, team:tk, opp:ok,
+    grp:ty.grp, label:ty.label, cue:ty.cue,
+    d:(typeof ty.d==="function")?ty.d(T):ty.d,
+    amp:ty.amp, win:ty.win, tier:ty.tier, reg:ty.reg,
+    cat:ty.cat, type:ty.type, play:ty.play, yards:ty.yards, dir:ty.dir,
+    period:ty.period, clock:ty.clock, hs:String(ty.hs), as:String(ty.as),
+    name:(typeof ty.name==="function")?ty.name(T,O):ty.name,
+    sub:(typeof ty.sub==="function")?ty.sub(T,O):ty.sub,
+    desc:ty.desc(c),
+    sr:(typeof ty.sr==="function")?ty.sr(c):ty.sr
+  };
+}
+
+/* Accepts the current form (event=td&team=TEX&opp=OU) and the earlier
+   one-id-per-combination form (event=td-tex), so URLs already sitting on a screen
+   keep working across this change. */
+function resolveSelection(P){
+  var t=P.get("event")||"td", team=P.get("team")||"", opp=P.get("opp")||"";
+  if(!TYPE_BY_ID[t]){
+    var m=/^(.+)-([A-Za-z]+)$/.exec(t);
+    if(m){
+      var pre=(m[1]==="ch")?"chant":m[1], tk=m[2].toUpperCase();
+      if(TYPE_BY_ID[pre]&&TEAMS[tk]){ t=pre; if(!TEAMS[team]) team=tk; }
+    }
+  }
+  if(!TYPE_BY_ID[t]) t="td";
+  if(!TEAMS[team]) team="TEX";
+  if(!TEAMS[opp]||opp===team) opp=RIVAL[team]||"OU";
+  return {type:t,team:team,opp:opp};
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    3 · LAYOUTS
@@ -730,7 +848,9 @@ var LAYORDER = ["single","pair","row3","row4","row6","strip8","quad","jumbo","ei
 LAYOUTS.room14.labels = ["L1","L2","L3","L4","J1","J2","J3","J4","J5","J6","R1","R2","R3","R4"];
 
 function geoOf(L){
-  var UW=16, UH=9, g=L.gap, maxX=0, maxY=0;
+  /* GAP overrides whatever the layout was authored with — the wall separations in
+     room14 and split44 live in the cell coordinates, not the gap, so they survive. */
+  var UW=16, UH=9, g=GAP, maxX=0, maxY=0;
   L.cells.forEach(function(c){
     maxX=Math.max(maxX, c.cx*(UW+g)+UW);
     maxY=Math.max(maxY, c.cy*(UH+g)+UH);
@@ -868,6 +988,13 @@ function pulse(v){ return Math.sin(v*Math.PI); }
 function hexA(h,a){
   var n=parseInt(h.slice(1),16);
   return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")";
+}
+/* Missouri gold and Vanderbilt gold need black type on them; crimson does not. */
+function lightOn(h){ var c=rgbOf(h); return (c[0]*299+c[1]*587+c[2]*114)/1000 > 150; }
+function mixHex(a,b,t){
+  var x=rgbOf(a), y=rgbOf(b), i, o="#";
+  for(i=0;i<3;i++) o+=("0"+Math.round(x[i]+(y[i]-x[i])*t).toString(16)).slice(-2);
+  return o;
 }
 function det(i){ /* deterministic 0..1 from an integer — every device agrees */
   var x=Math.sin(i*127.1+311.7)*43758.5453; return x-Math.floor(x);
@@ -1200,8 +1327,10 @@ G.chant=function(u,C){
   var txt=b.t.replace("{OPP}", C.ev.opp);
   ph="beat "+(bi+1)+"/"+T.beats.length+" · "+txt;
 
-  /* the loud side takes the school colour; the quiet side holds bright, never dark */
-  var loud=T.p, quiet=T.deep==="#000000"?"#141210":T.deep;
+  /* The loud side takes the school colour. The quiet side HOLDS BRIGHT (§9.3) — a
+     lit surface, not an unlit one — so a room mid-chant never has half its screens
+     go dark. Ground alone was too near black to read as held. */
+  var loud=T.p, quiet=mixHex(T.deep==="#000000"?"#0E0C0B":T.deep, T.p, 0.34);
   var hit=cl(bp*6,0,1)*cl((1-bp)*8,0,1);
 
   if(C.L.groups && C.L.groups.left){
@@ -1776,8 +1905,8 @@ function bootTV(){
   var tvIdx = Math.max(1, +Q.get("tv"))-1;
   var lid = Q.get("layout")||"row4";
   var L = LAYOUTS[lid]||LAYOUTS.row4;
-  var eid = Q.get("event")||"td-tex";
-  var ev = EVENTS.filter(function(e){ return e.id===eid; })[0] || EVENTS[0];
+  var sel = resolveSelection(Q);
+  var ev = makeEvent(sel.type, sel.team, sel.opp);
   if(tvIdx>=L.cells.length) tvIdx=L.cells.length-1;
 
   document.body.classList.add("tvmode");
@@ -1822,8 +1951,11 @@ function bootTV(){
     if(m.type==="bb:seek") hold=+m.t;
     else if(m.type==="bb:play") hold=null;
     else if(m.type==="bb:event"){
-      var n=EVENTS.filter(function(x){ return x.id===m.id; })[0];
-      if(n){ ev=n; period=ev.d+REST; document.title=ev.name+" · TV "+(tvIdx+1)+" · "+L.name; }
+      if(TYPE_BY_ID[m.id]||TEAMS[m.team]){
+        ev=makeEvent(m.id||ev.typeId, m.team||ev.team, m.opp||ev.opp);
+        period=ev.d+REST; hold=null;
+        document.title=ev.name+" · TV "+(tvIdx+1)+" · "+L.name;
+      }
     }
   });
   /* Changing the hash on a running screen swaps the cue with no reload and no flash.
@@ -1831,15 +1963,26 @@ function bootTV(){
      nothing, because position in the loop is read from the clock, not from page state. */
   window.addEventListener("hashchange",function(){
     var P=readParams();
-    if(P.get("tv")!==String(tvIdx+1) || (P.get("layout")||"row4")!==L.id){ location.reload(); return; }
-    var n=EVENTS.filter(function(x){ return x.id===P.get("event"); })[0];
-    if(n && n!==ev){ ev=n; period=ev.d+REST; hold=null;
-      document.title=ev.name+" · TV "+(tvIdx+1)+" · "+L.name; }
+    /* the gap is part of the canvas geometry, so a change to it has to reload —
+       outputs that disagree about the gap would frame different windows */
+    if(P.get("tv")!==String(tvIdx+1) || (P.get("layout")||"row4")!==L.id ||
+       (P.has("gap")?+P.get("gap"):GAP_DEFAULT)!==GAP){ location.reload(); return; }
+    var s=resolveSelection(P);
+    if(s.type!==ev.typeId || s.team!==ev.team || s.opp!==ev.opp){
+      ev=makeEvent(s.type,s.team,s.opp); period=ev.d+REST; hold=null;
+      document.title=ev.name+" · TV "+(tvIdx+1)+" · "+L.name;
+    }
   });
 
   window.__BB={ seek:function(t){ hold=t; return paint(cl(t,0,period)); },
                 play:function(){ hold=null; },
-                get:function(){ return {event:ev.id,layout:L.id,tv:tvIdx+1,
+                set:function(o){ o=o||{};
+                  ev=makeEvent(o.type||ev.typeId,o.team||ev.team,o.opp||ev.opp);
+                  period=ev.d+REST; hold=null;
+                  document.title=ev.name+" · TV "+(tvIdx+1)+" · "+L.name;
+                  return this.get(); },
+                get:function(){ return {event:ev.id,type:ev.typeId,team:ev.team,opp:ev.opp,
+                                        name:ev.name,layout:L.id,tv:tvIdx+1,gap:GAP,
                                         cell:r,ms:loopPos(ev.d),W:W,H:H,SW:SW,SH:SH}; } };
 
   var period=ev.d+REST;
@@ -1882,10 +2025,34 @@ function mkOverlay(){
    11 · CONTROL ROOM
    ══════════════════════════════════════════════════════════════════════════ */
 function bootApp(){
-  var state={ ev:EVENTS[0], L:LAYOUTS.row4, playing:true, bezel:true, urlStyle:"?",
-              filt:{grp:"all",team:"all"}, manual:null };
+  var boot=resolveSelection(Q);
+  var state={ type:boot.type, team:boot.team, opp:boot.opp, ev:null,
+              /* an opponent the user chose deliberately survives a change of school;
+                 one that is merely the default follows the new school's rivalry */
+              oppLocked:TEAMS[Q.get("opp")||""]?true:false,
+              L:LAYOUTS[Q.get("layout")]||LAYOUTS.row4,
+              playing:true, seams:true, plates:false, urlStyle:"?", manual:null };
+  state.ev=makeEvent(state.type,state.team,state.opp);
   var stage=document.getElementById("stage");
   var SCREENS=[];
+
+  /* Re-cross the two axes and refresh everything that reads from the result. */
+  function reselect(o){
+    o=o||{};
+    if(o.type!==undefined) state.type=o.type;
+    var teamChanged = o.team!==undefined && o.team!==state.team;
+    if(o.team!==undefined) state.team=o.team;
+    if(o.opp!==undefined){ state.opp=o.opp; state.oppLocked=!!TEAMS[o.opp]; }
+    else if(teamChanged && !state.oppLocked) state.opp=RIVAL[state.team];
+    /* normalise here, not in makeEvent, so state and the URLs never hold a stale
+       or empty opponent after a school change */
+    if(!TEAMS[state.opp]||state.opp===state.team) state.opp=RIVAL[state.team]||"OU";
+    if(state.opp===state.team) state.opp=(state.team==="TEX")?"OU":"TEX";
+    state.ev=makeEvent(state.type,state.team,state.opp);
+    state.manual=null;
+    renderTeams(); renderList(); renderOpp(); renderBrief(); renderRight(); renderURLs();
+    render(currentMs());
+  }
 
   /* ── layout select ── */
   var sel=document.getElementById("selLayout");
@@ -1894,45 +2061,64 @@ function bootApp(){
     o.textContent=LAYOUTS[id].name+"  ("+LAYOUTS[id].cells.length+")";
     sel.appendChild(o);
   });
-  sel.value="row4";
+  sel.value=state.L.id;
   sel.onchange=function(){ state.L=LAYOUTS[sel.value]; buildStage(); renderBrief(); renderURLs(); };
 
-  /* ── filters ── */
-  var GRPS=[["all","All 50"],["td","Touchdowns"],["chant","Chants"],["turnover","Turnovers"],
-            ["kick","Kicking"],["score","Scoring"],["big","Big plays"],["special","Special"],["state","States"]];
-  var fw=document.getElementById("filters");
-  GRPS.forEach(function(g){
-    var b=document.createElement("button"); b.className="chip"+(g[0]==="all"?" on":"");
-    b.textContent=g[1]; b.dataset.grp=g[0];
-    b.onclick=function(){ state.filt.grp=g[0];
-      fw.querySelectorAll("[data-grp]").forEach(function(x){ x.classList.toggle("on",x.dataset.grp===g[0]); });
-      renderList(); };
-    fw.appendChild(b);
-  });
-  var tsel=document.createElement("select");
-  tsel.innerHTML='<option value="all">All 16 schools</option>'+
-    Object.keys(TEAMS).map(function(k){ return '<option value="'+k+'">'+TEAMS[k].name+'</option>'; }).join("");
-  tsel.style.cssText="margin-left:auto;font-size:9px";
-  tsel.onchange=function(){ state.filt.team=tsel.value; renderList(); };
-  fw.appendChild(tsel);
+  /* ── school picker · axis one ── */
+  var tg=document.getElementById("teamgrid");
+  function renderTeams(){
+    tg.innerHTML="";
+    TEAMKEYS.forEach(function(k){
+      var T=TEAMS[k];
+      var b=document.createElement("button");
+      b.className="tchip"+(k===state.team?" on":"")+(k===state.opp?" opp":"");
+      b.style.background=T.p;
+      b.style.color=lightOn(T.p)?"#000":"#fff";
+      b.textContent=T.ab;
+      b.title=T.name+" "+T.nick+" · "+T.venue;
+      b.onclick=function(){ reselect({team:k}); };
+      tg.appendChild(b);
+    });
+    document.getElementById("schoolName").textContent=
+      TEAMS[state.team].name+" "+TEAMS[state.team].nick;
+  }
+  function renderOpp(){
+    var s=document.getElementById("selOpp");
+    s.innerHTML=TEAMKEYS.filter(function(k){ return k!==state.team; })
+      .map(function(k){ return '<option value="'+k+'"'+(k===state.opp?" selected":"")+'>'+
+        TEAMS[k].name+'</option>'; }).join("");
+    document.getElementById("bRival").classList.toggle("on",state.opp===RIVAL[state.team]);
+  }
+  document.getElementById("selOpp").onchange=function(){ reselect({opp:this.value}); };
+  document.getElementById("bRival").onclick=function(){
+    state.oppLocked=false; reselect({opp:RIVAL[state.team]}); state.oppLocked=false;
+    document.getElementById("bRival").classList.add("on");
+  };
 
-  /* ── event list ── */
+  /* ── event-type list · axis two ── */
   var list=document.getElementById("evlist");
   function renderList(){
-    var f=EVENTS.filter(function(e){
-      return (state.filt.grp==="all"||e.grp===state.filt.grp) &&
-             (state.filt.team==="all"||e.team===state.filt.team); });
-    document.getElementById("evcount").textContent=f.length+" of 50";
+    var T=TEAMS[state.team];
+    document.getElementById("evcount").textContent=TYPES.length+" types × 16";
     list.innerHTML="";
-    f.forEach(function(e){
-      var T=TEAMS[e.team];
-      var d=document.createElement("div");
-      d.className="ev"+(e.id===state.ev.id?" on":"");
-      d.innerHTML='<div class="tm" style="background:'+T.p+';color:'+(T.p==="#F1B82D"||T.p==="#CFAE70"||T.p==="#FDD023"?"#000":"#fff")+'">'+T.ab+'</div>'+
-        '<div class="nm"><b>'+e.name+'</b><i>'+e.sub+'</i></div>'+
-        '<div class="tr"><b>T'+e.tier+'</b>'+(e.d/1000).toFixed(1)+'s</div>';
-      d.onclick=function(){ state.ev=e; state.manual=null; renderList(); renderBrief(); renderRight(); renderURLs(); };
-      list.appendChild(d);
+    TYPE_GROUPS.forEach(function(g){
+      var rows=TYPES.filter(function(t){ return t.grp===g[0]; });
+      if(!rows.length) return;
+      var h=document.createElement("div"); h.className="grphd"; h.textContent=g[1];
+      list.appendChild(h);
+      rows.forEach(function(ty){
+        /* preview the type against the selected school, so the row shows what
+           you'd actually get rather than a generic label */
+        var e=makeEvent(ty.id,state.team,state.opp);
+        var d=document.createElement("div");
+        d.className="ev"+(ty.id===state.type?" on":"");
+        d.innerHTML='<div class="tm" style="background:'+T.p+';color:'+(lightOn(T.p)?"#000":"#fff")+'">'+
+            T.ab+'</div>'+
+          '<div class="nm"><b>'+e.name+'</b><i>'+ty.label+' · '+e.sub+'</i></div>'+
+          '<div class="tr"><b>T'+e.tier+'</b>'+(e.d/1000).toFixed(1)+'s</div>';
+        d.onclick=function(){ reselect({type:ty.id}); };
+        list.appendChild(d);
+      });
     });
   }
 
@@ -1946,9 +2132,11 @@ function bootApp(){
     var availW=Math.max(200, box.clientWidth-40), availH=Math.max(120, box.clientHeight-52);
     var W=availW, H=W*geo.AH/geo.AW;
     if(H>availH){ H=availH; W=H*geo.AW/geo.AH; }
-    lastBox=L.id+"|"+Math.round(availW)+"x"+Math.round(availH);
+    lastBox=L.id+"|"+GAP+"|"+Math.round(availW)+"x"+Math.round(availH);
     stage.innerHTML=""; SCREENS=[];
     stage.style.width=W+"px"; stage.style.height=H+"px";
+    stage.classList.toggle("seams",state.seams);
+    stage.classList.toggle("plates",state.plates);
     L.cells.forEach(function(c,i){
       var r=geo.rect(c);
       var d=document.createElement("div"); d.className="scr";
@@ -1965,7 +2153,6 @@ function bootApp(){
       d.onmouseenter=function(){ d.classList.add("hi"); };
       d.onmouseleave=function(){ d.classList.remove("hi"); };
       d.onclick=function(){ window.open(tvURL(i),"_blank"); };
-      if(!state.bezel) d.style.boxShadow="none";
       stage.appendChild(d);
       SCREENS.push({el:d,can:can,ov:ov,w:r.w*W,h:r.h*H});
     });
@@ -2042,7 +2229,9 @@ function bootApp(){
   /* ── urls ── */
   function tvURL(i){
     var base=location.href.split(/[?#]/)[0];
-    var p=["tv="+(i+1),"event="+state.ev.id,"layout="+state.L.id];
+    var p=["tv="+(i+1),"event="+state.type,"team="+state.team,"layout="+state.L.id];
+    if(state.opp!==RIVAL[state.team]) p.push("opp="+state.opp);
+    if(GAP!==GAP_DEFAULT) p.push("gap="+GAP);
     if(REST!==2500) p.push("rest="+REST);
     if(EPOCH!==EPOCH_DEFAULT) p.push("t0="+EPOCH);
     return base+state.urlStyle+p.join("&");
@@ -2085,10 +2274,25 @@ function bootApp(){
     state.playing=!state.playing; this.textContent=state.playing?"Pause":"Play";
     this.classList.toggle("on",state.playing); if(state.playing) state.manual=null;
   };
-  document.getElementById("bBezel").onclick=function(){
-    state.bezel=!state.bezel; this.classList.toggle("on",!state.bezel);
-    stage.querySelectorAll(".scr").forEach(function(s){
-      s.style.boxShadow = state.bezel ? "" : "none"; });
+  document.getElementById("bSeams").onclick=function(){
+    state.seams=!state.seams; this.classList.toggle("on",state.seams);
+    stage.classList.toggle("seams",state.seams);
+  };
+  document.getElementById("bPlates").onclick=function(){
+    state.plates=!state.plates; this.classList.toggle("on",state.plates);
+    stage.classList.toggle("plates",state.plates);
+  };
+  /* The gap is canvas geometry, not decoration, so changing it rewrites every
+     output URL — a wall whose screens disagree about the gap frames wrong. */
+  var gsel=document.getElementById("selGap");
+  gsel.value=String(GAP);
+  if(gsel.selectedIndex<0){
+    var o=document.createElement("option"); o.value=String(GAP);
+    o.textContent=GAP+" · custom"; gsel.appendChild(o); gsel.value=String(GAP);
+  }
+  gsel.onchange=function(){
+    GAP=Math.max(0,Math.min(2,+this.value||0));
+    buildStage(); renderBrief(); renderURLs();
   };
   function scrub(e){
     var r=track.getBoundingClientRect();
@@ -2103,12 +2307,16 @@ function bootApp(){
 
   document.addEventListener("keydown",function(e){
     if(e.target.tagName==="SELECT"||e.target.tagName==="INPUT") return;
-    var i=EVENTS.indexOf(state.ev);
-    if(e.key==="ArrowDown"||e.key==="j"){ state.ev=EVENTS[(i+1)%EVENTS.length]; e.preventDefault(); }
-    else if(e.key==="ArrowUp"||e.key==="k"){ state.ev=EVENTS[(i-1+EVENTS.length)%EVENTS.length]; e.preventDefault(); }
+    /* up/down walks the event types, left/right walks the schools — one key per axis */
+    var ti=TYPES.map(function(t){ return t.id; }).indexOf(state.type);
+    var si=TEAMKEYS.indexOf(state.team);
+    if(e.key==="ArrowDown"||e.key==="j"){ reselect({type:TYPES[(ti+1)%TYPES.length].id}); }
+    else if(e.key==="ArrowUp"||e.key==="k"){ reselect({type:TYPES[(ti-1+TYPES.length)%TYPES.length].id}); }
+    else if(e.key==="ArrowRight"||e.key==="l"){ reselect({team:TEAMKEYS[(si+1)%TEAMKEYS.length],opp:""}); }
+    else if(e.key==="ArrowLeft"||e.key==="h"){ reselect({team:TEAMKEYS[(si-1+TEAMKEYS.length)%TEAMKEYS.length],opp:""}); }
     else if(e.key===" "){ document.getElementById("bPlay").click(); e.preventDefault(); return; }
     else return;
-    state.manual=null; renderList(); renderBrief(); renderRight(); renderURLs();
+    e.preventDefault();
     var on=list.querySelector(".ev.on"); if(on) on.scrollIntoView({block:"nearest"});
   });
 
@@ -2160,15 +2368,20 @@ function bootApp(){
   /* ── scripting hook. Same shape as the other BarBoards prototypes (§13.1), and
         the only supported way to drive a frame without waiting for the clock. ── */
   window.__BB={
-    TEAMS:TEAMS, EVENTS:EVENTS, LAYOUTS:LAYOUTS, GRAMMARS:G,
+    TEAMS:TEAMS, TYPES:TYPES, LAYOUTS:LAYOUTS, GRAMMARS:G, RIVAL:RIVAL,
+    teamKeys:TEAMKEYS, makeEvent:makeEvent,
     frameAt:frameAt, payload:payloadFor, url:tvURL,
-    get:function(){ return {event:state.ev.id,layout:state.L.id,ms:currentMs(),playing:state.playing}; },
+    get:function(){ return {type:state.type,team:state.team,opp:state.opp,
+      event:state.ev.id,name:state.ev.name,layout:state.L.id,gap:GAP,
+      ms:currentMs(),playing:state.playing}; },
     set:function(o){
       o=o||{};
-      if(o.event){ var e=EVENTS.filter(function(x){ return x.id===o.event; })[0];
-                   if(e){ state.ev=e; state.manual=null; } }
       if(o.layout&&LAYOUTS[o.layout]){ state.L=LAYOUTS[o.layout]; sel.value=o.layout; }
-      buildStage(); renderList(); renderBrief(); renderRight(); renderURLs();
+      if(o.gap!==undefined){ GAP=Math.max(0,Math.min(2,+o.gap||0)); gsel.value=String(GAP); }
+      if(o.event&&!o.type){ var s=resolveSelection(new URLSearchParams("event="+o.event));
+                            o.type=s.type; if(!o.team) o.team=s.team; }
+      buildStage();
+      reselect({type:o.type,team:o.team,opp:o.opp});
       return this.get();
     },
     seek:function(ms){
@@ -2180,7 +2393,8 @@ function bootApp(){
     }
   };
 
-  renderList(); buildStage(); renderBrief(); renderRight(); renderURLs(); tick();
+  renderTeams(); renderOpp(); renderList(); buildStage();
+  renderBrief(); renderRight(); renderURLs(); tick();
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2188,12 +2402,24 @@ function bootApp(){
    Run on load, reported to the console. Cheap, and they caught real bugs.
    ══════════════════════════════════════════════════════════════════════════ */
 function audit(){
-  var fails=[], warn=[];
-  var ids={};
-  EVENTS.forEach(function(e){
+  var fails=[], warn=[], ids={}, checked=0;
+
+  /* Every type must cross with every school, so the matrix is what gets walked —
+     not a hand-written list. Colour-, chant- and finish-dependent code paths differ
+     per school, so a type that renders for Texas is not proof it renders for LSU. */
+  var MATRIX=[];
+  TYPES.forEach(function(ty){ TEAMKEYS.forEach(function(tk){
+    MATRIX.push(makeEvent(ty.id,tk,RIVAL[tk]));
+  }); });
+
+  MATRIX.forEach(function(e){
     if(ids[e.id]) fails.push("duplicate id "+e.id); ids[e.id]=1;
     if(!TEAMS[e.team]) fails.push(e.id+": unknown team "+e.team);
+    if(!TEAMS[e.opp])  fails.push(e.id+": unknown opponent "+e.opp);
+    if(e.opp===e.team) fails.push(e.id+": school is its own opponent");
     if(!G[e.cue]) fails.push(e.id+": unknown grammar "+e.cue);
+    if(!e.name||!e.sub||!e.desc) fails.push(e.id+": missing name/sub/desc");
+    if(!isFinite(e.d)||e.d<=0) fails.push(e.id+": bad duration "+e.d);
     /* overrun — every phase table must end at or before 1.0 */
     var P=PHASES[e.cue];
     if(P&&P.length&&e.cue!=="chant"&&P[P.length-1][1]>1.0001) fails.push(e.id+": phase overrun");
@@ -2204,10 +2430,11 @@ function audit(){
        caught a real bug — no opaque fill sitting on top of type that is meant to be read */
     ["row4","jumbo","room14"].forEach(function(lid){
       var L=LAYOUTS[lid];
-      for(var s=0;s<=20;s++){
+      for(var s=0;s<=12;s++){
         var f;
-        try{ f=frameAt(e,L,e.d*s/20); }
-        catch(err){ fails.push(e.id+"/"+lid+" @"+s+"/20: "+err.message); continue; }
+        checked++;
+        try{ f=frameAt(e,L,e.d*s/12); }
+        catch(err){ fails.push(e.id+"/"+lid+" @"+s+"/12: "+err.message); continue; }
         var topFill=-1;
         f.layers.forEach(function(l,k){ if(l.k==="fill"&&(l.a===undefined||l.a>=0.98)) topFill=k; });
         f.layers.forEach(function(l,k){
@@ -2216,7 +2443,7 @@ function audit(){
             if(!l.t) fails.push(e.id+"/"+lid+": empty word");
             if(!isFinite(l.x+l.y+l.h)) fails.push(e.id+"/"+lid+": word geometry NaN");
             if(k<topFill&&(l.a===undefined||l.a>0.5))
-              fails.push(e.id+"/"+lid+" @"+s+"/20: \""+l.t+"\" is under an opaque fill");
+              fails.push(e.id+"/"+lid+" @"+s+"/12: \""+l.t+"\" is under an opaque fill");
           }
           if((l.k==="band"||l.k==="cell")&&!isFinite(l.x+l.y+l.w+l.h))
             fails.push(e.id+"/"+lid+": "+l.k+" geometry NaN");
@@ -2224,17 +2451,31 @@ function audit(){
       }
     });
   });
-  /* chant durations must equal intro + beats + tail exactly */
-  EVENTS.filter(function(e){ return e.cue==="chant"; }).forEach(function(e){
+  /* chant duration must equal intro + that school's own beat table + tail, exactly */
+  MATRIX.filter(function(e){ return e.cue==="chant"; }).forEach(function(e){
     var ms=0; TEAMS[e.team].beats.forEach(function(b){ ms+=(b.ms||660); });
     if(1200+ms+1600!==e.d) fails.push(e.id+": chant duration mismatch");
   });
-  /* every school must be represented */
-  Object.keys(TEAMS).forEach(function(k){
-    if(!EVENTS.some(function(e){ return e.team===k; })) fails.push("no event for "+k);
+  /* every school must have a finish, a chant and a rival that is not itself */
+  TEAMKEYS.forEach(function(k){
+    if(!FINISH[TEAMS[k].finish]) fails.push(k+": unknown finish "+TEAMS[k].finish);
+    if(!TEAMS[k].beats||!TEAMS[k].beats.length) fails.push(k+": no chant beats");
+    if(!TEAMS[k].venue||!TEAMS[k].city) fails.push(k+": no venue/city");
+    if(!TEAMS[RIVAL[k]]||RIVAL[k]===k) fails.push(k+": bad rival "+RIVAL[k]);
   });
-  if(EVENTS.length!==50) fails.push("expected 50 events, found "+EVENTS.length);
-  var tag="BarBoards audit — "+EVENTS.length+" events, "+Object.keys(TEAMS).length+" schools, "+
+  /* every school must reach a distinct finish, or the theming is not doing its job */
+  var fin={}; TEAMKEYS.forEach(function(k){ fin[TEAMS[k].finish]=(fin[TEAMS[k].finish]||0)+1; });
+  Object.keys(fin).forEach(function(f){ if(fin[f]>1) warn.push("finish '"+f+"' shared by "+fin[f]+" schools"); });
+  /* legacy one-id-per-combination URLs must still resolve */
+  [["td-tex","td","TEX"],["ch-ark","chant","ARK"],["pick6-ala","pick6","ALA"],
+   ["twomin-lsu","twomin","LSU"],["fg50-uk","fg50","UK"]].forEach(function(t){
+    var s=resolveSelection(new URLSearchParams("event="+t[0]));
+    if(s.type!==t[1]||s.team!==t[2]) fails.push("legacy id "+t[0]+" → "+s.type+"/"+s.team);
+  });
+  if(MATRIX.length!==TYPES.length*TEAMKEYS.length)
+    fails.push("matrix size "+MATRIX.length);
+  var tag="BarBoards audit — "+TYPES.length+" types × "+TEAMKEYS.length+" schools = "+
+          MATRIX.length+" events, "+checked+" frames, "+
           LAYORDER.length+" layouts, "+Object.keys(G).length+" grammars";
   if(fails.length){ console.error(tag+" — FAIL"); fails.forEach(function(f){ console.error("  ✗ "+f); }); }
   else console.log("%c"+tag+" — pass","color:#7FC08A");
@@ -2243,7 +2484,9 @@ function audit(){
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 document.fonts && document.fonts.ready.then(function(){ WCACHE={}; });
-audit();
+/* The matrix audit walks twelve thousand frames. That is fine in the control room
+   and unacceptable on an output, which should be painting within a frame of load. */
+if(!Q.has("tv")) audit();
 if(Q.has("tv")) bootTV(); else bootApp();
 
 })();

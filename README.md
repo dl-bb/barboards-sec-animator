@@ -15,21 +15,33 @@ Single file, no build step, no dependencies beyond Google Fonts (Anton + IBM Ple
 | `barboards-spec.md` | The experience-system specification the animator is built against. |
 | `index.html` | Redirect to the animator, so the bare host URL works. |
 
-## The 50 events
+## Two independent axes
 
-Structured **16 + 16 + 18** so every school is covered and the whole event ladder is exercised:
+A push event has two axes: **what happened**, and **who it happened to**. They are selected
+separately, so all 20 types are available for all 16 schools against any opponent.
 
-- **16 touchdowns** — one per school, each with its own call, colours, venue and payoff move
-- **16 chants** — the real thing, one beat per 520–1400 ms slot
-- **18 ladder rungs** — pick six, scoop and score, kick return TD, blocked kick returned,
-  safety, walk-off field goal, fake punt, turnover on downs, interception, fumble lost,
-  two-point conversion, 50+ field goal, explosive play, fourth-down conversion,
-  review overturned, goal-line stand, red zone, two-minute warning
+**20 event types**
 
-Each carries a realistic push-event payload — `event_category`, `event_type`, `play.type`,
-and the fields that actually distinguish the event: `defense.int_touchdown`,
+| Group | Types |
+|---|---|
+| Scoring | touchdown · two-point conversion · safety |
+| Kicking | field goal 50+ · walk-off field goal |
+| Return touchdowns | pick six · scoop and score · kick return TD · blocked kick returned |
+| Turnovers | interception · fumble lost · turnover on downs |
+| Big plays | explosive play 40+ · fourth-down conversion · fake punt |
+| States & stoppages | red zone · two-minute warning · goal-line stand · review overturned |
+| Ritual | chant / call track |
+
+**16 schools**, each supplying its colours, venue, touchdown call, chant beat table and
+payoff move. The opponent defaults to the in-conference rivalry and can be overridden.
+
+Every combination carries a realistic push-event payload — `event_category`, `event_type`,
+`play.type`, and the fields that actually distinguish the event: `defense.int_touchdown`,
 `fumble.opp_rec_td`, `return.category`, `block.category`, `details.safety`,
 `play.official=false` → `review.reversed`, `game.expected_latency`.
+
+Player names in descriptions are **synthetic** and deterministic per school — the payload
+reads like the feed without attributing a play to a real player.
 
 ## Theming
 
@@ -65,10 +77,10 @@ So there is nothing to synchronise. A device joining ten minutes late lands on t
 frame immediately, and a device that reloads never falls out of step.
 
 ```
-…/sec-push-animator.html?tv=1&event=td-tex&layout=row4
-…/sec-push-animator.html?tv=2&event=td-tex&layout=row4
-…/sec-push-animator.html?tv=3&event=td-tex&layout=row4
-…/sec-push-animator.html?tv=4&event=td-tex&layout=row4
+…/sec-push-animator.html?tv=1&event=td&team=TEX&layout=row4
+…/sec-push-animator.html?tv=2&event=td&team=TEX&layout=row4
+…/sec-push-animator.html?tv=3&event=td&team=TEX&layout=row4
+…/sec-push-animator.html?tv=4&event=td&team=TEX&layout=row4
 ```
 
 Each output letterboxes itself to 16:9 and renders its own window into the shared canvas,
@@ -80,8 +92,11 @@ all 156 cells in all 12 layouts.
 | Param | Meaning |
 |---|---|
 | `tv` | 1-based output index. Omit for the control room. |
-| `event` | Event id, e.g. `td-tex` |
+| `event` | Event **type**, e.g. `td`, `pick6`, `chant` |
+| `team` | School, e.g. `TEX`. Independent of the type. |
+| `opp` | Opponent. Defaults to the school's rival. |
 | `layout` | Layout id, e.g. `row4` |
+| `gap` | Bezel gap in screen widths. `0` (default) butts panels pixel to pixel. **Must match on every output in a wall** — it is canvas geometry, not decoration. |
 | `t0` | Epoch override in ms. Same value everywhere = same phase. |
 | `rest` | Ms of lockup between loops. Default 2500. |
 | `skew` | Per-device offset in ms; positive runs ahead. |
