@@ -1,0 +1,16 @@
+name = "barboards-link"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+[[durable_objects.bindings]]
+name = "BOARD"
+class_name = "Board"
+
+# SQLite-backed Durable Objects are the free-plan class. Using `new_classes`
+# here would request the paid KV-backed kind and the deploy would be rejected.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Board"]
+
+[observability]
+enabled = true

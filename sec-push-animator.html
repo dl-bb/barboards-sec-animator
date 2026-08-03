@@ -169,6 +169,11 @@ table.t tr.now td{background:rgba(240,176,58,.09);color:var(--cue)}
 .urow .tvn{font-family:Anton,sans-serif;font-size:12px;color:var(--cue);text-align:center;background:#17120F;border-radius:2px;padding:2px 0}
 .urow .u{font-family:"IBM Plex Mono",monospace;font-size:8px;color:#8E8074;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .urow .btn{padding:3px 6px;font-size:7.5px}
+.outs{display:flex;flex-wrap:wrap;gap:3px}
+.outdot{font-family:"IBM Plex Mono",monospace;font-size:9px;width:20px;height:20px;line-height:18px;
+  text-align:center;border:1px solid #2A211C;border-radius:2px;color:var(--dimmer);background:#141010}
+.outdot.on{border-color:var(--good);color:var(--good);background:rgba(127,192,138,.12)}
+.outdot.warnx{border-color:var(--tally);color:var(--tally)}
 .note{font-size:11px;line-height:1.5;color:#9A8C7F}
 .note b{color:var(--bone);font-weight:500}
 .note code{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--cue);background:#17120F;padding:1px 4px;border-radius:2px}
@@ -275,6 +280,28 @@ body.diag #tvdiag{display:block}
     </div>
 
     <div class="sect">
+      <div class="secthd"><h3>Wall link</h3><span class="k" id="linkStat">off</span></div>
+      <div class="sectbody">
+        <div class="note">The TV URLs below are <b>permanent</b> — set them once and never touch
+          them again. This panel then drives what plays. Timing still comes from the wall clock,
+          so the link only carries <i>which</i> cue; it cannot desync anything.</div>
+        <dl class="kv" style="margin-top:8px">
+          <dt>room</dt><dd><input type="text" id="inRoom" style="width:100%" placeholder="room code"></dd>
+          <dt>broker</dt><dd><input type="text" id="inBroker" style="width:100%"></dd>
+          <dt>lead</dt><dd><input type="number" id="inLead" min="0" max="5000" step="100" style="width:74px"> ms
+            before outputs switch</dd>
+        </dl>
+        <div style="display:flex;gap:4px;margin-top:7px;flex-wrap:wrap">
+          <button class="btn" id="bLinkSave">Connect</button>
+          <button class="btn" id="bNewRoom">New room code</button>
+          <button class="btn" id="bRefire" title="Re-send the current cue so every screen restarts it together">Re-fire</button>
+        </div>
+        <div class="outs" id="outs" style="margin-top:9px"></div>
+        <div class="note warn" style="margin-top:8px" id="linkNote">—</div>
+      </div>
+    </div>
+
+    <div class="sect">
       <div class="secthd"><h3>TV URLs</h3><span class="k" id="urlN">—</span></div>
       <div class="sectbody">
         <div class="note">Each output is its own page. Open the URL on that TV once and leave it —
@@ -369,6 +396,237 @@ function loopPos(dur){                       /* → ms into (cue + rest) */
   var p = (nowMs() - EPOCH) % period;
   return p < 0 ? p + period : p;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   0b · LINK — the command channel
+   Carries which cue the wall is on. Never timing: an output that hears late
+   still renders the identical frame, because the frame comes from the clock.
+
+   Two things make transport latency stop mattering:
+     · a websocket, so an operator's click feels immediate, with a poll
+       underneath it that is the thing actually guaranteeing delivery
+     · `at` — a wall-clock instant to switch ON. Every output holding the
+       command before `at` flips on the same tick, so a slow channel produces
+       a late transition, never a ragged one.
+   ══════════════════════════════════════════════════════════════════════════ */
+function store(k,v){
+  try{ if(v===undefined) return localStorage.getItem(k);
+       if(v===null) localStorage.removeItem(k); else localStorage.setItem(k,v); }
+  catch(e){ return null; }                    /* kiosk browsers can forbid this */
+}
+/* ── a minimal MQTT 3.1.1 client over WebSocket ────────────────────────────
+   Hand-rolled rather than pulled from a CDN: these pages run on televisions and
+   kiosk browsers on somebody else's network, and a screen that goes blank
+   because a CDN is unreachable is worse than one extra page of packet code.
+   QoS 0 only, which is all a retained state topic needs.
+
+   RETAINED is the important flag. A television powered on at 3pm receives the
+   current cue the instant it subscribes, with no request and no catch-up — the
+   broker replays the last retained message to every new subscriber. */
+function MQTT(url, clientId){
+  var ws=null, self={connected:false, onmessage:null, onopen:null, onclose:null};
+  var ping=null, subs=[];
+  var TE=new TextEncoder(), TD=new TextDecoder();
+
+  function vlen(n){ var o=[],b; do{ b=n%128; n=Math.floor(n/128); if(n>0) b|=128; o.push(b); }while(n>0); return o; }
+  function mstr(s){ var b=TE.encode(s); return [b.length>>8, b.length&255].concat(Array.from(b)); }
+  function pkt(type,flags,body){
+    return new Uint8Array([(type<<4)|flags].concat(vlen(body.length), body));
+  }
+  function send(p){ if(ws&&ws.readyState===1) ws.send(p); }
+
+  self.connect=function(){
+    try{ ws=new WebSocket(url,"mqtt"); }catch(e){ if(self.onclose) self.onclose(); return; }
+    ws.binaryType="arraybuffer";
+    ws.onopen=function(){
+      /* CONNECT: protocol MQTT level 4, clean session, 45 s keepalive */
+      send(pkt(1,0, mstr("MQTT").concat([4,0x02,0,45], mstr(clientId))));
+    };
+    ws.onmessage=function(e){
+      var b=new Uint8Array(e.data), i=0;
+      while(i<b.length){
+        var type=b[i]>>4, flags=b[i]&15; i++;
+        var mult=1, len=0, d;
+        do{ d=b[i++]; len+=(d&127)*mult; mult*=128; }while(d&128 && i<b.length);
+        var body=b.subarray(i,i+len); i+=len;
+        if(type===2){                                   /* CONNACK */
+          if(body[1]!==0){ try{ ws.close(); }catch(x){} return; }
+          self.connected=true;
+          subs.forEach(function(t){ self.subscribe(t); });
+          clearInterval(ping); ping=setInterval(function(){ send(pkt(12,0,[])); },30000);
+          if(self.onopen) self.onopen();
+        }else if(type===3){                             /* PUBLISH */
+          var tl=(body[0]<<8)|body[1];
+          var topic=TD.decode(body.subarray(2,2+tl));
+          var off=2+tl; if(((flags>>1)&3)>0) off+=2;    /* packet id, QoS > 0 only */
+          if(self.onmessage) self.onmessage(topic, TD.decode(body.subarray(off)));
+        }
+      }
+    };
+    ws.onclose=function(){ self.connected=false; clearInterval(ping); if(self.onclose) self.onclose(); };
+    ws.onerror=function(){ try{ ws.close(); }catch(e){} };
+  };
+  self.subscribe=function(topic){
+    if(subs.indexOf(topic)<0) subs.push(topic);
+    if(self.connected) send(pkt(8,2, [0,1].concat(mstr(topic),[0])));
+  };
+  self.publish=function(topic,payload,retain){
+    send(pkt(3, retain?1:0, mstr(topic).concat(Array.from(TE.encode(payload)))));
+  };
+  self.close=function(){ clearInterval(ping); try{ ws&&ws.close(); }catch(e){} };
+  return self;
+}
+
+var LINK = (function(){
+  /* A public broker needs no account and nothing deployed, which is why it is
+     the default. The room code is the ONLY thing separating your wall from
+     anyone else on that broker, so the control panel generates a random one
+     rather than shipping a guessable default. Move to the Cloudflare worker in
+     worker/ when this stops being a prototype — same interface, and the
+     transport is chosen by the URL scheme, so it is a one-URL change. */
+  var MQTT_DEFAULT="wss://broker.hivemq.com:8884/mqtt";
+  var api={
+    url:  Q.get("link") || store("bb.link") || MQTT_DEFAULT,
+    room: Q.get("room") || store("bb.room") || "",
+    key:  Q.get("key")  || store("bb.key")  || "",
+    lead: Q.has("lead") ? +Q.get("lead") : 700,
+    seq:-1, status:"off", outputs:[], lastRx:0, mode:"off",
+    on:function(){ return !!this.url && !!this.room; }
+  };
+  var cli=null, ws=null, timer=null, onState=null, hello=null, retry=0, seen={}, queued=null;
+
+  function isMQTT(u){ return /^(wss?|mqtts?):\/\//i.test(u); }
+  function topic(sub){ return "barboards/"+api.room+"/"+sub; }
+  function rx(s,from){
+    if(!s||typeof s!=="object") return;
+    api.lastRx=Date.now();
+    if(Array.isArray(s.outputs)) api.outputs=s.outputs;
+    if(s.seq===undefined || s.seq===api.seq) return;
+    api.seq=s.seq;
+    if(onState) onState(s);
+  }
+  function pruneSeen(){
+    var now=Date.now(), out=[];
+    Object.keys(seen).forEach(function(k){ if(now-seen[k]<9000) out.push(+k); });
+    api.outputs=out.sort(function(a,b){ return a-b; });
+  }
+
+  /* ── MQTT transport ── */
+  function startMQTT(role){
+    api.mode="mqtt";
+    var id="bb_"+(role==="tv"?"tv"+hello:"ctl")+"_"+Math.floor(Date.now()%1e7)+"_"+
+           Math.floor((performance.now()*1000)%1e5);
+    cli=MQTT(api.url,id);
+    cli.onopen=function(){
+      api.status="live"; retry=0;
+      cli.subscribe(topic("state"));
+      if(role==="control") cli.subscribe(topic("hello"));
+      /* A push issued before the socket was up would otherwise be dropped in
+         silence, leaving an untouched control panel publishing nothing and the
+         wall with no retained message to pick up. */
+      if(queued){ var q=queued; queued=null; api.push(q); }
+    };
+    cli.onmessage=function(t,payload){
+      var m; try{ m=JSON.parse(payload); }catch(e){ return; }
+      if(t===topic("state")) rx(m,"mqtt");
+      else if(t===topic("hello")&&m&&m.tv!==undefined){ seen[m.tv]=Date.now(); pruneSeen(); }
+    };
+    cli.onclose=function(){
+      api.status="down";
+      retry=Math.min(retry+1,6);
+      /* backoff — a wall left running overnight must not hammer a free broker */
+      setTimeout(function(){ if(cli) cli.connect(); }, 1000*Math.pow(2,retry-1));
+    };
+    cli.connect();
+    clearInterval(timer);
+    timer=setInterval(function(){
+      if(role==="tv"&&cli&&cli.connected)
+        cli.publish(topic("hello"), JSON.stringify({tv:hello,t:Date.now()}), false);
+      if(role==="control") pruneSeen();
+    }, 3000);
+  }
+
+  /* ── HTTP/websocket transport, for the worker in worker/ ── */
+  function endpoint(path){
+    var u=api.url.replace(/\/+$/,"")+path;
+    var q=["room="+encodeURIComponent(api.room)];
+    if(hello!==null) q.push("hello="+hello);
+    return u+"?"+q.join("&");
+  }
+  function startHTTP(role){
+    api.mode="http";
+    function openWS(){
+      if(typeof WebSocket==="undefined") return;
+      try{ ws=new WebSocket(endpoint("/ws").replace(/^http/,"ws")); }catch(e){ ws=null; return; }
+      ws.onopen=function(){ api.status="live"; retry=0; };
+      ws.onmessage=function(e){ if(e.data==="pong") return;
+        try{ rx(JSON.parse(e.data),"ws"); }catch(err){} };
+      ws.onclose=function(){ ws=null; api.status=api.lastRx?"polling":"down";
+        retry=Math.min(retry+1,6); setTimeout(openWS,1000*Math.pow(2,retry-1)); };
+      ws.onerror=function(){ try{ ws.close(); }catch(e){} };
+    }
+    function poll(){
+      fetch(endpoint("/state"),{cache:"no-store"}).then(function(r){ return r.json(); })
+        .then(function(s){ if(api.status!=="live") api.status="polling"; rx(s,"poll"); })
+        .catch(function(){ if(!ws) api.status="down"; });
+    }
+    openWS(); poll();
+    clearInterval(timer);
+    timer=setInterval(function(){
+      if(ws&&ws.readyState===1){ try{ ws.send("ping"); }catch(e){} }
+      if(!ws||ws.readyState!==1||Date.now()-api.lastRx>8000) poll();
+    }, role==="tv"?2000:3000);
+  }
+
+  /* role "tv" announces its output index; "control" listens and publishes */
+  api.start=function(role,idx,cb){
+    onState=cb; hello=(role==="tv")?idx:null;
+    api.stop();
+    if(!api.on()){ api.status="off"; api.mode="off"; return; }
+    api.status="connecting";
+    if(isMQTT(api.url)) startMQTT(role); else startHTTP(role);
+  };
+  api.stop=function(){
+    clearInterval(timer); timer=null;
+    if(cli){ cli.onclose=null; cli.close(); cli=null; }
+    if(ws){ ws.onclose=null; try{ ws.close(); }catch(e){} ws=null; }
+    seen={}; api.outputs=[]; api.seq=-1; api.lastRx=0; retry=0;
+  };
+  api.push=function(o){
+    if(!api.on()) return Promise.resolve(null);
+    var body=Object.assign({},o);
+    if(body.at===undefined) body.at=Date.now()+api.lead;
+    body.seq=(api.seq<0?0:api.seq)+1;
+    body.t=Date.now();
+    if(api.mode==="mqtt"){
+      if(!cli||!cli.connected){ queued=o; return Promise.resolve(null); }
+      /* retained, so a television powered on later gets this without asking */
+      cli.publish(topic("state"), JSON.stringify(body), true);
+      rx(body,"self");
+      return Promise.resolve(body);
+    }
+    return fetch(endpoint("/state"),{
+      method:"POST", cache:"no-store",
+      headers:Object.assign({"content-type":"application/json"}, api.key?{"x-bb-key":api.key}:{}),
+      body:JSON.stringify(body)
+    }).then(function(r){ return r.json(); })
+      .then(function(s){ rx(s,"post"); return s; })
+      .catch(function(){ api.status="down"; return null; });
+  };
+  api.configure=function(o){
+    if(o.url!==undefined){ api.url=o.url.trim()||MQTT_DEFAULT; store("bb.link",api.url); }
+    if(o.room!==undefined){ api.room=o.room.trim(); store("bb.room",api.room||null); }
+    if(o.key!==undefined){ api.key=o.key.trim(); store("bb.key",api.key||null); }
+    if(o.lead!==undefined) api.lead=Math.max(0,+o.lead||0);
+  };
+  api.newRoom=function(){
+    var a="abcdefghjkmnpqrstuvwxyz23456789", s="", i;
+    for(i=0;i<10;i++) s+=a.charAt(Math.floor(Math.random()*a.length));
+    return s;
+  };
+  api.defaultBroker=MQTT_DEFAULT;
+  return api;
+})();
 
 /* ══════════════════════════════════════════════════════════════════════════
    1 · TEAMS — colours, locations, calls and chants for the 16 SEC schools
@@ -1902,12 +2160,17 @@ function frameAt(ev,L,ms){
    canvas, whatever its panel is.
    ══════════════════════════════════════════════════════════════════════════ */
 function bootTV(){
-  var tvIdx = Math.max(1, +Q.get("tv"))-1;
-  var lid = Q.get("layout")||"row4";
-  var L = LAYOUTS[lid]||LAYOUTS.row4;
+  /* rawIdx is what this screen was told it is and never changes. tvIdx is the
+     cell it currently occupies, which CAN go out of range when the control panel
+     switches to a smaller layout — a wall of eight told to show a row of three
+     has five screens with no cell, and they must say so rather than clamp and
+     silently duplicate output 3. */
+  var rawIdx = Math.max(1, +Q.get("tv"))-1;
+  var tvIdx = rawIdx;
+  var L = LAYOUTS[Q.get("layout")||"row4"]||LAYOUTS.row4;
   var sel = resolveSelection(Q);
   var ev = makeEvent(sel.type, sel.team, sel.opp);
-  if(tvIdx>=L.cells.length) tvIdx=L.cells.length-1;
+  var active = tvIdx < L.cells.length;
 
   document.body.classList.add("tvmode");
   if(Q.get("diag")==="1") document.body.classList.add("diag");
@@ -1920,8 +2183,13 @@ function bootTV(){
   var ov=mkOverlay(); scr.appendChild(ov.root);
   document.getElementById("tvhint").style.display = Q.get("bezel")==="0" ? "none" : "block";
 
-  var geo=geoOf(L), r=geo.rect(L.cells[tvIdx]);
-  var W=0,H=0,SW=0,SH=0;
+  var geo, r, W=0,H=0,SW=0,SH=0;
+  function regeo(){
+    active = rawIdx < L.cells.length;
+    tvIdx  = active ? rawIdx : 0;
+    geo=geoOf(L); r=geo.rect(L.cells[tvIdx]);
+  }
+  regeo();
   function size(){
     var vw=Math.max(160,root.clientWidth), vh=Math.max(90,root.clientHeight);
     SW=vw; SH=vw*9/16;
@@ -1936,6 +2204,61 @@ function bootTV(){
   }
   size(); window.addEventListener("resize",size);
   if(window.ResizeObserver) new ResizeObserver(size).observe(root);
+
+  /* ── the command channel ──────────────────────────────────────────────────
+     A cue arriving here is NOT applied on arrival. It is applied at s.at, a
+     wall-clock instant chosen by the control panel, so every screen holding the
+     command flips on the same tick and a slow channel yields a late transition
+     rather than a ragged one. Anything already past its `at` applies at once —
+     that is the case for a retained message replayed to a screen that just
+     powered on, which should join immediately. */
+  var pending=null, appliedAt=0, scheduledAt=0, applyErr=0;
+  function applyState(s){
+    /* recorded so an operator can prove the wall switched together: every output
+       aims at the same `at`, and applyErr is how far this one actually missed it */
+    appliedAt=Date.now(); scheduledAt=+s.at||0;
+    applyErr=scheduledAt?appliedAt-scheduledAt:0;
+    var nextL = (s.layout && LAYOUTS[s.layout]) ? LAYOUTS[s.layout] : L;
+    var nextGap = (s.gap===undefined||s.gap===null) ? GAP : Math.max(0,Math.min(2,+s.gap||0));
+    var geoChanged = (nextL!==L) || (nextGap!==GAP);
+    L=nextL; GAP=nextGap;
+    if(s.rest!==undefined && +s.rest>=0) REST=+s.rest;
+    if(s.epoch!==undefined && +s.epoch>0) EPOCH=+s.epoch;
+    var t=s.type||ev.typeId, tm=s.team||ev.team, op=s.opp||ev.opp;
+    if(!TYPE_BY_ID[t]) t=ev.typeId;
+    if(!TEAMS[tm]) tm=ev.team;
+    ev=makeEvent(t,tm,op);
+    period=ev.d+REST; hold=null;
+    if(geoChanged){ regeo(); size(); }
+    document.title=ev.name+" · TV "+(rawIdx+1)+" · "+L.name;
+  }
+  /* The armed switch is driven by a TIMER, never by the render loop.
+     requestAnimationFrame does not fire in a hidden or throttled tab, so a cue
+     scheduled from the frame loop would simply never arrive on an output whose
+     browser backgrounded it — and then jump when it came back. setTimeout is
+     throttled in the background but still fires, and the rAF check below stays
+     as a backstop for the case where it was throttled past `at`. */
+  var pendingTimer=null;
+  function arm(s){
+    var at=+s.at||0, dt=at-Date.now();
+    clearTimeout(pendingTimer); pendingTimer=null; pending=null;
+    if(dt>20){
+      pending={s:s,at:at};
+      pendingTimer=setTimeout(function(){
+        pendingTimer=null;
+        if(pending){ var q=pending; pending=null; applyState(q.s); }
+      }, dt);
+    }else applyState(s);          /* already due — a retained message, usually */
+  }
+  LINK.start("tv", rawIdx+1, arm);
+  /* Coming back from hidden: settle any switch whose moment passed while the
+     timer was throttled, then let the clock put us on the right frame. */
+  document.addEventListener("visibilitychange",function(){
+    if(!document.hidden && pending && Date.now()>=pending.at){
+      var q=pending; pending=null; clearTimeout(pendingTimer); pendingTimer=null;
+      applyState(q.s);
+    }
+  });
 
   var diag=document.getElementById("tvdiag");
   document.addEventListener("keydown",function(e){
@@ -1974,7 +2297,8 @@ function bootTV(){
     }
   });
 
-  window.__BB={ seek:function(t){ hold=t; return paint(cl(t,0,period)); },
+  window.__BB={ LINK:LINK,
+                seek:function(t){ hold=t; return paint(cl(t,0,period)); },
                 play:function(){ hold=null; },
                 set:function(o){ o=o||{};
                   ev=makeEvent(o.type||ev.typeId,o.team||ev.team,o.opp||ev.opp);
@@ -1982,7 +2306,9 @@ function bootTV(){
                   document.title=ev.name+" · TV "+(tvIdx+1)+" · "+L.name;
                   return this.get(); },
                 get:function(){ return {event:ev.id,type:ev.typeId,team:ev.team,opp:ev.opp,
-                                        name:ev.name,layout:L.id,tv:tvIdx+1,gap:GAP,
+                                        name:ev.name,layout:L.id,tv:rawIdx+1,gap:GAP,active:active,
+                                        scheduledAt:scheduledAt,appliedAt:appliedAt,applyErr:applyErr,
+                                        armed:pending?pending.at-Date.now():null,
                                         cell:r,ms:loopPos(ev.d),W:W,H:H,SW:SW,SH:SH}; } };
 
   var period=ev.d+REST;
@@ -1993,6 +2319,25 @@ function bootTV(){
     return {ms:p,u:+f.u.toFixed(4),phase:f.phase,layers:f.layers.length};
   }
   (function tick(){
+    /* the armed switch lands here, inside the frame loop, so it takes effect
+       within one frame of `at` on every screen holding it */
+    if(pending && Date.now()>=pending.at){ var q=pending; pending=null; applyState(q.s); }
+
+    if(!active){
+      /* This output has no cell in the current layout. Say so — clamping would
+         silently duplicate another screen and look like the wall is working. */
+      paintCanvas(can,[
+        {k:"fill",col:"#0A0807"},
+        {k:"word",t:"OUTPUT "+(rawIdx+1),x:.5,y:.44,h:.16,col:hexA("#EFE7DA",.5),fit:.7,track:.16},
+        {k:"word",t:"NOT IN "+L.name.toUpperCase(),x:.5,y:.62,h:.07,col:hexA("#EFE7DA",.28),fit:.7,track:.2}
+      ],SW,SH);
+      paintScreen(ov,null,SW,SH);
+      if(document.body.classList.contains("diag"))
+        diag.textContent="output  "+(rawIdx+1)+" — idle\nlayout  "+L.id+" has "+
+          L.cells.length+" cells\nlink    "+LINK.status+" · "+LINK.mode+" · room "+(LINK.room||"—");
+      requestAnimationFrame(tick); return;
+    }
+
     var p = hold!==null ? cl(hold,0,period) : loopPos(ev.d);
     var f=frameAt(ev,L,p);
     paintCanvas(can,f.layers,W,H);
@@ -2001,7 +2346,9 @@ function bootTV(){
       diag.textContent =
         "event   "+ev.id+"  ("+ev.name+")\n"+
         "layout  "+L.id+"   output "+(tvIdx+1)+" of "+L.cells.length+"\n"+
-        "cell    x "+r.x.toFixed(4)+"  y "+r.y.toFixed(4)+"  w "+r.w.toFixed(4)+"\n"+
+        "cell    x "+r.x.toFixed(4)+"  y "+r.y.toFixed(4)+"  w "+r.w.toFixed(4)+"  gap "+GAP+"\n"+
+        "link    "+LINK.status+" · "+LINK.mode+" · room "+(LINK.room||"—")+" · seq "+LINK.seq+"\n"+
+        (pending?("armed   "+ (pending.at-Date.now()) +" ms → "+pending.s.type+"/"+pending.s.team+"\n"):"")+
         "epoch   "+EPOCH+(SKEW?("   skew "+(SKEW>0?"+":"")+SKEW+" ms"):"")+"\n"+
         "now     "+nowMs()+"\n"+
         "period  "+period+" ms   ("+ev.d+" cue + "+REST+" rest)\n"+
@@ -2052,6 +2399,20 @@ function bootApp(){
     state.manual=null;
     renderTeams(); renderList(); renderOpp(); renderBrief(); renderRight(); renderURLs();
     render(currentMs());
+    if(o.push!==false) pushLink();
+  }
+
+  /* The wall is told what to show, and when to start showing it. The control
+     panel's own preview switches immediately so the UI stays responsive; the
+     outputs switch on `at`, together. The countdown to that is shown, because
+     an operator needs to know the difference between "nothing happened" and
+     "it happens in 600 ms". */
+  var armedUntil=0;
+  function pushLink(){
+    if(!LINK.on()) return;
+    armedUntil=Date.now()+LINK.lead;
+    LINK.push({type:state.type,team:state.team,opp:state.opp,
+               layout:state.L.id,gap:GAP,rest:REST,epoch:EPOCH});
   }
 
   /* ── layout select ── */
@@ -2062,7 +2423,8 @@ function bootApp(){
     sel.appendChild(o);
   });
   sel.value=state.L.id;
-  sel.onchange=function(){ state.L=LAYOUTS[sel.value]; buildStage(); renderBrief(); renderURLs(); };
+  sel.onchange=function(){ state.L=LAYOUTS[sel.value];
+    buildStage(); renderBrief(); renderURLs(); pushLink(); };
 
   /* ── school picker · axis one ── */
   var tg=document.getElementById("teamgrid");
@@ -2227,13 +2589,23 @@ function bootApp(){
   }
 
   /* ── urls ── */
+  /* With a link up, an output URL carries only WHICH SCREEN IT IS and which room
+     to listen to. Everything else arrives over the channel, so the URL is set
+     once per television and never changes again. Without a link, it falls back
+     to carrying the full selection so the file still works standalone. */
   function tvURL(i){
     var base=location.href.split(/[?#]/)[0];
-    var p=["tv="+(i+1),"event="+state.type,"team="+state.team,"layout="+state.L.id];
-    if(state.opp!==RIVAL[state.team]) p.push("opp="+state.opp);
-    if(GAP!==GAP_DEFAULT) p.push("gap="+GAP);
-    if(REST!==2500) p.push("rest="+REST);
-    if(EPOCH!==EPOCH_DEFAULT) p.push("t0="+EPOCH);
+    var p=["tv="+(i+1)];
+    if(LINK.on()){
+      p.push("room="+encodeURIComponent(LINK.room));
+      if(LINK.url!==LINK.defaultBroker) p.push("link="+encodeURIComponent(LINK.url));
+    }else{
+      p.push("event="+state.type,"team="+state.team,"layout="+state.L.id);
+      if(state.opp!==RIVAL[state.team]) p.push("opp="+state.opp);
+      if(GAP!==GAP_DEFAULT) p.push("gap="+GAP);
+      if(REST!==2500) p.push("rest="+REST);
+      if(EPOCH!==EPOCH_DEFAULT) p.push("t0="+EPOCH);
+    }
     return base+state.urlStyle+p.join("&");
   }
   function renderURLs(){
@@ -2268,6 +2640,55 @@ function bootApp(){
   document.getElementById("bQ").onclick=function(){ urlStyle("?"); };
   document.getElementById("bH").onclick=function(){ urlStyle("#"); };
 
+  /* ── wall link ── */
+  var inRoom=document.getElementById("inRoom"), inBroker=document.getElementById("inBroker"),
+      inLead=document.getElementById("inLead");
+  if(!LINK.room) LINK.room=LINK.newRoom();
+  inRoom.value=LINK.room; inBroker.value=LINK.url; inLead.value=LINK.lead;
+  function connectLink(){
+    LINK.configure({url:inBroker.value, room:inRoom.value, lead:+inLead.value});
+    inRoom.value=LINK.room; inBroker.value=LINK.url;
+    /* the control panel listens too, so a second operator's change is reflected here */
+    LINK.start("control",null,function(s){
+      if(s.type&&TYPE_BY_ID[s.type]&&
+         (s.type!==state.type||s.team!==state.team||s.opp!==state.opp||
+          (s.layout&&s.layout!==state.L.id))){
+        if(s.layout&&LAYOUTS[s.layout]){ state.L=LAYOUTS[s.layout]; sel.value=s.layout; buildStage(); }
+        if(s.gap!==undefined){ GAP=+s.gap; gsel.value=String(GAP); buildStage(); }
+        reselect({type:s.type,team:s.team,opp:s.opp,push:false});
+      }
+    });
+    renderURLs(); pushLink();
+  }
+  document.getElementById("bLinkSave").onclick=connectLink;
+  document.getElementById("bNewRoom").onclick=function(){ inRoom.value=LINK.newRoom(); connectLink(); };
+  document.getElementById("bRefire").onclick=function(){ pushLink(); };
+  connectLink();
+
+  function renderLink(){
+    var st=LINK.status, dot={live:"var(--good)",polling:"var(--cue)",connecting:"var(--cue)",
+                             down:"var(--tally)",off:"var(--dimmer)"}[st]||"var(--dimmer)";
+    document.getElementById("linkStat").innerHTML=
+      '<span style="color:'+dot+'">●</span> '+st+(LINK.mode!=="off"?(" · "+LINK.mode):"");
+    var live=LINK.outputs, n=state.L.cells.length, i, h="";
+    for(i=1;i<=n;i++){
+      var on=live.indexOf(i)>=0;
+      h+='<span class="outdot'+(on?" on":"")+'" title="output '+i+(on?" · live":" · not seen")+'">'+i+'</span>';
+    }
+    var extra=live.filter(function(v){ return v>n; });
+    extra.forEach(function(v){ h+='<span class="outdot warnx" title="output '+v+
+      ' is live but has no cell in this layout">'+v+'</span>'; });
+    document.getElementById("outs").innerHTML=h||'<span class="lb">no outputs</span>';
+    var ms=armedUntil-Date.now();
+    document.getElementById("linkNote").innerHTML =
+      (ms>0 ? '<b style="color:var(--cue)">arming — outputs switch in '+Math.max(0,Math.round(ms))+' ms</b>'
+            : (live.length? '<b>'+live.length+'</b> output'+(live.length===1?"":"s")+' listening · seq '+LINK.seq
+                          : 'No outputs have checked in yet. Open a TV URL below.'))+
+      '<div style="margin-top:5px">Public broker — the room code is the only thing keeping strangers off '+
+      'your wall. Deploy <code>worker/</code> and paste its https URL as the broker when this stops '+
+      'being a prototype.</div>';
+  }
+
   /* ── transport ── */
   var track=document.getElementById("track"), fill=document.getElementById("trackFill");
   document.getElementById("bPlay").onclick=function(){
@@ -2292,7 +2713,7 @@ function bootApp(){
   }
   gsel.onchange=function(){
     GAP=Math.max(0,Math.min(2,+this.value||0));
-    buildStage(); renderBrief(); renderURLs();
+    buildStage(); renderBrief(); renderURLs(); pushLink();
   };
   function scrub(e){
     var r=track.getBoundingClientRect();
@@ -2343,6 +2764,7 @@ function bootApp(){
     document.getElementById("tClk").textContent=(shown/1000).toFixed(2)+" / "+(e.d/1000).toFixed(2)+" s";
     document.getElementById("tPhase").textContent=f.phase||"—";
     document.getElementById("clk").textContent="wall clock "+new Date(nowMs()).toISOString().slice(11,23);
+    renderLink();
     document.getElementById("dEpoch").textContent=EPOCH;
     document.getElementById("dNow").textContent=nowMs();
     document.getElementById("dPos").textContent=Math.floor(ms)+" / "+(e.d+REST)+" ms";
@@ -2368,7 +2790,7 @@ function bootApp(){
   /* ── scripting hook. Same shape as the other BarBoards prototypes (§13.1), and
         the only supported way to drive a frame without waiting for the clock. ── */
   window.__BB={
-    TEAMS:TEAMS, TYPES:TYPES, LAYOUTS:LAYOUTS, GRAMMARS:G, RIVAL:RIVAL,
+    TEAMS:TEAMS, TYPES:TYPES, LAYOUTS:LAYOUTS, GRAMMARS:G, RIVAL:RIVAL, LINK:LINK,
     teamKeys:TEAMKEYS, makeEvent:makeEvent,
     frameAt:frameAt, payload:payloadFor, url:tvURL,
     get:function(){ return {type:state.type,team:state.team,opp:state.opp,

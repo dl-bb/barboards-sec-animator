@@ -64,6 +64,60 @@ Twelve arrangements. The cue changes **shape**, not just scale:
 | `stack` | column of 3 | Travel runs top to bottom |
 | `single` | single screen | Scaled in place |
 
+## Permanent TV URLs, driven live from the control panel
+
+Each output's URL carries **only which screen it is** and which room to listen to. Set it
+once per television and never touch it again:
+
+```
+…/?tv=1&room=<code>
+…/?tv=2&room=<code>
+…/?tv=3&room=<code>
+```
+
+The control panel then chooses the event, school, opponent, layout and gap, and every
+output follows.
+
+### Why latency doesn't matter
+
+The command channel carries *which cue*, never timing. Two mechanisms keep it honest:
+
+1. **The frame comes from the clock**, so an output that hears late joins the cue already
+   in progress at exactly the right frame — no drift, nothing to catch up. Measured: an
+   output that switched 762 ms late and one that switched 12 ms late both satisfied
+   `ms = (now − epoch) mod period` exactly.
+2. **The switch is scheduled, not immediate.** Every command carries `at`, a wall-clock
+   instant ~700 ms out. Every output holding the command flips on that tick, so a slow
+   channel produces a *late* transition rather than a *ragged* one. All outputs are handed
+   an identical `at`; a foregrounded screen hits it within ~12 ms.
+
+That second point is why the transport choice barely matters. It is also why the switch is
+driven by a timer rather than the render loop — `requestAnimationFrame` does not fire in a
+hidden or throttled tab, so a cue scheduled from the frame loop would never arrive on a
+backgrounded output.
+
+### Transport
+
+Selected by URL scheme, so moving between them is a one-URL change:
+
+| Scheme | Transport | Setup |
+|---|---|---|
+| `wss://` | MQTT over WebSocket (default: HiveMQ public broker) | none |
+| `https://` | The Cloudflare Worker in `worker/` | `wrangler deploy` |
+
+The default is a **public broker**, which needs no account and nothing deployed. The room
+code is the only thing separating your wall from anyone else on that broker, so the control
+panel generates a random one. There is no uptime guarantee. For anything beyond a
+prototype, deploy `worker/` and paste its https URL as the broker — same interface, private,
+strongly consistent, with a websocket for push and a 1 Hz poll underneath guaranteeing
+delivery.
+
+The MQTT state topic is published **retained**, so a television powered on hours later
+receives the current cue the instant it subscribes.
+
+If no room is configured the file falls back to carrying the full selection in each URL,
+exactly as it did before, and still works with no network at all.
+
 ## One URL per output, and no sync problem
 
 Every frame is a pure function of `u`, and `u` comes from `Date.now()` — not from a start
