@@ -1,0 +1,2252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BarBoards — SEC push-event animator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0C0A09; --panel:#1B1512; --panel2:#141010; --panel3:#100D0B;
+  --line:#3A2D25; --hair:#261E1A;
+  --bone:#EFE7DA; --dim:#9A8C7F; --dimmer:#6A5D53;
+  --cue:#F0B03A; --tally:#E23B2E; --good:#7FC08A; --cool:#3E8592; --violet:#9C86C4;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--ink);color:var(--bone);font-family:"IBM Plex Sans",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;font-size:13px;overflow:hidden}
+body.tvmode{overflow:hidden;background:#000;cursor:none}
+h1,h2,h3{font-family:Anton,"Arial Narrow",sans-serif;font-weight:400;text-transform:uppercase;line-height:.95}
+.mono{font-family:"IBM Plex Mono",monospace}
+:focus-visible{outline:2px solid var(--cue);outline-offset:2px}
+.lb{font-family:"IBM Plex Mono",monospace;font-size:8.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--dimmer)}
+.sp{flex:1}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#2A211C;border-radius:6px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ══ chrome ══ */
+.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 16px;
+  border-bottom:1px solid var(--hair);background:#0E0B0A;height:46px}
+.brand{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--dimmer);white-space:nowrap}
+.brand b{color:var(--bone);font-weight:600}
+.btn{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;
+  background:#191311;border:1px solid var(--line);color:var(--dim);padding:5px 10px;border-radius:2px;cursor:pointer;transition:.14s}
+.btn:hover{color:var(--bone);border-color:#5A483C}
+.btn.on{background:var(--cue);border-color:var(--cue);color:#160F05;font-weight:600}
+select,input[type=text],input[type=number]{font-family:"IBM Plex Mono",monospace;font-size:10px;background:#191311;
+  border:1px solid var(--line);color:var(--bone);padding:5px 7px;border-radius:2px}
+input[type=range]{accent-color:var(--cue);height:16px}
+
+.wrap{display:grid;grid-template-columns:274px minmax(0,1fr) 348px;height:calc(100vh - 46px)}
+.col{min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.col.mid{border-left:1px solid var(--hair);border-right:1px solid var(--hair);background:#0A0807}
+.pad{padding:10px 12px}
+.scroll{overflow-y:auto;overflow-x:hidden;flex:1}
+.hd{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--hair);background:#0E0B0A;flex:none}
+.hd h2{font-size:12.5px;letter-spacing:.02em}
+
+/* ══ event list ══ */
+.filters{display:flex;flex-wrap:wrap;gap:3px;padding:7px 10px;border-bottom:1px solid var(--hair);background:#0C0A09}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:8px;letter-spacing:.1em;text-transform:uppercase;
+  background:#17120F;border:1px solid #2A211C;color:var(--dimmer);padding:3px 6px;border-radius:2px;cursor:pointer}
+.chip:hover{color:var(--bone)}
+.chip.on{background:#2E2313;border-color:var(--cue);color:var(--cue)}
+.ev{display:grid;grid-template-columns:26px 1fr auto;gap:7px;align-items:center;padding:6px 10px 6px 0;
+  border-bottom:1px solid #191412;cursor:pointer;position:relative}
+.ev:hover{background:#141010}
+.ev.on{background:#1C1510}
+.ev.on::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--cue)}
+.ev .tm{font-family:Anton,sans-serif;font-size:10px;text-align:center;line-height:1;padding:3px 0;border-radius:2px;
+  letter-spacing:.01em;margin-left:6px}
+.ev .nm{min-width:0}
+.ev .nm b{display:block;font-family:"IBM Plex Sans",sans-serif;font-size:11.5px;font-weight:500;color:var(--bone);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}
+.ev .nm i{display:block;font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:8px;letter-spacing:.08em;
+  color:var(--dimmer);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .tr{font-family:"IBM Plex Mono",monospace;font-size:8px;letter-spacing:.06em;color:var(--dimmer);
+  padding-right:8px;text-align:right;line-height:1.3;white-space:nowrap}
+.ev .tr b{display:block;color:var(--cue);font-weight:500}
+
+/* ══ stage ══ */
+.stagewrap{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;min-height:0;position:relative}
+.stage{position:relative}
+.scr{position:absolute;background:#000;overflow:hidden;border-radius:2px;
+  box-shadow:0 0 0 2px #191512, 0 0 0 3px #2C2420, 0 8px 22px rgba(0,0,0,.6)}
+.scr .canvas{position:absolute;overflow:hidden;transform:translateZ(0)}
+.scr .plate{position:absolute;left:0;right:0;bottom:-15px;text-align:center;
+  font-family:"IBM Plex Mono",monospace;font-size:7px;letter-spacing:.14em;color:#5A4E45;pointer-events:none}
+.scr.hi{box-shadow:0 0 0 2px var(--cue), 0 0 0 3px #2C2420, 0 8px 22px rgba(0,0,0,.6)}
+.L{position:absolute;pointer-events:none;will-change:transform,opacity}
+.L-word{font-family:Anton,"Arial Narrow",sans-serif;text-transform:uppercase;white-space:nowrap;line-height:.82;
+  transform-origin:50% 50%}
+.L-band,.L-fill,.L-cell{transform-origin:0 0}
+.L-dot,.L-ring{border-radius:50%;transform-origin:50% 50%}
+.L-ring{background:none!important}
+.L-tri{width:0!important;height:0!important;background:none!important}
+.sov{position:absolute;inset:0;pointer-events:none}
+.sbg,.stint,.sflash{position:absolute;inset:0}
+.shair{position:absolute;inset:0}
+.shair i{position:absolute;top:0;bottom:0;width:1px;background:#EFE7DA;opacity:0}
+.stxt{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;
+  font-family:Anton,sans-serif;text-transform:uppercase;line-height:1;white-space:nowrap;opacity:0}
+
+/* ══ brief ══ */
+.brief{border-top:1px solid var(--hair);background:#0E0B0A;padding:9px 14px 11px;flex:none}
+.brtitle{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.brtitle h2{font-size:19px}
+.brmeta{display:flex;gap:14px;flex-wrap:wrap;margin-top:5px}
+.brm{font-family:"IBM Plex Mono",monospace;font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--dimmer)}
+.brm b{color:var(--bone);font-weight:500}
+.brtxt{margin-top:6px;font-size:12px;line-height:1.5;color:#C8BAAC;max-width:900px}
+.brtxt em{font-style:normal;color:var(--cue)}
+.transport{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid var(--hair);background:#0C0A09;flex:none}
+.track{flex:1;height:6px;background:#1C1613;border-radius:3px;position:relative;cursor:pointer;overflow:hidden}
+.track i{position:absolute;left:0;top:0;bottom:0;background:var(--cue);border-radius:3px}
+.track u{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.18)}
+.tclk{font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--dim);min-width:92px;text-align:right}
+
+/* ══ right column ══ */
+.sect{border-bottom:1px solid var(--hair)}
+.secthd{display:flex;align-items:center;gap:7px;padding:7px 12px;background:#0E0B0A;cursor:pointer}
+.secthd h3{font-size:11px;letter-spacing:.03em;color:var(--dim)}
+.secthd .k{font-family:"IBM Plex Mono",monospace;font-size:8px;color:var(--dimmer);margin-left:auto}
+.sectbody{padding:9px 12px 12px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:4px 9px;font-family:"IBM Plex Mono",monospace;font-size:9px;line-height:1.45}
+.kv dt{color:var(--dimmer);letter-spacing:.09em;text-transform:uppercase;font-size:8px;padding-top:1px}
+.kv dd{color:var(--bone);word-break:break-word}
+pre.json{font-family:"IBM Plex Mono",monospace;font-size:9px;line-height:1.45;color:#B9AB9C;background:#0A0807;
+  border:1px solid var(--hair);border-radius:2px;padding:8px 9px;overflow-x:auto;white-space:pre;max-height:340px;overflow-y:auto}
+pre.json .k{color:#7E9BB5}
+pre.json .s{color:#C5A86A}
+pre.json .n{color:#9FBF8E}
+pre.json .b{color:#C48A8A}
+.swatches{display:flex;gap:5px;margin-bottom:8px}
+.sw{flex:1;height:30px;border-radius:2px;border:1px solid #2A211C;position:relative}
+.sw span{position:absolute;left:3px;bottom:2px;font-family:"IBM Plex Mono",monospace;font-size:7px;letter-spacing:.05em;
+  color:#fff;mix-blend-mode:difference}
+.beats{display:flex;flex-wrap:wrap;gap:3px}
+.bt{font-family:Anton,sans-serif;font-size:10px;text-transform:uppercase;padding:3px 6px;border-radius:2px;
+  border:1px solid #2A211C;background:#141010;color:var(--dim);letter-spacing:.02em}
+.bt.l{border-left:3px solid var(--cool)}
+.bt.r{border-left:3px solid var(--violet)}
+.bt.a{border-left:3px solid var(--cue)}
+.bt.on{background:var(--cue);color:#160F05;border-color:var(--cue)}
+table.t{width:100%;border-collapse:collapse;font-family:"IBM Plex Mono",monospace;font-size:9px}
+table.t th{text-align:left;font-weight:400;font-size:7.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--dimmer);border-bottom:1px solid var(--line);padding:3px 6px 3px 0}
+table.t td{padding:3px 6px 3px 0;border-bottom:1px solid #191412;color:#B9AB9C;vertical-align:top}
+table.t td b{color:var(--bone);font-weight:500}
+table.t tr.now td{background:rgba(240,176,58,.09);color:var(--cue)}
+
+/* ══ url panel ══ */
+.urls{max-height:320px;overflow-y:auto}
+.urow{display:grid;grid-template-columns:44px 1fr auto auto;gap:5px;align-items:center;padding:4px 0;border-bottom:1px solid #191412}
+.urow .tvn{font-family:Anton,sans-serif;font-size:12px;color:var(--cue);text-align:center;background:#17120F;border-radius:2px;padding:2px 0}
+.urow .u{font-family:"IBM Plex Mono",monospace;font-size:8px;color:#8E8074;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.urow .btn{padding:3px 6px;font-size:7.5px}
+.note{font-size:11px;line-height:1.5;color:#9A8C7F}
+.note b{color:var(--bone);font-weight:500}
+.note code{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--cue);background:#17120F;padding:1px 4px;border-radius:2px}
+.warn{border-left:2px solid var(--cue);padding-left:8px;margin-top:7px}
+.clockline{font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--dim);display:flex;justify-content:space-between;
+  padding:3px 0;border-bottom:1px solid #191412}
+.clockline b{color:var(--good);font-weight:500}
+
+/* ══ TV mode ══ */
+#tvroot{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center}
+body.tvmode #tvroot{display:flex}
+body.tvmode .top,body.tvmode .wrap{display:none}
+#tvscreen{position:relative;overflow:hidden;background:#000}
+#tvdiag{position:fixed;left:10px;top:10px;font-family:"IBM Plex Mono",monospace;font-size:11px;line-height:1.6;
+  color:#F0B03A;background:rgba(0,0,0,.72);border:1px solid #3A2D25;padding:8px 11px;border-radius:3px;display:none;z-index:9;
+  white-space:pre;letter-spacing:.04em}
+body.diag #tvdiag{display:block}
+#tvhint{position:fixed;right:12px;bottom:10px;font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.14em;
+  color:#3A2D25;z-index:9;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><b>BarBoards</b> · SEC push-event animator</div>
+  <span class="lb" style="color:#3A2D25">|</span>
+  <label class="lb">Layout</label>
+  <select id="selLayout"></select>
+  <label class="lb">Preview</label>
+  <button class="btn on" id="bPlay">Pause</button>
+  <button class="btn" id="bBezel">Bezels</button>
+  <div class="sp"></div>
+  <span class="lb" id="clk">wall clock —</span>
+  <button class="btn" id="bOpen">Open all TVs</button>
+</header>
+
+<div class="wrap">
+
+  <!-- ══ left: the 50 events ══ -->
+  <section class="col">
+    <div class="hd"><h2>Push events</h2><span class="lb" id="evcount">50</span></div>
+    <div class="filters" id="filters"></div>
+    <div class="scroll" id="evlist"></div>
+  </section>
+
+  <!-- ══ middle: arrangement + brief ══ -->
+  <section class="col mid">
+    <div class="stagewrap"><div class="stage" id="stage"></div></div>
+    <div class="brief">
+      <div class="brtitle"><h2 id="brName">—</h2><span class="brm" id="brTeam">—</span></div>
+      <div class="brmeta" id="brMeta"></div>
+      <div class="brtxt" id="brTxt">—</div>
+    </div>
+    <div class="transport">
+      <span class="lb" id="tPhase">—</span>
+      <div class="track" id="track"><i id="trackFill"></i></div>
+      <span class="tclk" id="tClk">0.00 / 0.00 s</span>
+    </div>
+  </section>
+
+  <!-- ══ right: payload, theme, timing, urls ══ -->
+  <section class="col scroll" id="rightcol">
+
+    <div class="sect">
+      <div class="secthd"><h3>Team theme</h3><span class="k" id="thTeam">—</span></div>
+      <div class="sectbody">
+        <div class="swatches" id="thSwatch"></div>
+        <dl class="kv" id="thKv"></dl>
+      </div>
+    </div>
+
+    <div class="sect">
+      <div class="secthd"><h3>Chant / call track</h3><span class="k" id="chName">—</span></div>
+      <div class="sectbody"><div class="beats" id="chBeats"></div></div>
+    </div>
+
+    <div class="sect">
+      <div class="secthd"><h3>Sportradar push event</h3><span class="k">NCAAFB</span></div>
+      <div class="sectbody"><pre class="json" id="jsonBox">—</pre></div>
+    </div>
+
+    <div class="sect">
+      <div class="secthd"><h3>Timing</h3><span class="k" id="tmDur">—</span></div>
+      <div class="sectbody"><table class="t" id="tmTable"></table></div>
+    </div>
+
+    <div class="sect">
+      <div class="secthd"><h3>TV URLs</h3><span class="k" id="urlN">—</span></div>
+      <div class="sectbody">
+        <div class="note">Each output is its own page. Open the URL on that TV once and leave it —
+          the frame is derived from the <b>wall clock</b>, not from a start message, so every device
+          lands on the same frame with no server, no socket and no sync handshake.</div>
+        <div style="display:flex;gap:4px;margin-top:8px;align-items:center">
+          <span class="lb">URL form</span>
+          <button class="btn on" id="bQ">?query</button>
+          <button class="btn" id="bH">#hash</button>
+          <span class="lb" style="margin-left:auto" id="urlHint">works anywhere</span>
+        </div>
+        <div class="urls" id="urls" style="margin-top:8px"></div>
+        <div class="note warn" style="margin-top:9px">
+          <div class="clockline"><span>epoch</span><b id="dEpoch">—</b></div>
+          <div class="clockline"><span>this device now</span><b id="dNow">—</b></div>
+          <div class="clockline"><span>loop position</span><b id="dPos">—</b></div>
+          <div style="margin-top:6px">Per-device nudge: <code>&amp;skew=±ms</code> · diagnostics on a TV: press <code>i</code>.
+          Devices only need their own clocks to agree — NTP gets you inside ~100&nbsp;ms, which is under one chant beat.</div>
+          <div style="margin-top:6px">To reach real TVs and phones, serve the folder over HTTP —
+          <code>python -m http.server 8000</code> — and swap <code>file:///…</code> for
+          <code>http://&lt;this-machine&gt;:8000/</code>. A <code>file://</code> URL only opens on this machine.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sect">
+      <div class="secthd"><h3>URL parameters</h3><span class="k">reference</span></div>
+      <div class="sectbody">
+        <dl class="kv">
+          <dt>tv</dt><dd>1-based output index. Omit for the control room.</dd>
+          <dt>event</dt><dd>event id, e.g. <code>td-tex</code></dd>
+          <dt>layout</dt><dd>layout id, e.g. <code>row4</code></dd>
+          <dt>t0</dt><dd>epoch override in ms. Same value everywhere = same phase.</dd>
+          <dt>rest</dt><dd>ms of lockup between loops. Default 2500.</dd>
+          <dt>skew</dt><dd>per-device offset in ms, + runs ahead.</dd>
+          <dt>bezel</dt><dd><code>0</code> to drop the letterbox guides.</dd>
+          <dt>diag</dt><dd><code>1</code> to show the clock overlay.</dd>
+        </dl>
+      </div>
+    </div>
+
+  </section>
+</div>
+
+<!-- ══ single-output renderer ══ -->
+<div id="tvroot"><div id="tvscreen"></div></div>
+<div id="tvdiag"></div>
+<div id="tvhint" style="display:none">i · diagnostics</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   0 · WALL CLOCK
+   Every frame in this file is a pure function of u = 0..1. Nothing accumulates,
+   nothing is seeded off page load. u is derived from Date.now(), so N devices
+   that never speak to each other still render the same frame. That is the whole
+   sync story: there is no sync.
+   ══════════════════════════════════════════════════════════════════════════ */
+var EPOCH_DEFAULT = 1735689600000;         /* 2025-01-01T00:00:00Z, arbitrary and fixed */
+
+/* Params come from the query string or the hash, hash winning. Both are supported
+   because they fail in different places: some static hosts and kiosk shells rewrite
+   a query, and a hash can be changed on a running screen without a reload. */
+function readParams(){
+  var p=new URLSearchParams(location.search);
+  var h=location.hash.replace(/^#\/?\??/,"");
+  if(h) new URLSearchParams(h).forEach(function(v,k){ p.set(k,v); });
+  return p;
+}
+var Q = readParams();
+var EPOCH = +(Q.get("t0") || EPOCH_DEFAULT);
+var SKEW  = +(Q.get("skew") || 0);
+var REST  = Q.has("rest") ? +Q.get("rest") : 2500;
+
+function nowMs(){ return Date.now() + SKEW; }
+function loopPos(dur){                       /* → ms into (cue + rest) */
+  var period = dur + REST;
+  var p = (nowMs() - EPOCH) % period;
+  return p < 0 ? p + period : p;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1 · TEAMS — colours, locations, calls and chants for the 16 SEC schools
+   `finish` names the team-specific payoff inside the shared touchdown spine.
+   `beats` is the chant, one entry per 620–700 ms slot (§10 pacing rules).
+     side L = left group  ·  R = right group  ·  A = whole canvas
+   ══════════════════════════════════════════════════════════════════════════ */
+var TEAMS = {
+ALA:{ ab:"ALA", name:"Alabama", nick:"Crimson Tide",
+  p:"#9E1B32", s:"#F1F2F3", ink:"#FFFFFF", deep:"#4A0D18",
+  venue:"Bryant–Denny Stadium", city:"Tuscaloosa, Alabama",
+  td:"TOUCHDOWN ALABAMA", word:"ALABAMA", call:"ROLL TIDE", finish:"tide",
+  chant:"Rammer Jammer", beats:[
+    {t:"ROLL",s:"L"},{t:"TIDE",s:"R"},{t:"ROLL",s:"L"},{t:"TIDE",s:"R"},
+    {t:"ROLL TIDE ROLL",s:"A",ms:900},
+    {t:"RAMMER",s:"L"},{t:"JAMMER",s:"R"},{t:"YELLOW HAMMER",s:"A",ms:820},
+    {t:"GIVE 'EM HELL",s:"A",ms:760},{t:"ALABAMA",s:"A",ms:1100}]},
+
+ARK:{ ab:"ARK", name:"Arkansas", nick:"Razorbacks",
+  p:"#9D2235", s:"#FFFFFF", ink:"#FFFFFF", deep:"#4A1019",
+  venue:"Donald W. Reynolds Razorback Stadium", city:"Fayetteville, Arkansas",
+  td:"TOUCHDOWN ARKANSAS", word:"ARKANSAS", call:"WOO PIG SOOIE", finish:"hogcall",
+  chant:"Calling the Hogs", beats:[
+    {t:"WOOOOO",s:"A",ms:1400},{t:"PIG",s:"A",ms:520},{t:"SOOIE",s:"A",ms:760},
+    {t:"WOOOOO",s:"A",ms:1400},{t:"PIG",s:"A",ms:520},{t:"SOOIE",s:"A",ms:760},
+    {t:"WOOOOO",s:"A",ms:1400},{t:"PIG",s:"A",ms:520},{t:"SOOIE",s:"A",ms:760},
+    {t:"RAZORBACKS",s:"A",ms:1200}]},
+
+AUB:{ ab:"AUB", name:"Auburn", nick:"Tigers",
+  p:"#E87722", s:"#0C2340", ink:"#FFFFFF", deep:"#07182B",
+  venue:"Jordan–Hare Stadium", city:"Auburn, Alabama",
+  td:"TOUCHDOWN AUBURN", word:"AUBURN", call:"WAR EAGLE", finish:"eagle",
+  chant:"War Eagle", beats:[
+    {t:"WAR",s:"L"},{t:"EAGLE",s:"R"},{t:"WAR",s:"L"},{t:"EAGLE",s:"R"},
+    {t:"WAR",s:"L"},{t:"EAGLE",s:"R"},{t:"WAR EAGLE",s:"A",ms:900},
+    {t:"HEY!",s:"A",ms:520},{t:"WAR EAGLE",s:"A",ms:1150}]},
+
+FLA:{ ab:"FLA", name:"Florida", nick:"Gators",
+  p:"#FA4616", s:"#0021A5", ink:"#FFFFFF", deep:"#001466",
+  venue:"Ben Hill Griffin Stadium · The Swamp", city:"Gainesville, Florida",
+  td:"TOUCHDOWN FLORIDA", word:"FLORIDA", call:"GO GATORS", finish:"chomp",
+  chant:"The Gator Chomp", beats:[
+    {t:"GA",s:"L"},{t:"TOR",s:"R"},{t:"GA",s:"L"},{t:"TOR",s:"R"},
+    {t:"GA",s:"L"},{t:"TOR",s:"R"},{t:"GO GATORS",s:"A",ms:900},
+    {t:"IT'S GREAT",s:"A",ms:640},{t:"TO BE A FLORIDA GATOR",s:"A",ms:1250}]},
+
+UGA:{ ab:"UGA", name:"Georgia", nick:"Bulldogs",
+  p:"#BA0C2F", s:"#000000", ink:"#FFFFFF", deep:"#12060A",
+  venue:"Sanford Stadium · Between the Hedges", city:"Athens, Georgia",
+  td:"TOUCHDOWN GEORGIA", word:"GEORGIA", call:"GO DAWGS", finish:"hedges",
+  chant:"Sic 'Em", beats:[
+    {t:"GO DAWGS",s:"A",ms:760},{t:"SIC 'EM",s:"A",ms:700},
+    {t:"WOOF",s:"L",ms:560},{t:"WOOF",s:"R",ms:560},{t:"WOOF",s:"A",ms:700},
+    {t:"GO DAWGS",s:"A",ms:760},{t:"SIC 'EM",s:"A",ms:700},
+    {t:"WOOF",s:"L",ms:560},{t:"WOOF",s:"R",ms:560},{t:"WOOF",s:"A",ms:700},
+    {t:"GLORY GLORY",s:"A",ms:1150}]},
+
+UK:{ ab:"UK", name:"Kentucky", nick:"Wildcats",
+  p:"#0033A0", s:"#FFFFFF", ink:"#FFFFFF", deep:"#001B52",
+  venue:"Kroger Field", city:"Lexington, Kentucky",
+  td:"TOUCHDOWN KENTUCKY", word:"KENTUCKY", call:"GO CATS", finish:"spell",
+  chant:"C-A-T-S", beats:[
+    {t:"C",s:"L",ms:560},{t:"A",s:"R",ms:560},{t:"T",s:"L",ms:560},{t:"S",s:"R",ms:560},
+    {t:"CATS",s:"A",ms:620},{t:"CATS",s:"A",ms:620},{t:"CATS",s:"A",ms:800},
+    {t:"C",s:"L",ms:560},{t:"A",s:"R",ms:560},{t:"T",s:"L",ms:560},{t:"S",s:"R",ms:560},
+    {t:"GO CATS",s:"A",ms:1100}]},
+
+LSU:{ ab:"LSU", name:"LSU", nick:"Tigers",
+  p:"#461D7C", s:"#FDD023", ink:"#FDD023", deep:"#240E42",
+  venue:"Tiger Stadium · Death Valley", city:"Baton Rouge, Louisiana",
+  td:"TOUCHDOWN LSU", word:"LSU", call:"GEAUX TIGERS", finish:"stripe",
+  chant:"L-S-U", beats:[
+    {t:"L",s:"L",ms:560},{t:"S",s:"R",ms:560},{t:"U",s:"A",ms:660},
+    {t:"L",s:"L",ms:560},{t:"S",s:"R",ms:560},{t:"U",s:"A",ms:660},
+    {t:"TIGERS",s:"A",ms:820},{t:"GEAUX",s:"L",ms:660},{t:"TIGERS",s:"R",ms:660},
+    {t:"GEAUX TIGERS",s:"A",ms:1150}]},
+
+MSST:{ ab:"MSST", name:"Mississippi State", nick:"Bulldogs",
+  p:"#5D1725", s:"#FFFFFF", ink:"#FFFFFF", deep:"#2B0A12",
+  venue:"Davis Wade Stadium at Scott Field", city:"Starkville, Mississippi",
+  td:"TOUCHDOWN MISSISSIPPI STATE", word:"HAIL STATE", call:"HAIL STATE", finish:"cowbell",
+  chant:"Cowbells", beats:[
+    {t:"HAIL",s:"L"},{t:"STATE",s:"R"},{t:"HAIL",s:"L"},{t:"STATE",s:"R"},
+    {t:"HAIL STATE",s:"A",ms:900},
+    {t:"HAIL",s:"L"},{t:"STATE",s:"R"},{t:"HAIL",s:"L"},{t:"STATE",s:"R"},
+    {t:"HAIL STATE",s:"A",ms:1200}]},
+
+MIZ:{ ab:"MIZ", name:"Missouri", nick:"Tigers",
+  p:"#F1B82D", s:"#000000", ink:"#F1B82D", deep:"#0B0B0B",
+  venue:"Faurot Field at Memorial Stadium", city:"Columbia, Missouri",
+  td:"TOUCHDOWN MISSOURI", word:"MIZZOU", call:"MIZ-ZOU", finish:"mizzou",
+  chant:"M-I-Z · Z-O-U", beats:[
+    {t:"M-I-Z",s:"L",ms:700},{t:"Z-O-U",s:"R",ms:700},
+    {t:"M-I-Z",s:"L",ms:700},{t:"Z-O-U",s:"R",ms:700},
+    {t:"M-I-Z",s:"L",ms:700},{t:"Z-O-U",s:"R",ms:700},
+    {t:"M-I-Z",s:"L",ms:620},{t:"Z-O-U",s:"R",ms:620},
+    {t:"MIZZOU",s:"A",ms:1200}]},
+
+OU:{ ab:"OU", name:"Oklahoma", nick:"Sooners",
+  p:"#841617", s:"#FFF9F3", ink:"#FFF9F3", deep:"#3D0A0B",
+  venue:"Gaylord Family Oklahoma Memorial Stadium", city:"Norman, Oklahoma",
+  td:"TOUCHDOWN OKLAHOMA", word:"OKLAHOMA", call:"BOOMER SOONER", finish:"schooner",
+  chant:"Boomer Sooner", beats:[
+    {t:"BOOMER",s:"L"},{t:"SOONER",s:"R"},{t:"BOOMER",s:"L"},{t:"SOONER",s:"R"},
+    {t:"BOOMER",s:"L"},{t:"SOONER",s:"R"},{t:"BOOMER",s:"L"},{t:"SOONER",s:"R"},
+    {t:"OK-LA-HOMA",s:"A",ms:900},{t:"O-U!",s:"A",ms:1150}]},
+
+MISS:{ ab:"MISS", name:"Ole Miss", nick:"Rebels",
+  p:"#CE1126", s:"#14213D", ink:"#FFFFFF", deep:"#0A1226",
+  venue:"Vaught–Hemingway Stadium", city:"Oxford, Mississippi",
+  td:"TOUCHDOWN OLE MISS", word:"OLE MISS", call:"HOTTY TODDY", finish:"hotty",
+  chant:"Hotty Toddy", beats:[
+    {t:"ARE YOU READY?",s:"A",ms:900},{t:"HELL YES!",s:"L",ms:620},{t:"DAMN RIGHT!",s:"R",ms:620},
+    {t:"HOTTY TODDY",s:"A",ms:820},{t:"GOSH ALMIGHTY",s:"A",ms:760},
+    {t:"WHO THE HELL ARE WE?",s:"A",ms:900},{t:"FLIM FLAM",s:"L",ms:560},{t:"BIM BAM",s:"R",ms:560},
+    {t:"OLE MISS BY DAMN!",s:"A",ms:1250}]},
+
+SCAR:{ ab:"SCAR", name:"South Carolina", nick:"Gamecocks",
+  p:"#73000A", s:"#000000", ink:"#FFFFFF", deep:"#2E0004",
+  venue:"Williams–Brice Stadium", city:"Columbia, South Carolina",
+  td:"TOUCHDOWN SOUTH CAROLINA", word:"GAMECOCKS", call:"GO COCKS", finish:"sandstorm",
+  chant:"Sandstorm", beats:[
+    {t:"GAME",s:"L"},{t:"COCKS",s:"R"},{t:"GAME",s:"L"},{t:"COCKS",s:"R"},
+    {t:"GAME",s:"L"},{t:"COCKS",s:"R"},
+    {t:"U",s:"L",ms:520},{t:"S",s:"A",ms:520},{t:"C",s:"R",ms:520},
+    {t:"GAMECOCKS",s:"A",ms:1200}]},
+
+TENN:{ ab:"TENN", name:"Tennessee", nick:"Volunteers",
+  p:"#FF8200", s:"#FFFFFF", ink:"#FFFFFF", deep:"#3D2000",
+  venue:"Neyland Stadium", city:"Knoxville, Tennessee",
+  td:"TOUCHDOWN TENNESSEE", word:"TENNESSEE", call:"GO VOLS", finish:"checker",
+  chant:"Rocky Top · T-E-N-N-E-S-S-E-E", beats:[
+    {t:"ROCKY",s:"L",ms:660},{t:"TOP",s:"R",ms:660},
+    {t:"ROCKY",s:"L",ms:660},{t:"TOP",s:"R",ms:660},
+    {t:"T",s:"L",ms:520},{t:"E",s:"R",ms:520},{t:"N",s:"L",ms:520},{t:"N",s:"R",ms:520},
+    {t:"E",s:"L",ms:520},{t:"S",s:"R",ms:520},{t:"S",s:"L",ms:520},{t:"E",s:"R",ms:520},
+    {t:"E",s:"A",ms:620},{t:"TENNESSEE",s:"A",ms:1250}]},
+
+TEX:{ ab:"TEX", name:"Texas", nick:"Longhorns",
+  p:"#BF5700", s:"#FFFFFF", ink:"#FFFFFF", deep:"#000000",
+  venue:"Darrell K Royal–Texas Memorial Stadium", city:"Austin, Texas",
+  td:"TOUCHDOWN TEXAS", word:"TEXAS", call:"HOOK 'EM", finish:"race",
+  chant:"Texas Fight", beats:[
+    {t:"TEXAS",s:"L"},{t:"FIGHT",s:"R"},{t:"TEXAS",s:"L"},{t:"FIGHT",s:"R"},
+    {t:"{OPP} SUCKS",s:"A",ms:900},
+    {t:"TEXAS",s:"L"},{t:"FIGHT",s:"R"},{t:"TEXAS",s:"L"},{t:"FIGHT",s:"R"},
+    {t:"{OPP} SUCKS",s:"A",ms:900},{t:"HOOK 'EM",s:"A",ms:1150}]},
+
+TAMU:{ ab:"TAMU", name:"Texas A&M", nick:"Aggies",
+  p:"#500000", s:"#FFFFFF", ink:"#FFFFFF", deep:"#280000",
+  venue:"Kyle Field · Home of the 12th Man", city:"College Station, Texas",
+  td:"TOUCHDOWN TEXAS A&M", word:"AGGIES", call:"GIG 'EM", finish:"twelfth",
+  chant:"Aggie War Hymn", beats:[
+    {t:"GIG 'EM",s:"L"},{t:"AGGIES",s:"R"},{t:"GIG 'EM",s:"L"},{t:"AGGIES",s:"R"},
+    {t:"FARMERS",s:"L",ms:620},{t:"FIGHT!",s:"R",ms:620},
+    {t:"FARMERS",s:"L",ms:620},{t:"FIGHT!",s:"R",ms:620},
+    {t:"SAW VARSITY'S HORNS OFF",s:"A",ms:1000},{t:"12TH MAN",s:"A",ms:1200}]},
+
+VAN:{ ab:"VAN", name:"Vanderbilt", nick:"Commodores",
+  p:"#CFAE70", s:"#000000", ink:"#CFAE70", deep:"#0A0A0A",
+  venue:"FirstBank Stadium", city:"Nashville, Tennessee",
+  td:"TOUCHDOWN VANDERBILT", word:"VANDERBILT", call:"ANCHOR DOWN", finish:"anchor",
+  chant:"Anchor Down", beats:[
+    {t:"ANCHOR",s:"L"},{t:"DOWN",s:"R"},{t:"ANCHOR",s:"L"},{t:"DOWN",s:"R"},
+    {t:"ANCHOR",s:"L"},{t:"DOWN",s:"R"},{t:"ANCHOR DOWN",s:"A",ms:900},
+    {t:"V-U",s:"A",ms:620},{t:"ANCHOR DOWN",s:"A",ms:1200}]}
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2 · THE 50 EVENTS
+   16 touchdowns (one per school) · 16 chants (one per school) ·
+   18 rungs of the §8.4 event ladder, one school each.
+   amp / win / tier / reg come straight from the ladder. `sr` carries the
+   fields that actually distinguish the push event.
+   ══════════════════════════════════════════════════════════════════════════ */
+function td(id,tm,opp,hs,as,cl,per,pt,yds,desc,sr){
+  return {id:id,team:tm,opp:opp,hs:hs,as:as,clock:cl,period:per,grp:"td",cue:"runacross",d:8000,
+    name:TEAMS[tm].td, sub:TEAMS[tm].call, amp:75,win:150,tier:3,reg:"celebratory",
+    cat:"scoring_play", type:null, play:pt, yards:yds, desc:desc,
+    sr:Object.assign({scoring_play:true,"details.category":"touchdown",points:6},sr||{})};
+}
+function chant(id,tm,opp,hs,as,cl,per){
+  var T=TEAMS[tm], ms=0; T.beats.forEach(function(b){ ms += (b.ms||660); });
+  return {id:id,team:tm,opp:opp,hs:hs,as:as,clock:cl,period:per,grp:"chant",cue:"chant",
+    d:1200+ms+1600, name:T.chant.toUpperCase(), sub:T.call, amp:70,win:150,tier:3,reg:"celebratory",
+    cat:"scoring_play", type:null, play:"extra_point", yards:0,
+    desc:T.name+" crowd answers the score — "+T.chant,
+    sr:{"details.category":"extra point","extra_point.attempt":1,"extra_point.made":1,points:1}};
+}
+var EVENTS = [
+  /* ── 16 touchdowns ─────────────────────────────────────────────────── */
+  td("td-tex","TEX","OU","31","28","0:04",4,"rush",12,
+     "Q. Ewers 12 yd run (C. Bell kick), 0:04 4th quarter",{"rush.touchdown":1,"rush.yards":12}),
+  td("td-ou","OU","TEX","28","24","6:41",4,"pass",34,
+     "J. Hawkins 34 yd pass to N. Anderson (Z. Schmit kick)",{"pass.touchdown":1,"receive.touchdown":1,"pass.yards":34}),
+  td("td-ala","ALA","LSU","24","17","11:02",3,"rush",3,
+     "J. Haynes 3 yd run (G. Bernhardt kick)",{"rush.touchdown":1,"rush.yards":3,"drive.scoring_drive":true}),
+  td("td-lsu","LSU","ALA","21","17","2:19",2,"pass",41,
+     "G. Nussmeier 41 yd pass to K. Lacy (D. Ramos kick)",{"pass.touchdown":1,"pass.yards":41,"drive.inside_20":true}),
+  td("td-uga","UGA","TENN","20","13","8:55",3,"rush",1,
+     "T. Etienne 1 yd run (P. Woodring kick)",{"rush.touchdown":1,"end_situation.goaltogo":true}),
+  td("td-tenn","TENN","UGA","13","10","0:38",2,"pass",22,
+     "N. Iamaleava 22 yd pass to D. Matthews (M. Palmer kick)",{"pass.touchdown":1,"event_category_2":"two_minute"}),
+  td("td-fla","FLA","SCAR","17","14","4:27",4,"rush",18,
+     "D. Lagway 18 yd run (T. Chrestman kick)",{"rush.touchdown":1,"rush.broken_tackles":2}),
+  td("td-aub","AUB","MSST","28","21","13:44",2,"pass",9,
+     "P. Thorne 9 yd pass to K. Coleman (A. Carlson kick)",{"pass.touchdown":1,"end_situation.goaltogo":true}),
+  td("td-tamu","TAMU","ARK","31","24","1:11",4,"rush",7,
+     "M. Reed 7 yd run (R. Bond kick)",{"rush.touchdown":1,"drive.scoring_drive":true}),
+  td("td-ark","ARK","TAMU","24","31","7:53",4,"pass",63,
+     "T. Green 63 yd pass to A. Green (K. Little kick)",{"pass.touchdown":1,"pass.yards":63,"event_category_2":"big_play"}),
+  td("td-miss","MISS","MSST","35","14","9:31",3,"pass",28,
+     "J. Dart 28 yd pass to T. Harris (C. Blanchard kick)",{"pass.touchdown":1,"pass.yards":28}),
+  td("td-msst","MSST","MISS","14","35","3:08",3,"rush",5,
+     "M. Van Buren 5 yd run (K. Ryland kick)",{"rush.touchdown":1,"rush.yards":5}),
+  td("td-miz","MIZ","SCAR","27","20","10:16",4,"pass",15,
+     "B. Cook 15 yd pass to L. Burden III (B. Sanchez kick)",{"pass.touchdown":1,"receive.yards_after_catch":11}),
+  td("td-scar","SCAR","MIZ","20","27","5:02",4,"rush",44,
+     "L. Sellers 44 yd run (A. Hankerson kick)",{"rush.touchdown":1,"rush.yards":44,"event_category_2":"big_play"}),
+  td("td-uk","UK","VAN","17","20","12:37",3,"pass",11,
+     "B. Vandagriff 11 yd pass to D. Anthony (A. Raynor kick)",{"pass.touchdown":1}),
+  td("td-van","VAN","UK","20","17","0:52",4,"rush",2,
+     "D. Pavia 2 yd run (B. Sherwood kick)",{"rush.touchdown":1,"end_situation.goaltogo":true,"drive.scoring_drive":true}),
+
+  /* ── 16 chants ─────────────────────────────────────────────────────── */
+  chant("ch-tex","TEX","OU","31","28","0:04",4),
+  chant("ch-ou","OU","TEX","28","24","6:41",4),
+  chant("ch-ala","ALA","LSU","24","17","11:02",3),
+  chant("ch-lsu","LSU","ALA","21","17","2:19",2),
+  chant("ch-uga","UGA","TENN","20","13","8:55",3),
+  chant("ch-tenn","TENN","UGA","13","10","0:38",2),
+  chant("ch-fla","FLA","SCAR","17","14","4:27",4),
+  chant("ch-aub","AUB","MSST","28","21","13:44",2),
+  chant("ch-tamu","TAMU","ARK","31","24","1:11",4),
+  chant("ch-ark","ARK","TAMU","24","31","7:53",4),
+  chant("ch-miss","MISS","MSST","35","14","9:31",3),
+  chant("ch-msst","MSST","MISS","14","35","3:08",3),
+  chant("ch-miz","MIZ","SCAR","27","20","10:16",4),
+  chant("ch-scar","SCAR","MIZ","20","27","5:02",4),
+  chant("ch-uk","UK","VAN","17","20","12:37",3),
+  chant("ch-van","VAN","UK","20","17","0:52",4),
+
+  /* ── 18 rungs of the event ladder ──────────────────────────────────── */
+  {id:"pick6-ala",team:"ALA",opp:"LSU",hs:"31",as:"17",clock:"9:44",period:3,grp:"turnover",
+   cue:"streak",d:7200,name:"PICK SIX",sub:"INTERCEPTED · 62 YARDS",amp:96,win:150,tier:3,reg:"celebratory",
+   cat:"turnover",type:null,play:"pass",yards:62,dir:1,
+   desc:"M. Woods 62 yd interception return (G. Bernhardt kick)",
+   sr:{"defense.int_touchdown":1,"defense.interceptions":1,"details.recovery.type":"interception",
+       "details.category":"touchdown","return.touchdown":1,"return.category":"interception",
+       scoring_play:true,points:6}},
+
+  {id:"scoop-uga",team:"UGA",opp:"TENN",hs:"27",as:"13",clock:"4:12",period:4,grp:"turnover",
+   cue:"streak",d:7200,name:"SCOOP AND SCORE",sub:"FUMBLE · 31 YARDS",amp:94,win:150,tier:3,reg:"celebratory",
+   cat:"turnover",type:null,play:"rush",yards:31,dir:-1,
+   desc:"J. Ingram-Dawkins 31 yd fumble return (P. Woodring kick)",
+   sr:{"fumble.opp_rec_td":1,"fumble.lost":1,"details.recovery.type":"fumble recovery",
+       "details.category":"touchdown","return.touchdown":1,scoring_play:true,points:6}},
+
+  {id:"kr-aub",team:"AUB",opp:"MSST",hs:"35",as:"21",clock:"0:01",period:4,grp:"kick",
+   cue:"streak",d:7600,name:"KICK RETURN TOUCHDOWN",sub:"109 YARDS · NO TIME LEFT",amp:97,win:150,tier:3,reg:"celebratory",
+   cat:"scoring_play",type:null,play:"field_goal",yards:109,dir:1,
+   desc:"C. Hunter 109 yd missed field goal return (A. Carlson kick)",
+   sr:{"return.touchdown":1,"return.category":"missed field goal","field_goal.missed":1,
+       "field_goal.att_yards":57,"details.category":"touchdown",
+       scoring_play:true,points:6,"game.expected_latency":2}},
+
+  {id:"blk-lsu",team:"LSU",opp:"ALA",hs:"28",as:"24",clock:"1:47",period:4,grp:"kick",
+   cue:"streak",d:7200,name:"BLOCKED · RETURNED",sub:"FIELD GOAL BLOCKED · 47 YARDS",amp:93,win:140,tier:3,reg:"celebratory",
+   cat:"scoring_play",type:null,play:"field_goal",yards:47,dir:-1,
+   desc:"M. Perkins blocked FG, W. Campbell 47 yd return (D. Ramos kick)",
+   sr:{"block.category":"field_goal","defense.blocks":1,"details.recovery.type":"blocked kick recovery",
+       "details.category":"touchdown","return.touchdown":1,scoring_play:true,points:6}},
+
+  {id:"safety-msst",team:"MSST",opp:"MISS",hs:"16",as:"35",clock:"7:22",period:4,grp:"score",
+   cue:"strike",d:6000,name:"SAFETY",sub:"TWO POINTS · HAIL STATE",amp:80,win:120,tier:3,reg:"celebratory",
+   cat:"scoring_play",type:null,play:"rush",yards:-3,
+   desc:"J. Dart sacked in end zone by K. Jackson, safety",
+   sr:{"details.safety":true,"details.category":"safety","defense.safety":1,"defense.sack":1,
+       scoring_play:true,points:2}},
+
+  {id:"walkoff-miss",team:"MISS",opp:"MSST",hs:"38",as:"35",clock:"0:00",period:4,grp:"kick",
+   cue:"arc",d:8000,name:"WALK-OFF FIELD GOAL",sub:"48 YARDS · GAME OVER",amp:92,win:9999,tier:3,reg:"celebratory",
+   cat:"scoring_play",type:"game_over",play:"field_goal",yards:48,
+   desc:"C. Blanchard 48 yd field goal, no time remaining",
+   sr:{"field_goal.made":1,"field_goal.att_yards":48,"field_goal.attempt":1,
+       "details.category":"field goal",scoring_play:true,points:3,"game.status":"closed"}},
+
+  {id:"fake-ark",team:"ARK",opp:"TAMU",hs:"24",as:"31",clock:"11:08",period:4,grp:"special",
+   cue:"misdirect",d:5400,name:"FAKE PUNT",sub:"FIRST DOWN · FOURTH AND 4",amp:86,win:35,tier:2,reg:"celebratory",
+   cat:"big_play",type:null,play:"punt",yards:19,
+   desc:"Fake punt, D. Wagner 19 yd run for a first down",
+   sr:{fake_punt:true,"down_conversion.down":4,"down_conversion.attempt":1,"down_conversion.complete":1,
+       "start_situation.down":4,"start_situation.yfd":4}},
+
+  {id:"downs-tamu",team:"TAMU",opp:"ARK",hs:"31",as:"24",clock:"2:41",period:4,grp:"turnover",
+   cue:"steal",d:5200,name:"TURNOVER ON DOWNS",sub:"STOPPED SHORT",amp:79,win:40,tier:2,reg:"celebratory",
+   cat:"turnover",type:null,play:"rush",yards:2,
+   desc:"Fourth and 3, R. Sanders stopped for a 2 yd gain",
+   sr:{"down_conversion.down":4,"down_conversion.attempt":1,"down_conversion.complete":0,
+       "end_situation.down":1,"end_situation.possession":"TAMU"}},
+
+  {id:"int-fla",team:"FLA",opp:"SCAR",hs:"17","as":"14",clock:"6:19",period:4,grp:"turnover",
+   cue:"steal",d:5000,name:"INTERCEPTED",sub:"THE STEAL",amp:78,win:45,tier:2,reg:"celebratory",
+   cat:"turnover",type:null,play:"pass",yards:0,
+   desc:"L. Sellers pass intercepted by D. Marshall at the FLA 34",
+   sr:{"defense.interceptions":1,"details.recovery.type":"interception",
+       "pass.interceptions":1,"end_situation.possession":"FLA"}},
+
+  {id:"fum-miz",team:"MIZ",opp:"SCAR",hs:"27",as:"20",clock:"13:05",period:4,grp:"turnover",
+   cue:"steal",d:5000,name:"FUMBLE LOST",sub:"THE STEAL",amp:76,win:45,tier:2,reg:"celebratory",
+   cat:"turnover",type:null,play:"rush",yards:4,
+   desc:"R. Rogers fumbles, recovered by J. Carnell at the SCAR 41",
+   sr:{"fumble.lost":1,"fumble.forced":1,"details.recovery.type":"fumble recovery",
+       "end_situation.possession":"MIZ"}},
+
+  {id:"twopt-van",team:"VAN",opp:"UK",hs:"22",as:"17",clock:"3:44",period:4,grp:"score",
+   cue:"card",d:4600,name:"TWO-POINT CONVERSION",sub:"GOOD · ANCHOR DOWN",amp:71,win:90,tier:2,reg:"celebratory",
+   cat:"scoring_play",type:null,play:"conversion",yards:3,
+   desc:"D. Pavia pass to E. Sheppard for a two point conversion",
+   sr:{"conversion.attempt":1,"conversion.complete":1,"conversion.category":"pass",
+       "details.category":"two point conversion",scoring_play:true,points:2}},
+
+  {id:"fg50-uk",team:"UK",opp:"VAN",hs:"20",as:"20",clock:"0:03",period:4,grp:"kick",
+   cue:"arc",d:6400,name:"FIFTY-THREE YARDS",sub:"GOOD",amp:68,win:120,tier:2,reg:"celebratory",
+   cat:"scoring_play",type:null,play:"field_goal",yards:53,
+   desc:"A. Raynor 53 yd field goal is good",
+   sr:{"field_goal.made":1,"field_goal.att_yards":53,"field_goal.attempt":1,
+       "details.category":"field goal",scoring_play:true,points:3}},
+
+  {id:"big-ou",team:"OU",opp:"TEX",hs:"24",as:"24",clock:"9:12",period:3,grp:"big",
+   cue:"burst",d:2200,name:"EXPLOSIVE PLAY",sub:"47 YARDS",amp:64,win:0,tier:1,reg:"celebratory",
+   cat:"big_play",type:null,play:"pass",yards:47,
+   desc:"J. Hawkins 47 yd pass to D. Lawson to the TEX 21",
+   sr:{"pass.yards":47,"receive.yards_after_catch":22,"pass.att_yards":25,"drive.inside_20":false}},
+
+  {id:"fourth-tenn",team:"TENN",opp:"UGA",hs:"13",as:"20",clock:"4:58",period:4,grp:"big",
+   cue:"burst",d:2000,name:"FOURTH DOWN CONVERTED",sub:"FOURTH AND 2",amp:62,win:0,tier:1,reg:"celebratory",
+   cat:"big_play",type:null,play:"rush",yards:6,
+   desc:"Fourth and 2, D. Sampson 6 yd run for a first down",
+   sr:{"down_conversion.down":4,"down_conversion.attempt":1,"down_conversion.complete":1,
+       "start_situation.down":4,"start_situation.yfd":2,"end_situation.down":1}},
+
+  {id:"review-scar",team:"SCAR",opp:"MIZ",hs:"20",as:"27",clock:"2:56",period:4,grp:"state",
+   cue:"binary",d:7000,name:"UNDER REVIEW",sub:"RULING REVERSED",amp:60,win:180,tier:2,reg:"tense",
+   cat:"scoring_play",type:"comment",play:"pass",yards:19,
+   desc:"Ruling on the field is reversed — pass is complete, first down SCAR",
+   sr:{official:false,"review.result":"reversed","review.reversed":true,"review.type":"booth",
+       "event_type":"comment"}},
+
+  {id:"hold-tex",team:"TEX",opp:"OU",hs:"24",as:"28",clock:"1:12",period:4,grp:"state",
+   cue:"hold",d:8500,name:"FOURTH AND GOAL",sub:"THE HOLD · GOAL-LINE STAND",amp:58,win:40,tier:2,reg:"tense",
+   cat:"redzone",type:null,play:"rush",yards:0,
+   desc:"Fourth and goal at the TEX 2 — stopped at the line of scrimmage",
+   sr:{"start_situation.down":4,"start_situation.yfd":2,"end_situation.goaltogo":true,
+       "down_conversion.down":4,"down_conversion.complete":0,"drive.inside_20":true,
+       "drive.end_reason":"Downs"}},
+
+  {id:"rz-uga",team:"UGA",opp:"TENN",hs:"20",as:"13",clock:"7:41",period:3,grp:"state",
+   cue:"edge",d:6000,name:"RED ZONE",sub:"SUSTAINED STATE · NOT AN EVENT",amp:54,win:0,tier:1,reg:"tense",
+   cat:"redzone",type:null,play:"rush",yards:8,
+   desc:"T. Etienne 8 yd run to the TENN 17 — Georgia enters the red zone",
+   sr:{"drive.inside_20":true,"end_situation.yardline":17,"end_situation.down":1,
+       "end_situation.possession":"UGA"}},
+
+  {id:"twomin-lsu",team:"LSU",opp:"ALA",hs:"28",as:"24",clock:"2:00",period:4,grp:"state",
+   cue:"clockdown",d:4600,name:"TWO MINUTE WARNING",sub:"SUBTRACT · NEVER CELEBRATE",amp:40,win:100,tier:2,reg:"tense",
+   cat:"two_minute",type:"two_minute_warning",play:null,yards:0,
+   desc:"Two minute warning, fourth quarter",
+   sr:{"event_type":"two_minute_warning","boxscore.home_timeouts_remaining":1,
+       "boxscore.away_timeouts_remaining":2,"clock":"2:00"}}
+];
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3 · LAYOUTS
+   Cells are in 16×9 units. Everything downstream — the preview, the canvas
+   offsets, the per-TV URLs — is derived from this table and nothing else.
+   ══════════════════════════════════════════════════════════════════════════ */
+function grid(cols,rows,gap){ var c=[],r,x; for(r=0;r<rows;r++) for(x=0;x<cols;x++) c.push({cx:x,cy:r}); return {cells:c,gap:gap===undefined?0.9:gap}; }
+function LAY(id,name,note,mode,g,groups){ var o=Object.assign({id:id,name:name,note:note,mode:mode},g); o.groups=groups||null; return o; }
+
+var LAYOUTS = {
+  single: LAY("single","Single screen","One output, 16:9. No canvas to cut — the cue plays whole.","single",grid(1,1)),
+  pair:   LAY("pair","Pair","Two outputs side by side. Call on the left, answer on the right.","scroll",grid(2,1),
+              {left:[0],right:[1]}),
+  row3:   LAY("row3","Row of 3","Three in a row above the bar.","scroll",grid(3,1),{left:[0],right:[2],mid:[1]}),
+  row4:   LAY("row4","Row of 4","Four in a row — the classic bar wall. Wide enough for a run-across.","scroll",grid(4,1),
+              {left:[0,1],right:[2,3]}),
+  row6:   LAY("row6","Row of 6","Six across. Longest travel in the set.","scroll",grid(6,1),
+              {left:[0,1,2],right:[3,4,5]}),
+  strip8: LAY("strip8","Rail of 8","Eight over a long bar. Reads as a ticker at this aspect.","scroll",grid(8,1,0.7),
+              {left:[0,1,2,3],right:[4,5,6,7]}),
+  quad:   LAY("quad","Quad 2×2","Four in a block. Travel gives way to a radial flood.","grid",grid(2,2),
+              {left:[0,2],right:[1,3]}),
+  jumbo:  LAY("jumbo","Jumbotron 3×2","Six as one screen. Type can go big.","grid",grid(3,2),
+              {left:[0,3],right:[2,5],mid:[1,4]}),
+  eight:  LAY("eight","Block 4×2","Eight in a block — a video wall.","grid",grid(4,2),
+              {left:[0,1,4,5],right:[2,3,6,7]}),
+  tower:  LAY("tower","Column of 3","Three stacked on a pillar. Travel runs top to bottom.","stack",grid(1,3)),
+  split44:LAY("split44","Facing walls 4 + 4","Two walls of four across the room. Built for call and response.","split",
+              {cells:[{cx:0,cy:0},{cx:1,cy:0},{cx:2,cy:0},{cx:3,cy:0},
+                      {cx:5.6,cy:0},{cx:6.6,cy:0},{cx:7.6,cy:0},{cx:8.6,cy:0}],gap:0.9},
+              {left:[0,1,2,3],right:[4,5,6,7]}),
+  room14: LAY("room14","Reference room · 14","Left wall 4 · jumbotron 3×2 · right wall 4. The BarBoards reference build.","split",
+              {cells:[{cx:0,cy:0.55},{cx:1,cy:0.55},{cx:2,cy:0.55},{cx:3,cy:0.55},
+                      {cx:4.9,cy:0},{cx:5.9,cy:0},{cx:6.9,cy:0},
+                      {cx:4.9,cy:1.1},{cx:5.9,cy:1.1},{cx:6.9,cy:1.1},
+                      {cx:8.8,cy:0.55},{cx:9.8,cy:0.55},{cx:10.8,cy:0.55},{cx:11.8,cy:0.55}],gap:0.9},
+              {left:[0,1,2,3],mid:[4,5,6,7,8,9],right:[10,11,12,13]})
+};
+var LAYORDER = ["single","pair","row3","row4","row6","strip8","quad","jumbo","eight","tower","split44","room14"];
+LAYOUTS.room14.labels = ["L1","L2","L3","L4","J1","J2","J3","J4","J5","J6","R1","R2","R3","R4"];
+
+function geoOf(L){
+  var UW=16, UH=9, g=L.gap, maxX=0, maxY=0;
+  L.cells.forEach(function(c){
+    maxX=Math.max(maxX, c.cx*(UW+g)+UW);
+    maxY=Math.max(maxY, c.cy*(UH+g)+UH);
+  });
+  return {AW:maxX, AH:maxY, UW:UW, UH:UH, g:g,
+    rect:function(c){ return {x:c.cx*(UW+g)/maxX, y:c.cy*(UH+g)/maxY, w:UW/maxX, h:UH/maxY}; }};
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4 · PAINTER
+   One canvas spec → N identical canvases at N different negative offsets.
+   Screens sharing a surface are byte-identical by construction (§14.2).
+   ══════════════════════════════════════════════════════════════════════════ */
+var MEAS = document.createElement("div");
+MEAS.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;"+
+  "font-family:Anton,'Arial Narrow',sans-serif;text-transform:uppercase;font-size:100px;line-height:.82";
+document.body.appendChild(MEAS);
+var WCACHE = {};
+function natW(t,track){
+  var k=t+"|"+track;
+  if(WCACHE[k]!==undefined) return WCACHE[k];
+  MEAS.style.letterSpacing=(track||0)+"em"; MEAS.textContent=t;
+  var w=MEAS.getBoundingClientRect().width||1;
+  WCACHE[k]=w; return w;
+}
+
+function ensure(host,kind,n){
+  var pool = host.__pool || (host.__pool={});
+  var arr = pool[kind] || (pool[kind]=[]);
+  while(arr.length<n){
+    var e=document.createElement("div"); e.className="L L-"+kind;
+    host.appendChild(e); arr.push(e);
+  }
+  return arr;
+}
+function px(v){ return v.toFixed(2)+"px"; }
+
+/* z is the layer's index in the spec. Elements are pooled per kind, so their DOM
+   order is whatever order the kinds were first needed in and has nothing to do with
+   stacking — the spec's own order has to be restated as z-index every frame. */
+function applyLayer(e,l,W,H,z){
+  var s=e.style; s.display="block"; s.opacity = (l.a===undefined?1:l.a); s.zIndex=z;
+  switch(l.k){
+    case "fill":
+      s.left="0";s.top="0";s.width=px(W);s.height=px(H);s.background=l.col;s.transform="none";s.borderRadius="0";break;
+    case "band":
+      s.left="0";s.top="0";s.width=px(l.w*W);s.height=px(l.h*H);s.background=l.col;
+      s.borderRadius=(l.r||0)+"px";
+      s.transform="translate("+px(l.x*W)+","+px(l.y*H)+")"+
+        (l.rot?" rotate("+l.rot+"deg)":"")+(l.skew?" skewX("+l.skew+"deg)":"");
+      break;
+    case "cell":
+      s.left="0";s.top="0";s.width=px(l.w*W);s.height=px(l.h*H);s.background=l.col;s.borderRadius="0";
+      s.transform="translate("+px(l.x*W)+","+px(l.y*H)+") scale("+(l.sc===undefined?1:l.sc)+")";break;
+    case "dot":
+      s.left="0";s.top="0";s.width=px(l.r*2*W);s.height=px(l.r*2*W);s.background=l.col;
+      s.transform="translate("+px(l.x*W-l.r*W)+","+px(l.y*H-l.r*W)+")";break;
+    case "ring":
+      s.left="0";s.top="0";s.width=px(l.r*2*W);s.height=px(l.r*2*W);
+      s.border=(l.w||3)+"px solid "+l.col;
+      s.transform="translate("+px(l.x*W-l.r*W)+","+px(l.y*H-l.r*W)+")";break;
+    case "tri":
+      s.left="0";s.top="0";
+      s.borderLeft=px(l.w*W/2)+" solid transparent";
+      s.borderRight=px(l.w*W/2)+" solid transparent";
+      s.borderTop = l.dir==="down" ? px(l.h*H)+" solid "+l.col : "0";
+      s.borderBottom = l.dir==="up" ? px(l.h*H)+" solid "+l.col : "0";
+      s.transform="translate("+px(l.x*W-l.w*W/2)+","+px(l.y*H)+")";break;
+    case "word":
+      var fs=l.h*H, track=(l.track||0);
+      var w=natW(l.t,track)*fs/100;
+      if(l.fit && w > l.fit*W){ fs = fs*(l.fit*W)/w; w=l.fit*W; }
+      s.left="0";s.top="0";s.fontSize=px(fs);s.letterSpacing=track+"em";s.color=l.col;
+      s.transform="translate("+px(l.x*W-w/2)+","+px(l.y*H-fs*0.46)+") scale("+(l.sc===undefined?1:l.sc)+")"+
+                  (l.rot?" rotate("+l.rot+"deg)":"");
+      if(e.textContent!==l.t) e.textContent=l.t;
+      break;
+    case "flash":
+      s.left="0";s.top="0";s.width=px(W);s.height=px(H);s.background="#fff";s.transform="none";break;
+  }
+}
+
+function paintCanvas(host,layers,W,H){
+  var counts={},used={},i,l;
+  for(i=0;i<layers.length;i++){ l=layers[i]; counts[l.k]=(counts[l.k]||0)+1; }
+  for(i=0;i<layers.length;i++){
+    l=layers[i];
+    var idx = used[l.k]=(used[l.k]||0);
+    used[l.k]=idx+1;
+    var arr=ensure(host,l.k,counts[l.k]);
+    applyLayer(arr[idx],l,W,H,i);
+  }
+  var pool=host.__pool||{};
+  for(var k in pool){
+    var from=used[k]||0;
+    for(var j=from;j<pool[k].length;j++) pool[k][j].style.display="none";
+  }
+}
+
+function paintScreen(ov,sp,w,h){
+  if(!sp) sp={};
+  ov.bg.style.background = sp.bg||"transparent";
+  ov.bg.style.opacity = sp.bg? (sp.a===undefined?1:sp.a) : 0;
+  ov.tint.style.background = sp.tint||"#000";
+  ov.tint.style.opacity = sp.dim||0;
+  ov.flash.style.background = sp.flashCol||"#fff";
+  ov.flash.style.opacity = sp.flash||0;
+  var hp = sp.hair;
+  if(hp===undefined || hp===null){ ov.h1.style.opacity=0; ov.h2.style.opacity=0; }
+  else{
+    var inset = hp*0.5*w;
+    ov.h1.style.opacity=sp.hairA===undefined?1:sp.hairA; ov.h1.style.left=px(inset);
+    ov.h2.style.opacity=sp.hairA===undefined?1:sp.hairA; ov.h2.style.left=px(w-inset-1);
+  }
+  if(sp.txt){
+    ov.txt.textContent=sp.txt;
+    ov.txt.style.opacity=sp.txtA===undefined?1:sp.txtA;
+    ov.txt.style.color=sp.txtCol||"#fff";
+    ov.txt.style.fontSize=px(h*(sp.txtH||0.3));
+    ov.txt.style.letterSpacing=(sp.txtTrack||0)+"em";
+  } else ov.txt.style.opacity=0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5 · EASING + SMALL HELPERS
+   ══════════════════════════════════════════════════════════════════════════ */
+function cl(v,a,b){ return v<a?a:(v>b?b:v); }
+function seg(u,a,b){ return cl((u-a)/(b-a),0,1); }
+function eo(v){ return 1-Math.pow(1-v,3); }          /* out-cubic  */
+function ei(v){ return v*v*v; }                       /* in-cubic   */
+function eio(v){ return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2; }
+function eb(v){ var c=1.70158+1; return 1+c*Math.pow(v-1,3)+1.70158*Math.pow(v-1,2); }
+function mix(a,b,t){ return a+(b-a)*t; }
+function pulse(v){ return Math.sin(v*Math.PI); }
+function hexA(h,a){
+  var n=parseInt(h.slice(1),16);
+  return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")";
+}
+function det(i){ /* deterministic 0..1 from an integer — every device agrees */
+  var x=Math.sin(i*127.1+311.7)*43758.5453; return x-Math.floor(x);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6 · GRAMMARS
+   Each returns {layers:[], screens:[], phase:"name"} from u alone.
+   ctx = {ev, T (team), L (layout), mode, n (screen count), tw(text,h,track)}
+   ══════════════════════════════════════════════════════════════════════════ */
+var G = {};
+
+/* ── shared: team-specific touchdown payoffs ─────────────────────────── */
+var FINISH = {
+
+race:function(v,T,C,o){            /* TEXAS — burnt orange out from the centre to both corners */
+  var a=seg(v,0,.55), w=eo(a)*0.52;
+  o.push({k:"band",x:0.5-w,y:0,w:w,h:1,col:T.p});
+  o.push({k:"band",x:0.5,y:0,w:w,h:1,col:T.p});
+  if(v>.5) o.push({k:"word",t:T.call,x:.5,y:.5,h:.4,col:"#fff",fit:.72,track:.02,
+                   a:seg(v,.5,.68),sc:mix(1.12,1,eo(seg(v,.5,.72)))});
+  if(v>.9) o.push({k:"flash",a:pulse(seg(v,.9,1))*0.18});
+},
+
+tide:function(v,T,C,o){            /* ALABAMA — a wave sweeps the canvas, foam on the front */
+  var x=eo(seg(v,0,.55));
+  o.push({k:"band",x:0,y:0,w:x,h:1,col:T.p});
+  o.push({k:"band",x:cl(x-0.012,0,1),y:0,w:0.012,h:1,col:"#fff",a:cl(1-seg(v,.5,.62),0,1)});
+  var i;
+  for(i=0;i<4;i++){
+    var ph=seg(v,.08+i*.05,.72+i*.05);
+    o.push({k:"band",x:cl(x-0.02-i*0.05,0,1),y:i*0.25,w:0.05,h:0.25,col:"#fff",a:(1-ph)*0.22});
+  }
+  if(v>.55) o.push({k:"word",t:T.call,x:.5,y:.5,h:.4,col:"#fff",fit:.72,track:.02,a:seg(v,.55,.7)});
+},
+
+hogcall:function(v,T,C,o){         /* ARKANSAS — three escalating calls */
+  o.push({k:"fill",col:T.p});
+  var beats=[["WOOOOO",0,.42,.22,.18],["PIG",.42,.62,.34,0],["SOOIE",.62,1,.5,0]];
+  beats.forEach(function(b){
+    var p=seg(v,b[1],b[2]); if(p<=0||p>=1) return;
+    var g=eo(cl(p*2.2,0,1));
+    o.push({k:"word",t:b[0],x:.5,y:.5,h:b[3],col:"#fff",fit:.9,
+      track:b[4]*g, sc:mix(0.82,1,g), a:cl(p*4,0,1)*cl((1-p)*4,0,1)});
+  });
+},
+
+eagle:function(v,T,C,o){           /* AUBURN — the flight, then WAR EAGLE */
+  o.push({k:"fill",col:T.s});
+  var x=eo(seg(v,0,.5)), y=.5-Math.sin(seg(v,0,.5)*Math.PI)*0.22, i;
+  for(i=0;i<14;i++){
+    var t=cl(x-i*0.028,0,1);
+    o.push({k:"dot",x:t,y:.5-Math.sin(cl((x-i*0.028)/1,0,1)*Math.PI)*0.22,
+            r:0.004+0.006*(1-i/14),col:T.p,a:(1-i/14)*0.9*cl(seg(v,0,.06)*6,0,1)});
+  }
+  if(v<.55){
+    o.push({k:"tri",x:x,y:y-0.06,w:.07,h:.06,col:T.p,dir:"up",a:.9});
+    o.push({k:"tri",x:x,y:y,w:.07,h:.06,col:T.p,dir:"down",a:.9});
+  }
+  if(v>.5){
+    o.push({k:"band",x:0,y:0,w:1,h:eo(seg(v,.5,.72)),col:T.p});
+    o.push({k:"word",t:"WAR EAGLE",x:.5,y:.5,h:.4,col:"#fff",fit:.8,track:.02,a:seg(v,.56,.7)});
+  }
+},
+
+chomp:function(v,T,C,o){           /* FLORIDA — the jaws close, three times */
+  o.push({k:"fill",col:T.p});
+  var i;
+  for(i=0;i<3;i++){
+    var p=seg(v,i*.22,i*.22+.2); if(p<=0) continue;
+    var open = i===2 ? (1-eio(p))*0.5 : Math.abs(Math.cos(p*Math.PI))*0.5;
+    if(p>=1 && i<2) open=0.5;
+    o.push({k:"band",x:0,y:0,w:1,h:0.5-open*0.62,col:T.s,a:1});
+    o.push({k:"band",x:0,y:0.5+open*0.62,w:1,h:0.5-open*0.62,col:T.s,a:1});
+  }
+  if(v>.66){
+    o.push({k:"band",x:0,y:0,w:1,h:1,col:T.s,a:seg(v,.66,.74)});
+    o.push({k:"word",t:T.call,x:.5,y:.5,h:.36,col:T.p,fit:.72,track:.02,a:seg(v,.7,.82)});
+  }
+},
+
+hedges:function(v,T,C,o){          /* GEORGIA — the hedges close in, then red between them */
+  o.push({k:"fill",col:"#0B1A0E"});
+  var h=eo(seg(v,0,.42))*0.3;
+  o.push({k:"band",x:0,y:0,w:h,h:1,col:"#1E5229"});
+  o.push({k:"band",x:1-h,y:0,w:h,h:1,col:"#1E5229"});
+  var i;
+  for(i=0;i<9;i++){
+    o.push({k:"band",x:h*det(i)*0.9,y:i/9,w:h*0.34,h:1/9-0.008,col:"#2F7038",a:.7});
+    o.push({k:"band",x:1-h+h*det(i+40)*0.6,y:i/9,w:h*0.34,h:1/9-0.008,col:"#2F7038",a:.7});
+  }
+  if(v>.4){
+    var f=eo(seg(v,.4,.7));
+    o.push({k:"band",x:h,y:.5-f*.5,w:1-h*2,h:f,col:T.p});
+    o.push({k:"word",t:T.call,x:.5,y:.5,h:.38,col:"#fff",fit:.6,track:.02,a:seg(v,.55,.7)});
+  }
+},
+
+spell:function(v,T,C,o){           /* KENTUCKY — C · A · T · S land, then CATS CATS CATS */
+  o.push({k:"fill",col:T.p});
+  var L=["C","A","T","S"],i;
+  for(i=0;i<4;i++){
+    var p=seg(v,i*.11,i*.11+.14); if(p<=0) continue;
+    o.push({k:"band",x:i*0.25+0.012,y:.18,w:0.226,h:.64,col:"#fff",a:cl(p*3,0,1)*0.1});
+    o.push({k:"word",t:L[i],x:i*0.25+0.125,y:.5,h:.5,col:"#fff",fit:.2,
+            sc:mix(1.6,1,eb(cl(p*1.4,0,1))),a:cl(p*3,0,1)});
+  }
+  if(v>.62){
+    o.push({k:"flash",a:pulse(seg(v,.62,.72))*0.7});
+    o.push({k:"word",t:"CATS CATS CATS",x:.5,y:.5,h:.3,col:"#fff",fit:.88,track:.02,a:seg(v,.7,.82)});
+  }
+},
+
+stripe:function(v,T,C,o){          /* LSU — gold rips across the purple */
+  o.push({k:"fill",col:T.p});
+  var i;
+  for(i=0;i<7;i++){
+    var p=seg(v,i*.055,i*.055+.3); if(p<=0) continue;
+    o.push({k:"band",x:i*0.142,y:0,w:0.058*eo(p),h:1,col:T.s,skew:-14,a:1});
+  }
+  if(v>.5){
+    o.push({k:"band",x:0,y:.32,w:1,h:.36,col:T.p,a:seg(v,.5,.6)});
+    o.push({k:"word",t:T.call,x:.5,y:.5,h:.3,col:T.s,fit:.8,track:.04,a:seg(v,.54,.66)});
+  }
+},
+
+cowbell:function(v,T,C,o){         /* MISSISSIPPI STATE — three rings of cowbell */
+  o.push({k:"fill",col:T.p});
+  var i,j;
+  for(i=0;i<3;i++){
+    var p=seg(v,i*.2,i*.2+.42); if(p<=0) continue;
+    for(j=0;j<3;j++){
+      var q=cl(p-j*0.07,0,1);
+      o.push({k:"ring",x:.5,y:.5,r:0.02+eo(q)*0.62,col:"#fff",w:Math.max(1,7*(1-q)),a:(1-q)*0.55});
+    }
+  }
+  if(v>.52){
+    o.push({k:"word",t:"HAIL STATE",x:.5,y:.5,h:.36,col:"#fff",fit:.8,track:.02,
+            a:seg(v,.52,.62),sc:mix(1.1,1,eo(seg(v,.52,.68)))});
+  }
+},
+
+mizzou:function(v,T,C,o){          /* MISSOURI — M-I-Z from the left, Z-O-U from the right */
+  o.push({k:"fill",col:T.s});
+  var a=eo(seg(v,0,.34)), b=eo(seg(v,.2,.54));
+  o.push({k:"word",t:"M-I-Z",x:mix(-0.3,0.28,a),y:.5,h:.42,col:T.p,fit:.44,track:.02,a:cl(a*3,0,1)});
+  o.push({k:"word",t:"Z-O-U",x:mix(1.3,0.72,b),y:.5,h:.42,col:T.p,fit:.44,track:.02,a:cl(b*3,0,1)});
+  if(v>.56){
+    o.push({k:"flash",a:pulse(seg(v,.56,.66))*0.55});
+    o.push({k:"band",x:0,y:0,w:1,h:1,col:T.p,a:seg(v,.62,.72)});
+    o.push({k:"word",t:"MIZZOU",x:.5,y:.5,h:.42,col:T.s,fit:.66,track:.02,a:seg(v,.66,.78)});
+  }
+},
+
+schooner:function(v,T,C,o){        /* OKLAHOMA — the wagon runs, dust behind it */
+  o.push({k:"fill",col:T.p});
+  var x=eo(seg(v,0,.55)),i;
+  for(i=0;i<20;i++){
+    var t=cl(x-i*0.03,0,1);
+    o.push({k:"dot",x:t,y:.5+ (det(i)-0.5)*0.28,r:0.003+0.009*(1-i/20),col:T.s,a:(1-i/20)*0.5});
+  }
+  o.push({k:"band",x:cl(x-0.05,0,1),y:.42,w:0.1,h:.16,col:T.s,a:cl(1-seg(v,.5,.6),0,1),r:3});
+  if(v>.5){
+    o.push({k:"band",x:0,y:.34,w:eo(seg(v,.5,.72)),h:.32,col:T.s});
+    o.push({k:"word",t:"BOOMER SOONER",x:.5,y:.5,h:.26,col:T.p,fit:.86,track:.02,a:seg(v,.6,.72)});
+  }
+},
+
+hotty:function(v,T,C,o){           /* OLE MISS — four-beat call and answer */
+  var cards=[["ARE YOU READY?",T.s,"#fff"],["HELL YES!",T.p,"#fff"],
+             ["DAMN RIGHT!",T.s,"#fff"],["HOTTY TODDY",T.p,"#fff"]];
+  var i=Math.min(3,Math.floor(v*4)), p=(v*4)%1, c=cards[i];
+  o.push({k:"fill",col:c[1]});
+  o.push({k:"word",t:c[0],x:.5,y:.5,h:i===3?.42:.3,col:c[2],fit:.9,track:.02,
+          sc:mix(1.08,1,eo(cl(p*3,0,1))),a:cl(p*6,0,1)});
+},
+
+sandstorm:function(v,T,C,o){       /* SOUTH CAROLINA — the swarm builds and bursts */
+  o.push({k:"fill",col:T.s});
+  var n=36,i,build=seg(v,0,.6);
+  for(i=0;i<n;i++){
+    var a0=det(i)*Math.PI*2, r0=0.15+det(i+7)*0.55;
+    var r=mix(r0,0.02+det(i+13)*0.06,eo(build));
+    o.push({k:"dot",x:.5+Math.cos(a0+build*2.4)*r*0.55,y:.5+Math.sin(a0+build*2.4)*r,
+            r:0.004+det(i+21)*0.008,col:T.p,a:0.35+build*0.6});
+  }
+  if(v>.58){
+    var f=eo(seg(v,.58,.76));
+    o.push({k:"band",x:.5-f*.5,y:.5-f*.5,w:f,h:f,col:T.p});
+    o.push({k:"word",t:"GAMECOCKS",x:.5,y:.5,h:.32,col:"#fff",fit:.82,track:.03,a:seg(v,.7,.82)});
+  }
+},
+
+checker:function(v,T,C,o){         /* TENNESSEE — the checkerboard fills in on the diagonal */
+  o.push({k:"fill",col:T.s});
+  var cols=10, rows=6, i,j;
+  for(j=0;j<rows;j++) for(i=0;i<cols;i++){
+    var dgn=(i/cols + j/rows)/2;
+    var p=seg(v,dgn*0.62, dgn*0.62+0.2); if(p<=0) continue;
+    var on=((i+j)%2)===0;
+    o.push({k:"cell",x:i/cols,y:j/rows,w:1/cols+0.002,h:1/rows+0.003,
+            col:on?T.p:"#FFFFFF",sc:mix(0.4,1,eb(p)),a:cl(p*3,0,1)});
+  }
+  if(v>.72){
+    o.push({k:"band",x:0,y:.34,w:1,h:.32,col:T.p,a:seg(v,.72,.8)});
+    o.push({k:"word",t:"GO VOLS",x:.5,y:.5,h:.28,col:"#fff",fit:.6,track:.03,a:seg(v,.76,.86)});
+  }
+},
+
+twelfth:function(v,T,C,o){         /* TEXAS A&M — the 12th Man stands, left to right */
+  o.push({k:"fill",col:T.p});
+  var n=18,i;
+  for(i=0;i<n;i++){
+    var p=eo(seg(v,i*0.028, i*0.028+0.22));
+    o.push({k:"band",x:i/n,y:1-p*0.9,w:1/n+0.003,h:p*0.9,col:"#fff",a:.92});
+  }
+  if(v>.62){
+    o.push({k:"band",x:0,y:0,w:1,h:1,col:"#fff",a:seg(v,.62,.72)});
+    o.push({k:"word",t:"12TH MAN",x:.5,y:.42,h:.3,col:T.p,fit:.6,track:.03,a:seg(v,.68,.78)});
+    o.push({k:"word",t:"GIG 'EM",x:.5,y:.72,h:.16,col:T.p,fit:.4,track:.1,a:seg(v,.74,.84)});
+  }
+},
+
+anchor:function(v,T,C,o){          /* VANDERBILT — the anchor drops and sets */
+  o.push({k:"fill",col:T.s});
+  var d=eb(seg(v,0,.4));
+  var y=mix(-0.45,0.46,cl(d,0,1.06));
+  o.push({k:"band",x:.485,y:y-0.22,w:.03,h:.44,col:T.p});
+  o.push({k:"band",x:.40,y:y-0.16,w:.2,h:.028,col:T.p});
+  o.push({k:"ring",x:.5,y:y-0.24,r:.045,col:T.p,w:8});
+  o.push({k:"band",x:.36,y:y+0.14,w:.28,h:.03,col:T.p,rot:0});
+  o.push({k:"band",x:.355,y:y+0.06,w:.03,h:.12,col:T.p});
+  o.push({k:"band",x:.615,y:y+0.06,w:.03,h:.12,col:T.p});
+  if(v>.4){
+    o.push({k:"flash",a:pulse(seg(v,.4,.5))*0.5});
+    var i;
+    for(i=0;i<2;i++){
+      var q=seg(v,.42+i*.12,.42+i*.12+.4);
+      if(q>0) o.push({k:"ring",x:.5,y:.5,r:0.05+eo(q)*0.55,col:T.p,w:Math.max(1,6*(1-q)),a:(1-q)*0.5});
+    }
+    o.push({k:"word",t:"ANCHOR DOWN",x:.5,y:.86,h:.13,col:T.p,fit:.6,track:.14,a:seg(v,.55,.68)});
+  }
+}
+};
+
+/* ── runacross: the touchdown spine ───────────────────────────────────── */
+G.runacross=function(u,C){
+  var T=C.T, o=[], ph="", W=1;
+  o.push({k:"fill",col:T.deep});
+
+  /* A · the word runs the canvas */
+  if(u<0.24){
+    ph="run · TOUCHDOWN crosses the canvas";
+    var v=seg(u,0,.24), w=C.tw("TOUCHDOWN",.6,.02);
+    if(C.mode==="stack"){
+      o.push({k:"word",t:"TOUCHDOWN",x:.5,y:mix(-0.25,1.25,eio(v)),h:.16,col:"#fff",fit:.9,track:.02});
+    }else if(C.mode==="single"||C.mode==="grid"){
+      o.push({k:"word",t:"TOUCHDOWN",x:.5,y:.5,h:C.mode==="single"?.24:.3,col:"#fff",fit:.92,track:.02,
+              sc:mix(1.45,1,eo(v)),a:cl(v*5,0,1)*cl((1-v)*7,0,1)});
+    }else{
+      o.push({k:"word",t:"TOUCHDOWN",x:mix(-w/2,1+w/2,eio(v)),y:.5,h:.6,col:"#fff",track:.02});
+    }
+  }
+  /* B · the school lands */
+  else if(u<0.48){
+    ph="land · "+T.word;
+    var v2=seg(u,.24,.48);
+    o.push({k:"word",t:T.word,x:.5,y:.5,h:C.mode==="grid"?.42:.62,col:T.p,fit:.9,track:.01,
+            sc:mix(1.55,1,eb(cl(v2*2.6,0,1))),a:cl(v2*7,0,1)});
+    if(v2>.45) o.push({k:"word",t:T.city.toUpperCase(),x:.5,y:.88,h:.07,col:hexA("#FFFFFF",.5),
+                       fit:.7,track:.18,a:seg(v2,.45,.7)});
+  }
+  /* C · flash — 384 ms at d=8000, inside the 250–500 ms rule */
+  else if(u<0.528){
+    ph="flash · 384 ms";
+    o.push({k:"word",t:T.word,x:.5,y:.5,h:.62,col:T.p,fit:.9,track:.01});
+    o.push({k:"flash",a:1-seg(u,.48,.528)*0.15});
+  }
+  /* D · the school's own payoff — longer than the setup that built to it */
+  else if(u<0.86){
+    ph="payoff · "+T.finish;
+    (FINISH[T.finish]||FINISH.race)(seg(u,.528,.86),T,C,o);
+  }
+  /* E · lockup */
+  else{
+    ph="lockup · scoreline + venue";
+    var v3=seg(u,.86,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:T.ab+" "+C.ev.hs+"   "+C.ev.opp+" "+C.ev.as,x:.5,y:.4,h:.3,
+            col:"#fff",fit:.8,track:.02,a:cl(v3*6,0,1)});
+    o.push({k:"word",t:T.venue.toUpperCase(),x:.5,y:.68,h:.075,col:hexA("#FFFFFF",.72),
+            fit:.86,track:.14,a:cl(v3*4,0,1)});
+    o.push({k:"word",t:"Q"+C.ev.period+"  "+C.ev.clock,x:.5,y:.82,h:.06,col:hexA("#FFFFFF",.5),
+            fit:.4,track:.2,a:cl(v3*4,0,1)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── chant: call and response on 520–1400 ms beats ────────────────────── */
+G.chant=function(u,C){
+  var T=C.T, o=[], sc=[], ph="", ms=u*C.ev.d, i;
+  var intro=1200, tail=1600, tot=C.ev.d-intro-tail;
+  o.push({k:"fill",col:T.deep});
+
+  if(ms<intro){
+    ph="open · "+T.chant;
+    var v=ms/intro;
+    o.push({k:"fill",col:T.p,a:eo(v)*0.9});
+    o.push({k:"word",t:T.chant.toUpperCase(),x:.5,y:.5,h:.22,col:"#fff",fit:.86,track:.06,
+            a:cl(v*3,0,1)*cl((1-v)*4,0,1),sc:mix(0.92,1,eo(v))});
+    return {layers:o,screens:sc,phase:ph,beat:-1};
+  }
+  if(ms>intro+tot){
+    ph="hold · "+T.call;
+    var v4=seg(ms,intro+tot,C.ev.d);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:T.call,x:.5,y:.46,h:.34,col:"#fff",fit:.8,track:.02,sc:mix(1.06,1,eo(v4))});
+    o.push({k:"word",t:T.venue.toUpperCase(),x:.5,y:.8,h:.07,col:hexA("#FFFFFF",.66),fit:.86,track:.14});
+    return {layers:o,screens:sc,phase:ph,beat:-1};
+  }
+
+  /* which beat are we on */
+  var t=ms-intro, acc=0, bi=0, bp=0;
+  for(i=0;i<T.beats.length;i++){
+    var dms=T.beats[i].ms||660;
+    if(t<acc+dms){ bi=i; bp=(t-acc)/dms; break; }
+    acc+=dms; bi=i; bp=1;
+  }
+  var b=T.beats[bi];
+  var txt=b.t.replace("{OPP}", C.ev.opp);
+  ph="beat "+(bi+1)+"/"+T.beats.length+" · "+txt;
+
+  /* the loud side takes the school colour; the quiet side holds bright, never dark */
+  var loud=T.p, quiet=T.deep==="#000000"?"#141210":T.deep;
+  var hit=cl(bp*6,0,1)*cl((1-bp)*8,0,1);
+
+  if(C.L.groups && C.L.groups.left){
+    var GL=C.L.groups, k;
+    /* the mid group is one surface, so on an all-room beat it carries the phrase whole
+       and its screens run no text of their own — the canvas word crosses their bezels */
+    var midWhole = b.s==="A" && !!GL.mid;
+    if(midWhole){
+      /* the fill and the word both go on the canvas, so the phrase crosses the
+         jumbotron's bezels as one object instead of repeating six times */
+      var sp=C.span("mid");
+      o.push({k:"band",x:sp.x0,y:0,w:sp.w,h:1,col:loud});
+      o.push({k:"word",t:txt,x:sp.c,y:.5,h:.3,col:"#fff",fit:sp.w*0.88,track:.02,
+              a:hit,sc:mix(1.1,1,eo(cl(bp*3,0,1)))});
+    }
+    for(k=0;k<C.n;k++){
+      var side = GL.left.indexOf(k)>=0 ? "L" : (GL.right.indexOf(k)>=0 ? "R" : "M");
+      var on = b.s==="A" || b.s===side;
+      var whole = midWhole && side==="M";
+      sc[k]= whole ? {flash:hit*0.16}
+           : {bg: on?loud:quiet, dim: on?0:0.28,
+              txt: on?txt:"", txtCol:"#fff", txtH: txt.length>10?0.16:0.3,
+              txtA: on?hit:0, txtTrack:.02, flash: on?hit*0.16:0};
+    }
+  }else{
+    /* no groups — cut the canvas itself in half */
+    var lft = b.s==="L"||b.s==="A", rgt = b.s==="R"||b.s==="A";
+    if(C.mode==="stack"){
+      o.push({k:"band",x:0,y:0,w:1,h:.5,col:lft?loud:quiet});
+      o.push({k:"band",x:0,y:.5,w:1,h:.5,col:rgt?loud:quiet});
+    }else{
+      o.push({k:"band",x:0,y:0,w:.5,h:1,col:lft?loud:quiet});
+      o.push({k:"band",x:.5,y:0,w:.5,h:1,col:rgt?loud:quiet});
+    }
+    var wx = b.s==="A"?.5:(b.s==="L"?.25:.75);
+    var wy = C.mode==="stack" ? (b.s==="A"?.5:(b.s==="L"?.25:.75)) : .5;
+    o.push({k:"word",t:txt,x:C.mode==="stack"?.5:wx,y:wy,h:b.s==="A"?.4:.34,col:"#fff",
+            fit:b.s==="A"?.9:.44,track:.02,a:hit,sc:mix(1.12,1,eo(cl(bp*3,0,1)))});
+  }
+  /* beat counter along the bottom of the canvas */
+  for(i=0;i<T.beats.length;i++){
+    o.push({k:"band",x:0.06+i*(0.88/T.beats.length),y:.94,w:0.88/T.beats.length-0.006,h:.012,
+            col:"#fff",a:i<bi?0.3:(i===bi?0.95:0.1)});
+  }
+  return {layers:o,screens:sc,phase:ph,beat:bi};
+};
+
+/* ── streak: return touchdowns — pick six, scoop, kick return, block ──── */
+G.streak=function(u,C){
+  var T=C.T, o=[], ph="", dir=C.ev.dir||1;
+  o.push({k:"fill",col:T.deep});
+  if(u<.14){
+    ph="turn · the ball changes hands";
+    var v=seg(u,0,.14);
+    o.push({k:"fill",col:"#0A0807"});
+    o.push({k:"word",t:C.ev.sr["details.recovery.type"] ? C.ev.sr["details.recovery.type"].toUpperCase() : "RECOVERED",
+            x:.5,y:.5,h:.18,col:"#fff",fit:.7,track:.12,a:cl(v*5,0,1)*cl((1-v)*5,0,1)});
+  }else if(u<.58){
+    ph="return · "+C.ev.yards+" yards";
+    var v2=seg(u,.14,.58), x=dir>0?eio(v2):1-eio(v2), i;
+    o.push({k:"band",x:0,y:.44,w:1,h:.12,col:hexA("#FFFFFF",.06)});
+    for(i=0;i<16;i++){
+      var tx=cl(x-dir*i*0.032,0,1);
+      o.push({k:"band",x:tx-0.01,y:.5-0.012-i*0.0008,w:0.02+i*0.004,h:.024+i*0.0016,
+              col:T.p,a:(1-i/16)*0.85});
+    }
+    o.push({k:"dot",x:x,y:.5,r:.022,col:"#fff"});
+    o.push({k:"word",t:Math.round(mix(0,C.ev.yards,v2))+"",x:x,y:.28,h:.2,col:"#fff",fit:.2,a:.9});
+    /* yard ticks so the travel reads as distance, not decoration */
+    for(i=0;i<=10;i++) o.push({k:"band",x:i/10,y:.62,w:.002,h:.05,col:hexA("#FFFFFF",i%5===0?.35:.15)});
+  }else if(u<.63){
+    ph="flash · 360 ms";
+    o.push({k:"flash",a:1});
+  }else if(u<.87){
+    ph="payoff · "+T.finish;
+    (FINISH[T.finish]||FINISH.race)(seg(u,.63,.87),T,C,o);
+  }else{
+    ph="lockup · "+C.ev.name;
+    var v3=seg(u,.87,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:C.ev.name,x:.5,y:.4,h:.28,col:"#fff",fit:.88,track:.02,a:cl(v3*6,0,1)});
+    o.push({k:"word",t:C.ev.sub,x:.5,y:.68,h:.09,col:hexA("#FFFFFF",.75),fit:.8,track:.14,a:cl(v3*4,0,1)});
+    o.push({k:"word",t:T.ab+" "+C.ev.hs+"  ·  "+C.ev.opp+" "+C.ev.as,x:.5,y:.85,h:.07,
+            col:hexA("#FFFFFF",.5),fit:.5,track:.16,a:cl(v3*4,0,1)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── hold: the goal-line stand. Adds nothing, and never covers the play ── */
+G.hold=function(u,C){
+  var T=C.T, o=[], sc=[], ph="", k;
+  if(u<.62){
+    ph="hold · hairlines contract, per receiver, out of step";
+    o.push({k:"fill",col:"#070605"});
+    var v=seg(u,.06,.62);
+    for(k=0;k<C.n;k++){
+      var off=k*0.055;                       /* deterministic stagger — no clock lock needed */
+      var p=eo(cl((v*1.5)-off,0,1));
+      sc[k]={dim:mix(0.35,0.86,p),hair:p*0.92,hairA:cl(v*4,0,1)*0.85};
+    }
+    o.push({k:"word",t:"FOURTH AND GOAL",x:.5,y:.5,h:.1,col:hexA("#EFE7DA",.16*(1-eo(v))),fit:.5,track:.28});
+  }else if(u<.68){
+    ph="the stop · 500 ms flash";
+    for(k=0;k<C.n;k++) sc[k]={flash:1-seg(u,.62,.68)*0.2};
+    o.push({k:"flash",a:1});
+  }else{
+    ph="flood · HELD";
+    var v2=seg(u,.68,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:"HELD",x:.5,y:.44,h:.5,col:"#fff",fit:.7,track:.02,sc:mix(1.2,1,eo(cl(v2*2.4,0,1)))});
+    if(v2>.36) o.push({k:"word",t:"TURNOVER ON DOWNS · "+T.name.toUpperCase()+" BALL",
+                       x:.5,y:.8,h:.075,col:hexA("#FFFFFF",.8),fit:.86,track:.13,a:seg(v2,.36,.55)});
+  }
+  return {layers:o,screens:sc,phase:ph};
+};
+
+/* ── steal: interception, fumble, turnover on downs ───────────────────── */
+G.steal=function(u,C){
+  var T=C.T, o=[], ph="";
+  var opp = TEAMS[C.ev.opp] || {p:"#3A2D25",ab:C.ev.opp};
+  if(u<.3){
+    ph="the boundary · possession is still theirs";
+    var v=seg(u,0,.3), x=mix(1,0.5,eo(v));
+    o.push({k:"fill",col:opp.p});
+    o.push({k:"band",x:x,y:0,w:1-x,h:1,col:T.p});
+    o.push({k:"band",x:x-0.004,y:0,w:.008,h:1,col:"#fff",a:.85});
+  }else if(u<.4){
+    ph="flip · 500 ms";
+    var v2=seg(u,.3,.4), x2=mix(0.5,0,eio(v2));
+    o.push({k:"fill",col:opp.p});
+    o.push({k:"band",x:x2,y:0,w:1-x2,h:1,col:T.p});
+    o.push({k:"band",x:x2-0.004,y:0,w:.008,h:1,col:"#fff"});
+    o.push({k:"flash",a:pulse(v2)*0.35});
+  }else{
+    ph="statement · "+C.ev.name;
+    var v3=seg(u,.4,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:C.ev.name,x:.5,y:.42,h:.34,col:"#fff",fit:.9,track:.02,
+            sc:mix(1.14,1,eo(cl(v3*3,0,1))),a:cl(v3*6,0,1)});
+    if(v3>.22) o.push({k:"word",t:T.name.toUpperCase()+" BALL",x:.5,y:.72,h:.1,
+                       col:hexA("#FFFFFF",.82),fit:.6,track:.16,a:seg(v3,.22,.4)});
+    if(v3>.5) o.push({k:"word",t:T.call,x:.5,y:.88,h:.07,col:hexA("#FFFFFF",.55),fit:.4,track:.2,a:seg(v3,.5,.68)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── burst: explosive play / fourth-down conversion. Tier 1, no window ─── */
+G.burst=function(u,C){
+  var T=C.T, o=[], ph="accent · "+C.ev.name, i;
+  var v=u, k=pulse(cl(v*1.15,0,1));
+  o.push({k:"fill",col:T.p,a:k*0.9});
+  for(i=0;i<6;i++){
+    var p=eo(cl(v*1.6-i*0.05,0,1));
+    o.push({k:"band",x:mix(.5,-0.1,p)-0.02,y:i/6,w:0.06,h:1/6-0.01,col:"#fff",a:(1-p)*0.5,skew:-22});
+    o.push({k:"band",x:mix(.5,1.1,p),y:i/6,w:0.06,h:1/6-0.01,col:"#fff",a:(1-p)*0.5,skew:-22});
+  }
+  o.push({k:"word",t:C.ev.yards+"",x:.5,y:.44,h:.5,col:"#fff",fit:.3,
+          sc:mix(1.35,1,eo(cl(v*2.6,0,1))),a:cl(v*8,0,1)*cl((1-v)*5,0,1)});
+  o.push({k:"word",t:C.ev.name,x:.5,y:.82,h:.09,col:hexA("#FFFFFF",.8),fit:.8,track:.15,
+          a:cl((v-0.12)*6,0,1)*cl((1-v)*5,0,1)});
+  return {layers:o,phase:ph};
+};
+
+/* ── arc: field goals, scaled by distance ─────────────────────────────── */
+G.arc=function(u,C){
+  var T=C.T, o=[], ph="", yd=C.ev.yards;
+  var walkoff = C.ev.type==="game_over";
+  o.push({k:"fill",col:T.deep});
+  o.push({k:"band",x:0,y:.82,w:1,h:.006,col:hexA("#FFFFFF",.2)});
+  var upx=0.88;
+  o.push({k:"band",x:upx,y:.34,w:.008,h:.48,col:"#FFD34D"});
+  o.push({k:"band",x:upx-0.06,y:.34,w:.008,h:.3,col:"#FFD34D"});
+  o.push({k:"band",x:upx+0.06,y:.34,w:.008,h:.3,col:"#FFD34D"});
+  o.push({k:"band",x:upx-0.06,y:.34,w:.128,h:.008,col:"#FFD34D"});
+
+  if(u<.46){
+    ph="the kick · "+yd+" yards";
+    var v=seg(u,.06,.46), x=mix(0.06,0.97,v), y=.82-Math.sin(v*Math.PI)*0.58;
+    var i;
+    for(i=0;i<14;i++){
+      var q=cl(v-i*0.028,0,1);
+      o.push({k:"dot",x:mix(0.06,0.97,q),y:.82-Math.sin(q*Math.PI)*0.58,r:0.004,
+              col:T.p,a:q>0?(1-i/14)*0.55:0});
+    }
+    o.push({k:"dot",x:x,y:y,r:.016,col:"#fff"});
+    o.push({k:"word",t:yd+" YD",x:.16,y:.2,h:.12,col:hexA("#FFFFFF",.6),fit:.3,track:.1});
+  }else if(u<.52){
+    ph="good · flash 400 ms";
+    o.push({k:"flash",a:1-seg(u,.46,.52)*0.2});
+  }else if(walkoff){
+    if(u<.88){ ph="payoff · "+T.finish; (FINISH[T.finish]||FINISH.race)(seg(u,.52,.88),T,C,o); }
+    else{
+      ph="final";
+      var v3=seg(u,.88,1);
+      o.push({k:"fill",col:T.p});
+      o.push({k:"word",t:"FINAL",x:.5,y:.32,h:.14,col:hexA("#FFFFFF",.7),fit:.4,track:.3});
+      o.push({k:"word",t:T.ab+" "+C.ev.hs+"   "+C.ev.opp+" "+C.ev.as,x:.5,y:.58,h:.3,col:"#fff",fit:.85,
+              a:cl(v3*5,0,1)});
+      o.push({k:"word",t:T.venue.toUpperCase(),x:.5,y:.85,h:.07,col:hexA("#FFFFFF",.6),fit:.86,track:.14});
+    }
+  }else{
+    ph="good · "+yd+" yards";
+    var v4=seg(u,.52,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:"GOOD",x:.5,y:.36,h:.34,col:"#fff",fit:.6,track:.04,sc:mix(1.15,1,eo(cl(v4*3,0,1)))});
+    o.push({k:"word",t:yd+" YARDS",x:.5,y:.68,h:.16,col:hexA("#FFFFFF",.82),fit:.6,track:.12,a:cl(v4*3,0,1)});
+    if(v4>.5) o.push({k:"word",t:T.call,x:.5,y:.88,h:.07,col:hexA("#FFFFFF",.5),fit:.4,track:.2,a:seg(v4,.5,.7)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── strike: the safety — the rarest scoring play in the sport ─────────── */
+G.strike=function(u,C){
+  var T=C.T, o=[], ph="";
+  o.push({k:"fill",col:"#0A0807"});
+  if(u<.34){
+    ph="the signal · arms overhead";
+    var v=seg(u,0,.34), w=eio(v)*0.42;
+    o.push({k:"band",x:0,y:0,w:w,h:1,col:T.p});
+    o.push({k:"band",x:1-w,y:0,w:w,h:1,col:T.p});
+    o.push({k:"band",x:w,y:0,w:.006,h:1,col:"#fff",a:.6});
+    o.push({k:"band",x:1-w-0.006,y:0,w:.006,h:1,col:"#fff",a:.6});
+  }else if(u<.4){
+    ph="contact · flash 360 ms";
+    o.push({k:"flash",a:1});
+  }else{
+    ph="statement · SAFETY · two points";
+    var v2=seg(u,.4,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:"SAFETY",x:.5,y:.42,h:.42,col:"#fff",fit:.82,track:.03,
+            sc:mix(1.18,1,eo(cl(v2*2.6,0,1)))});
+    if(v2>.22) o.push({k:"word",t:"TWO POINTS · "+T.name.toUpperCase(),x:.5,y:.76,h:.09,
+                       col:hexA("#FFFFFF",.82),fit:.86,track:.14,a:seg(v2,.22,.4)});
+    if(v2>.55) o.push({k:"word",t:"FREE KICK TO FOLLOW",x:.5,y:.9,h:.055,
+                       col:hexA("#FFFFFF",.45),fit:.5,track:.22,a:seg(v2,.55,.75)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── clockdown: two-minute warning. Subtractive, never celebratory ─────── */
+G.clockdown=function(u,C){
+  var T=C.T, o=[], sc=[], ph="tension · subtract";
+  o.push({k:"fill",col:"#0A0807"});
+  var v=eo(cl(u*1.25,0,1));
+  o.push({k:"band",x:mix(0,.32,v),y:.5-0.001,w:mix(1,.36,v),h:.002,col:hexA("#EFE7DA",.5)});
+  o.push({k:"word",t:"2:00",x:.5,y:.38,h:mix(.1,.26,v),col:hexA("#EFE7DA",.9),fit:.4,track:.04,a:cl(u*4,0,1)});
+  if(u>.34) o.push({k:"word",t:"TWO MINUTE WARNING",x:.5,y:.66,h:.075,col:hexA("#EFE7DA",.55),
+                    fit:.8,track:.22,a:seg(u,.34,.55)});
+  if(u>.62) o.push({k:"word",t:T.ab+" "+C.ev.hs+"  ·  "+C.ev.opp+" "+C.ev.as+"   Q4",
+                    x:.5,y:.84,h:.055,col:hexA("#EFE7DA",.32),fit:.5,track:.2,a:seg(u,.62,.8)});
+  return {layers:o,screens:sc,phase:ph};
+};
+
+/* ── edge: red zone. A sustained state, rendered as a tint, not an event ─ */
+G.edge=function(u,C){
+  var T=C.T, o=[], sc=[], ph="state · red zone, edge only";
+  var b=0.5+0.5*Math.sin(u*Math.PI*4);
+  o.push({k:"band",x:0,y:0,w:1,h:.02,col:T.p,a:.5+b*0.45});
+  o.push({k:"band",x:0,y:.98,w:1,h:.02,col:T.p,a:.5+b*0.45});
+  o.push({k:"band",x:0,y:0,w:.008,h:1,col:T.p,a:.5+b*0.45});
+  o.push({k:"band",x:.992,y:0,w:.008,h:1,col:T.p,a:.5+b*0.45});
+  /* the last 20 yards, with the ball on it */
+  var i;
+  for(i=0;i<=4;i++){
+    o.push({k:"band",x:.18+i*.16,y:.62,w:.002,h:.1,col:hexA("#FFFFFF",.22)});
+    o.push({k:"word",t:(20-i*5)+"",x:.18+i*.16,y:.79,h:.045,col:hexA("#FFFFFF",.28),fit:.06});
+  }
+  var bx = .18 + (20-17)/20*0.64;
+  o.push({k:"band",x:bx-0.001,y:.6,w:.003,h:.14,col:T.p});
+  o.push({k:"dot",x:bx,y:.67,r:.012,col:T.p,a:.6+b*0.4});
+  o.push({k:"word",t:"RED ZONE",x:.5,y:.36,h:.1,col:T.p,fit:.5,track:.3,a:.55+b*0.4});
+  o.push({k:"word",t:T.ab+" 1ST AND 10 AT THE "+C.ev.opp+" 17",x:.5,y:.5,h:.05,
+          col:hexA("#FFFFFF",.4),fit:.7,track:.16});
+  return {layers:o,screens:sc,phase:ph};
+};
+
+/* ── binary: a review is a long window with a vote in the middle of it ─── */
+G.binary=function(u,C){
+  var T=C.T, o=[], ph="";
+  o.push({k:"fill",col:"#0A0807"});
+  if(u<.16){
+    ph="window opens · play.official = false";
+    var v=seg(u,0,.16);
+    o.push({k:"word",t:"UNDER REVIEW",x:.5,y:.5,h:.16,col:hexA("#EFE7DA",.9),fit:.7,track:.22,
+            a:cl(v*4,0,1)});
+  }else if(u<.62){
+    ph="the vote · 180 s of window, and a binary to fill it";
+    var v2=seg(u,.16,.62);
+    o.push({k:"band",x:0,y:0,w:.5,h:1,col:"#1C1613"});
+    o.push({k:"band",x:.5,y:0,w:.5,h:1,col:"#22140F"});
+    o.push({k:"word",t:"STANDS",x:.25,y:.36,h:.14,col:hexA("#EFE7DA",.75),fit:.4,track:.12});
+    o.push({k:"word",t:"OVERTURNED",x:.75,y:.36,h:.14,col:hexA("#EFE7DA",.75),fit:.46,track:.06});
+    var a=mix(0.5,0.38,eo(v2)), bq=1-a;
+    o.push({k:"band",x:.08,y:.58,w:.34*a*2,h:.06,col:"#5A4E45"});
+    o.push({k:"band",x:.58,y:.58,w:.34*bq*2,h:.06,col:T.p});
+    o.push({k:"word",t:Math.round(a*100)+"%",x:.25,y:.76,h:.1,col:hexA("#EFE7DA",.6),fit:.2});
+    o.push({k:"word",t:Math.round(bq*100)+"%",x:.75,y:.76,h:.1,col:T.p,fit:.2});
+    o.push({k:"word",t:"THE ROOM IS VOTING",x:.5,y:.06,h:.05,col:hexA("#EFE7DA",.3),fit:.5,track:.26});
+  }else if(u<.68){
+    ph="the answer · flash 420 ms";
+    o.push({k:"flash",a:1});
+  }else{
+    ph="reversed · review.reversed = true";
+    var v3=seg(u,.68,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:"REVERSED",x:.5,y:.42,h:.36,col:"#fff",fit:.84,track:.03,
+            sc:mix(1.14,1,eo(cl(v3*3,0,1)))});
+    if(v3>.25) o.push({k:"word",t:"CATCH IS GOOD · FIRST DOWN "+T.ab,x:.5,y:.74,h:.085,
+                       col:hexA("#FFFFFF",.82),fit:.88,track:.12,a:seg(v3,.25,.45)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── misdirect: the fake. Everything goes one way, then it doesn't ─────── */
+G.misdirect=function(u,C){
+  var T=C.T, o=[], ph="", i;
+  o.push({k:"fill",col:T.deep});
+  if(u<.36){
+    ph="the look · punt formation, everything right";
+    var v=seg(u,0,.36);
+    for(i=0;i<7;i++){
+      var p=cl(v*1.3-i*0.04,0,1);
+      o.push({k:"tri",x:mix(0.12,0.78,eo(p)),y:.18+i*0.1,w:.05,h:.055,col:hexA("#FFFFFF",.4),dir:"down"});
+    }
+    o.push({k:"word",t:"FOURTH AND 4",x:.5,y:.9,h:.06,col:hexA("#FFFFFF",.35),fit:.4,track:.2});
+  }else if(u<.44){
+    ph="the stop · 400 ms of nothing";
+    o.push({k:"fill",col:"#000"});
+    o.push({k:"word",t:"FAKE",x:.5,y:.5,h:.4,col:T.p,fit:.5,track:.06,
+            sc:mix(1.5,1,eb(seg(u,.36,.44)))});
+  }else if(u<.74){
+    ph="the reverse · one man the other way";
+    var v3=seg(u,.44,.74);
+    o.push({k:"fill",col:T.deep});
+    for(i=0;i<7;i++) o.push({k:"tri",x:0.78,y:.18+i*0.1,w:.05,h:.055,col:hexA("#FFFFFF",.14),dir:"down"});
+    var x=mix(0.78,0.1,eio(v3));
+    for(i=0;i<10;i++){
+      var q=cl(v3-i*0.03,0,1);
+      o.push({k:"dot",x:mix(0.78,0.1,eio(q)),y:.5,r:0.004+0.012*(1-i/10),col:T.p,a:q>0?(1-i/10)*0.7:0});
+    }
+    o.push({k:"dot",x:x,y:.5,r:.02,col:"#fff"});
+    o.push({k:"word",t:C.ev.yards+" YARDS",x:x,y:.3,h:.1,col:"#fff",fit:.24,track:.06,a:cl(v3*3,0,1)});
+  }else{
+    ph="first down";
+    var v4=seg(u,.74,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:"FIRST DOWN",x:.5,y:.42,h:.3,col:"#fff",fit:.88,track:.03,a:cl(v4*5,0,1)});
+    o.push({k:"word",t:T.call,x:.5,y:.74,h:.12,col:hexA("#FFFFFF",.8),fit:.6,track:.16,a:cl(v4*3,0,1)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── card: two-point conversion — one number, held long enough to read ── */
+G.card=function(u,C){
+  var T=C.T, o=[], ph="";
+  o.push({k:"fill",col:T.s==="#000000"?"#0A0A0A":T.deep});
+  if(u<.3){
+    ph="the call · going for two";
+    var v=seg(u,0,.3);
+    o.push({k:"word",t:"GOING FOR TWO",x:.5,y:.5,h:.14,col:hexA("#EFE7DA",.85),fit:.72,track:.2,
+            a:cl(v*4,0,1)*cl((1-v)*5,0,1)});
+  }else if(u<.36){
+    ph="flash · 280 ms";
+    o.push({k:"flash",a:1});
+  }else{
+    ph="good · two points";
+    var v2=seg(u,.36,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:"2",x:.5,y:.44,h:.62,col:T.s==="#000000"?"#000":"#fff",fit:.24,
+            sc:mix(1.3,1,eb(cl(v2*2.4,0,1)))});
+    if(v2>.2) o.push({k:"word",t:"CONVERSION GOOD",x:.5,y:.78,h:.1,
+                      col:T.s==="#000000"?hexA("#000000",.8):hexA("#FFFFFF",.85),fit:.72,track:.16,a:seg(v2,.2,.4)});
+    if(v2>.5) o.push({k:"word",t:T.ab+" "+C.ev.hs+"  ·  "+C.ev.opp+" "+C.ev.as,x:.5,y:.92,h:.06,
+                      col:T.s==="#000000"?hexA("#000000",.6):hexA("#FFFFFF",.6),fit:.4,track:.18,a:seg(v2,.5,.7)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── the rest state between loops: a quiet lockup, never a black screen ── */
+function restFrame(C){
+  var T=C.T;
+  return {layers:[
+    {k:"fill",col:T.deep},
+    {k:"band",x:0,y:.5-0.0008,w:1,h:.0016,col:hexA(T.p,.5)},
+    {k:"word",t:T.ab,x:.5,y:.5,h:.26,col:hexA(T.p,.9),fit:.3,track:.06},
+    {k:"word",t:T.venue.toUpperCase(),x:.5,y:.72,h:.05,col:hexA("#FFFFFF",.28),fit:.8,track:.2},
+    {k:"word",t:C.ev.name,x:.5,y:.86,h:.04,col:hexA("#FFFFFF",.18),fit:.6,track:.24}
+  ],phase:"rest · lockup between loops"};
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7 · TIMING TABLES + ADAPTATION COPY
+   ══════════════════════════════════════════════════════════════════════════ */
+var PHASES = {
+  runacross:[[0,.24,"Run","TOUCHDOWN crosses the canvas"],[.24,.48,"Land","school word, city under it"],
+             [.48,.528,"Flash","384 ms"],[.528,.86,"Payoff","team-specific finish"],
+             [.86,1,"Lockup","scoreline + venue"]],
+  streak:[[0,.14,"Turn","recovery type"],[.14,.58,"Return","yardage counts up"],[.58,.63,"Flash","360 ms"],
+          [.63,.87,"Payoff","team finish"],[.87,1,"Lockup","name + scoreline"]],
+  hold:[[0,.62,"Hold","hairlines contract, per receiver"],[.62,.68,"Stop","500 ms flash"],
+        [.68,1,"Flood","HELD"]],
+  steal:[[0,.3,"Boundary","possession still theirs"],[.3,.4,"Flip","500 ms"],[.4,1,"Statement","team ball"]],
+  burst:[[0,1,"Accent","1 state, no window spent"]],
+  arc:[[0,.46,"Kick","ball on the parabola"],[.46,.52,"Flash","400 ms"],[.52,1,"Good","distance held"]],
+  strike:[[0,.34,"Signal","bars in from both edges"],[.34,.4,"Flash","360 ms"],[.4,1,"Statement","SAFETY"]],
+  clockdown:[[0,1,"Subtract","desaturate, rule shrinks, clock"]],
+  edge:[[0,1,"State","edge tint, ball spot, no takeover"]],
+  binary:[[0,.16,"Open","play.official = false"],[.16,.62,"Vote","the room votes"],
+          [.62,.68,"Flash","420 ms"],[.68,1,"Answer","review.reversed"]],
+  misdirect:[[0,.36,"Look","punt formation right"],[.36,.44,"Stop","400 ms"],
+             [.44,.74,"Reverse","one man the other way"],[.74,1,"First down","payoff"]],
+  card:[[0,.3,"Call","going for two"],[.3,.36,"Flash","280 ms"],[.36,1,"Good","the number, held"]],
+  chant:[[0,0,"Open","chant name"],[0,0,"Beats","one slot per call"],[0,0,"Hold","team call"]]
+};
+
+var ADAPT = {
+  scroll:{
+    runacross:"the canvas is wide enough to carry a word, so TOUCHDOWN <b>runs the full arrangement as one word</b> — it enters off the left edge of screen 1 and leaves off the right edge of the last, continuing behind every bezel on the way.",
+    chant:"the wall splits down the middle: the left screens call, the right screens answer, and the quiet side holds bright so the room never goes dark.",
+    streak:"the return runs the arrangement end to end, one yard tick per screen, with the yardage counting up on the ball.",
+    arc:"the ball flies the length of the arrangement and the uprights sit on the last screen.",
+    misdirect:"the whole formation sweeps one way across every screen, stops dead, and one man comes back the other way.",
+    "default":"the cue is cut across the arrangement as one continuous surface."
+  },
+  grid:{
+    runacross:"the block is too square for a run-across, so travel gives way to <b>scale</b> — TOUCHDOWN arrives centred and grows, and the payoff floods radially instead of laterally.",
+    chant:"the block alternates left column against right column on the beat.",
+    streak:"the return reads as a diagonal sweep rather than a straight line — the block is short for a 100-yard travel.",
+    arc:"the arc is compressed into the block; the uprights hold the right column.",
+    misdirect:"the formation sweeps column to column instead of screen to screen.",
+    "default":"the cue floods the block from the centre out."
+  },
+  split:{
+    runacross:"the walls face each other, so the word is not travelled — it is <b>thrown</b>: TOUCHDOWN lands on the left wall, the school word answers on the right, and the payoff takes the whole room at once.",
+    chant:"this is what the layout is for. Left wall calls, right wall answers, and on an all-room beat the jumbotron carries the phrase whole.",
+    streak:"the return crosses the room physically — it starts on the far wall and finishes on the near one.",
+    arc:"the kick leaves one wall and lands on the other.",
+    misdirect:"the fake breaks from one wall to the other, which is the clearest read of any layout here.",
+    "default":"the two walls are addressed separately, call and answer."
+  },
+  stack:{
+    runacross:"the column is vertical, so the word travels <b>top to bottom</b> instead of left to right.",
+    chant:"top screen calls, bottom screen answers, middle carries the all-room beats.",
+    "default":"travel runs vertically down the column."
+  },
+  single:{
+    runacross:"one output, no canvas to cut — TOUCHDOWN is scaled in place rather than travelled, and everything after it is unchanged.",
+    chant:"there is no left and right, so the call and the answer alternate on the same screen.",
+    "default":"the cue plays whole on one screen."
+  }
+};
+function adaptCopy(ev,L){
+  var m=ADAPT[L.mode]||ADAPT.grid;
+  return m[ev.cue]||m["default"];
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   8 · SPORTRADAR PAYLOAD
+   Real push-event shape: metadata envelope + payload{game, drive, play}.
+   ══════════════════════════════════════════════════════════════════════════ */
+function nest(flat){
+  var out={};
+  for(var k in flat){
+    var parts=k.split("."), cur=out, i;
+    for(i=0;i<parts.length-1;i++){ cur[parts[i]]=cur[parts[i]]||{}; cur=cur[parts[i]]; }
+    cur[parts[parts.length-1]]=flat[k];
+  }
+  return out;
+}
+function payloadFor(ev){
+  var T=TEAMS[ev.team], O=TEAMS[ev.opp]||{name:ev.opp,ab:ev.opp};
+  var extra=nest(ev.sr||{});
+  var pl={
+    metadata:{
+      league:"NCAAFB", locale:"en", version:"v7", operation:"update",
+      match:"sd:match:"+ev.id, team:"sr:competitor:"+T.ab.toLowerCase(),
+      status:ev.type==="game_over"?"closed":"inprogress",
+      event_category:ev.cat, event_type:ev.type
+    },
+    payload:{
+      game:{
+        id:"sd:game:"+ev.id, status:(extra.game&&extra.game.status)||"inprogress",
+        scheduled:"2026-10-10T16:00:00+00:00",
+        expected_latency:(extra.game&&extra.game.expected_latency)||2,
+        home:{alias:T.ab,market:T.name,name:T.nick},
+        away:{alias:O.ab||ev.opp,market:O.name||ev.opp,name:O.nick||""},
+        venue:{name:T.venue.split(" · ")[0],city:T.city.split(", ")[0],state:T.city.split(", ")[1]}
+      },
+      boxscore:{
+        clock:ev.clock, quarter:ev.period,
+        home_points:+ev.hs, away_points:+ev.as,
+        home_timeouts_remaining:(extra.boxscore&&extra.boxscore.home_timeouts_remaining)!==undefined?
+          extra.boxscore.home_timeouts_remaining:2,
+        away_timeouts_remaining:(extra.boxscore&&extra.boxscore.away_timeouts_remaining)!==undefined?
+          extra.boxscore.away_timeouts_remaining:3
+      },
+      drive:Object.assign({
+        id:"sd:drive:"+ev.id, sequence:11, start_reason:"Kickoff",
+        inside_20:false, scoring_drive:!!(ev.sr&&ev.sr.scoring_play)
+      },extra.drive||{}),
+      play:Object.assign({
+        id:"sd:play:"+ev.id, sequence:1207, clock:ev.clock, type:ev.play,
+        scoring_play:!!(ev.sr&&ev.sr.scoring_play),
+        official:(extra.official!==undefined)?extra.official:true,
+        description:ev.desc,
+        start_situation:Object.assign({clock:ev.clock,down:1,yfd:10,possession:{alias:T.ab}},
+          extra.start_situation||{}),
+        end_situation:Object.assign({clock:ev.clock,down:1,yfd:10,possession:{alias:T.ab}},
+          extra.end_situation||{}),
+        details:Object.assign({category:"",description:ev.desc,
+          result:(ev.sr&&ev.sr.points)?"score":"", points:(ev.sr&&ev.sr.points)||0},extra.details||{}),
+        statistics:statsFor(ev,extra)
+      }, extra.review?{review:extra.review}:{},
+         extra.block?{block:extra.block}:{},
+         (ev.sr&&ev.sr.fake_punt)?{fake_punt:true}:{},
+         (ev.sr&&ev.sr.fake_field_goal)?{fake_field_goal:true}:{})
+    }
+  };
+  return pl;
+}
+function statsFor(ev,extra){
+  var T=TEAMS[ev.team], s=[], team={alias:T.ab,id:"sr:competitor:"+T.ab.toLowerCase()};
+  ["pass","rush","receive","defense","fumble","return","field_goal","extra_point","conversion",
+   "down_conversion","penalty","block"].forEach(function(g){
+    if(extra[g]) s.push(Object.assign({stat_type:g,team:team},extra[g]));
+  });
+  if(!s.length) s.push({stat_type:ev.play||"play",team:team,yards:ev.yards});
+  return s;
+}
+function jsonHTML(o){
+  var t=JSON.stringify(o,null,2);
+  return t.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/"([^"]+)":/g,'<span class="k">"$1"</span>:')
+    .replace(/: "([^"]*)"/g,': <span class="s">"$1"</span>')
+    .replace(/: (-?\d+\.?\d*)/g,': <span class="n">$1</span>')
+    .replace(/: (true|false|null)/g,': <span class="b">$1</span>');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9 · FRAME ASSEMBLY — the one entry point both modes use
+   ══════════════════════════════════════════════════════════════════════════ */
+function makeCtx(ev,L){
+  var T=TEAMS[ev.team], geo=geoOf(L), ar=geo.AH/geo.AW;
+  return {ev:ev,T:T,L:L,mode:L.mode,n:L.cells.length,geo:geo,
+    /* a word of cap-height h (fraction of canvas H) is this wide, as a fraction of canvas W.
+       H/W is the layout's own aspect, so travel distances are exact before any pixel exists. */
+    tw:function(t,h,track){ return natW(t,track||0)*h/100*ar; },
+    rect:function(i){ return geo.rect(L.cells[i]); },
+    /* canvas x-extent of a named screen group, for layouts that have walls */
+    span:function(g){
+      var x0=1,x1=0,self=this;
+      (L.groups&&L.groups[g]||[]).forEach(function(i){
+        var r=self.rect(i); if(r.x<x0)x0=r.x; if(r.x+r.w>x1)x1=r.x+r.w; });
+      return x1>x0?{x0:x0,x1:x1,c:(x0+x1)/2,w:x1-x0}:{x0:0,x1:1,c:.5,w:1};
+    }};
+}
+function frameAt(ev,L,ms){
+  var C=makeCtx(ev,L);
+  if(ms>=ev.d) return Object.assign(restFrame(C),{u:1,rest:true,C:C});
+  var u=cl(ms/ev.d,0,1);
+  var f=(G[ev.cue]||G.runacross)(u,C);
+  f.u=u; f.rest=false; f.C=C;
+  return f;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   10 · SINGLE-OUTPUT MODE  ( ?tv=N )
+   Letterboxed to 16:9 so every device renders an identical window into the
+   canvas, whatever its panel is.
+   ══════════════════════════════════════════════════════════════════════════ */
+function bootTV(){
+  var tvIdx = Math.max(1, +Q.get("tv"))-1;
+  var lid = Q.get("layout")||"row4";
+  var L = LAYOUTS[lid]||LAYOUTS.row4;
+  var eid = Q.get("event")||"td-tex";
+  var ev = EVENTS.filter(function(e){ return e.id===eid; })[0] || EVENTS[0];
+  if(tvIdx>=L.cells.length) tvIdx=L.cells.length-1;
+
+  document.body.classList.add("tvmode");
+  if(Q.get("diag")==="1") document.body.classList.add("diag");
+  document.title = ev.name+" · TV "+(tvIdx+1)+" · "+L.name;
+
+  var root=document.getElementById("tvroot");
+  var scr=document.getElementById("tvscreen");
+  var can=document.createElement("div"); can.className="canvas"; can.style.position="absolute";
+  scr.appendChild(can);
+  var ov=mkOverlay(); scr.appendChild(ov.root);
+  document.getElementById("tvhint").style.display = Q.get("bezel")==="0" ? "none" : "block";
+
+  var geo=geoOf(L), r=geo.rect(L.cells[tvIdx]);
+  var W=0,H=0,SW=0,SH=0;
+  function size(){
+    var vw=Math.max(160,root.clientWidth), vh=Math.max(90,root.clientHeight);
+    SW=vw; SH=vw*9/16;
+    if(SH>vh){ SH=vh; SW=vh*16/9; }
+    scr.style.width=SW+"px"; scr.style.height=SH+"px";
+    W=SW/r.w; H=SH/r.h;
+    can.style.width=W+"px"; can.style.height=H+"px";
+    can.style.left=(-r.x*W)+"px"; can.style.top=(-r.y*H)+"px";
+    ov.txt.style.fontSize=(SH*0.3)+"px";
+    /* == null catches the boot call, where hold is declared but not yet assigned */
+    paint(hold==null ? loopPos(ev.d) : cl(hold,0,ev.d+REST));
+  }
+  size(); window.addEventListener("resize",size);
+  if(window.ResizeObserver) new ResizeObserver(size).observe(root);
+
+  var diag=document.getElementById("tvdiag");
+  document.addEventListener("keydown",function(e){
+    if(e.key==="i"||e.key==="I") document.body.classList.toggle("diag");
+  });
+  document.addEventListener("click",function(){ document.body.classList.toggle("diag"); });
+
+  /* An output controller can hold a frame or hop an output to another cue without a
+     reload. Nothing here is required for sync — the wall clock already does that. */
+  var hold=null;
+  window.addEventListener("message",function(e){
+    var m=e.data||{};
+    if(m.type==="bb:seek") hold=+m.t;
+    else if(m.type==="bb:play") hold=null;
+    else if(m.type==="bb:event"){
+      var n=EVENTS.filter(function(x){ return x.id===m.id; })[0];
+      if(n){ ev=n; period=ev.d+REST; document.title=ev.name+" · TV "+(tvIdx+1)+" · "+L.name; }
+    }
+  });
+  /* Changing the hash on a running screen swaps the cue with no reload and no flash.
+     Structural changes (which output, which layout) still need a reload — which costs
+     nothing, because position in the loop is read from the clock, not from page state. */
+  window.addEventListener("hashchange",function(){
+    var P=readParams();
+    if(P.get("tv")!==String(tvIdx+1) || (P.get("layout")||"row4")!==L.id){ location.reload(); return; }
+    var n=EVENTS.filter(function(x){ return x.id===P.get("event"); })[0];
+    if(n && n!==ev){ ev=n; period=ev.d+REST; hold=null;
+      document.title=ev.name+" · TV "+(tvIdx+1)+" · "+L.name; }
+  });
+
+  window.__BB={ seek:function(t){ hold=t; return paint(cl(t,0,period)); },
+                play:function(){ hold=null; },
+                get:function(){ return {event:ev.id,layout:L.id,tv:tvIdx+1,
+                                        cell:r,ms:loopPos(ev.d),W:W,H:H,SW:SW,SH:SH}; } };
+
+  var period=ev.d+REST;
+  function paint(p){
+    var f=frameAt(ev,L,p);
+    paintCanvas(can,f.layers,W,H);
+    paintScreen(ov, f.screens?f.screens[tvIdx]:null, SW, SH);
+    return {ms:p,u:+f.u.toFixed(4),phase:f.phase,layers:f.layers.length};
+  }
+  (function tick(){
+    var p = hold!==null ? cl(hold,0,period) : loopPos(ev.d);
+    var f=frameAt(ev,L,p);
+    paintCanvas(can,f.layers,W,H);
+    paintScreen(ov, f.screens?f.screens[tvIdx]:null, SW, SH);
+    if(document.body.classList.contains("diag")){
+      diag.textContent =
+        "event   "+ev.id+"  ("+ev.name+")\n"+
+        "layout  "+L.id+"   output "+(tvIdx+1)+" of "+L.cells.length+"\n"+
+        "cell    x "+r.x.toFixed(4)+"  y "+r.y.toFixed(4)+"  w "+r.w.toFixed(4)+"\n"+
+        "epoch   "+EPOCH+(SKEW?("   skew "+(SKEW>0?"+":"")+SKEW+" ms"):"")+"\n"+
+        "now     "+nowMs()+"\n"+
+        "period  "+period+" ms   ("+ev.d+" cue + "+REST+" rest)\n"+
+        "loop    "+String(Math.floor(p)).padStart(6," ")+" ms   u "+f.u.toFixed(4)+"\n"+
+        "phase   "+(f.phase||"—")+"\n"+
+        "cycle#  "+Math.floor((nowMs()-EPOCH)/period);
+    }
+    requestAnimationFrame(tick);
+  })();
+}
+function mkOverlay(){
+  var d=document.createElement("div"); d.className="sov";
+  d.innerHTML='<div class="sbg"></div><div class="stint"></div>'+
+    '<div class="shair"><i></i><i></i></div><div class="stxt"></div><div class="sflash"></div>';
+  return {root:d, bg:d.children[0], tint:d.children[1],
+          h1:d.children[2].children[0], h2:d.children[2].children[1],
+          txt:d.children[3], flash:d.children[4]};
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   11 · CONTROL ROOM
+   ══════════════════════════════════════════════════════════════════════════ */
+function bootApp(){
+  var state={ ev:EVENTS[0], L:LAYOUTS.row4, playing:true, bezel:true, urlStyle:"?",
+              filt:{grp:"all",team:"all"}, manual:null };
+  var stage=document.getElementById("stage");
+  var SCREENS=[];
+
+  /* ── layout select ── */
+  var sel=document.getElementById("selLayout");
+  LAYORDER.forEach(function(id){
+    var o=document.createElement("option"); o.value=id;
+    o.textContent=LAYOUTS[id].name+"  ("+LAYOUTS[id].cells.length+")";
+    sel.appendChild(o);
+  });
+  sel.value="row4";
+  sel.onchange=function(){ state.L=LAYOUTS[sel.value]; buildStage(); renderBrief(); renderURLs(); };
+
+  /* ── filters ── */
+  var GRPS=[["all","All 50"],["td","Touchdowns"],["chant","Chants"],["turnover","Turnovers"],
+            ["kick","Kicking"],["score","Scoring"],["big","Big plays"],["special","Special"],["state","States"]];
+  var fw=document.getElementById("filters");
+  GRPS.forEach(function(g){
+    var b=document.createElement("button"); b.className="chip"+(g[0]==="all"?" on":"");
+    b.textContent=g[1]; b.dataset.grp=g[0];
+    b.onclick=function(){ state.filt.grp=g[0];
+      fw.querySelectorAll("[data-grp]").forEach(function(x){ x.classList.toggle("on",x.dataset.grp===g[0]); });
+      renderList(); };
+    fw.appendChild(b);
+  });
+  var tsel=document.createElement("select");
+  tsel.innerHTML='<option value="all">All 16 schools</option>'+
+    Object.keys(TEAMS).map(function(k){ return '<option value="'+k+'">'+TEAMS[k].name+'</option>'; }).join("");
+  tsel.style.cssText="margin-left:auto;font-size:9px";
+  tsel.onchange=function(){ state.filt.team=tsel.value; renderList(); };
+  fw.appendChild(tsel);
+
+  /* ── event list ── */
+  var list=document.getElementById("evlist");
+  function renderList(){
+    var f=EVENTS.filter(function(e){
+      return (state.filt.grp==="all"||e.grp===state.filt.grp) &&
+             (state.filt.team==="all"||e.team===state.filt.team); });
+    document.getElementById("evcount").textContent=f.length+" of 50";
+    list.innerHTML="";
+    f.forEach(function(e){
+      var T=TEAMS[e.team];
+      var d=document.createElement("div");
+      d.className="ev"+(e.id===state.ev.id?" on":"");
+      d.innerHTML='<div class="tm" style="background:'+T.p+';color:'+(T.p==="#F1B82D"||T.p==="#CFAE70"||T.p==="#FDD023"?"#000":"#fff")+'">'+T.ab+'</div>'+
+        '<div class="nm"><b>'+e.name+'</b><i>'+e.sub+'</i></div>'+
+        '<div class="tr"><b>T'+e.tier+'</b>'+(e.d/1000).toFixed(1)+'s</div>';
+      d.onclick=function(){ state.ev=e; state.manual=null; renderList(); renderBrief(); renderRight(); renderURLs(); };
+      list.appendChild(d);
+    });
+  }
+
+  /* ── stage ── */
+  var lastBox="";
+  function buildStage(){
+    var L=state.L, geo=geoOf(L);
+    var box=stage.parentElement;
+    /* clamped, because a container that has not been laid out yet reports 0 and a
+       negative width silently invalidates every style write downstream */
+    var availW=Math.max(200, box.clientWidth-40), availH=Math.max(120, box.clientHeight-52);
+    var W=availW, H=W*geo.AH/geo.AW;
+    if(H>availH){ H=availH; W=H*geo.AW/geo.AH; }
+    lastBox=L.id+"|"+Math.round(availW)+"x"+Math.round(availH);
+    stage.innerHTML=""; SCREENS=[];
+    stage.style.width=W+"px"; stage.style.height=H+"px";
+    L.cells.forEach(function(c,i){
+      var r=geo.rect(c);
+      var d=document.createElement("div"); d.className="scr";
+      d.style.left=(r.x*W)+"px"; d.style.top=(r.y*H)+"px";
+      d.style.width=(r.w*W)+"px"; d.style.height=(r.h*H)+"px";
+      var can=document.createElement("div"); can.className="canvas";
+      can.style.width=W+"px"; can.style.height=H+"px";
+      can.style.left=(-r.x*W)+"px"; can.style.top=(-r.y*H)+"px";
+      d.appendChild(can);
+      var ov=mkOverlay(); d.appendChild(ov.root);
+      var pl=document.createElement("div"); pl.className="plate";
+      pl.textContent=(L.labels?L.labels[i]:("TV "+(i+1)));
+      d.appendChild(pl);
+      d.onmouseenter=function(){ d.classList.add("hi"); };
+      d.onmouseleave=function(){ d.classList.remove("hi"); };
+      d.onclick=function(){ window.open(tvURL(i),"_blank"); };
+      if(!state.bezel) d.style.boxShadow="none";
+      stage.appendChild(d);
+      SCREENS.push({el:d,can:can,ov:ov,w:r.w*W,h:r.h*H});
+    });
+    stage.__W=W; stage.__H=H;
+    render(currentMs());          /* paint at once — do not wait for the next frame */
+  }
+  /* rebuild whenever the container's box actually changes — covers first layout,
+     web-font arrival and the pane being revealed, none of which fire `resize` */
+  function maybeRebuild(){
+    var box=stage.parentElement, L=state.L;
+    var key=L.id+"|"+Math.max(200,box.clientWidth-40).toFixed(0)+"x"+Math.max(120,box.clientHeight-52).toFixed(0);
+    if(key!==lastBox) buildStage();
+  }
+  if(window.ResizeObserver) new ResizeObserver(maybeRebuild).observe(stage.parentElement);
+  window.addEventListener("resize",maybeRebuild);
+  document.fonts && document.fonts.ready.then(function(){ WCACHE={}; buildStage(); });
+
+  /* ── brief ── */
+  function renderBrief(){
+    var e=state.ev, T=TEAMS[e.team], L=state.L;
+    document.getElementById("brName").textContent=e.name;
+    document.getElementById("brName").style.color=T.p;
+    document.getElementById("brTeam").innerHTML="<b>"+T.name+" "+T.nick+"</b> vs "+
+      ((TEAMS[e.opp]&&TEAMS[e.opp].name)||e.opp)+" · "+T.venue+" · "+T.city;
+    var M=[["tier","T"+e.tier],["duration",(e.d/1000).toFixed(1)+" s"],
+           ["window",e.win>900?"unlimited":e.win+" s"],["amplitude",e.amp],
+           ["register",e.reg],["event_category",e.cat],["play.type",e.play||"—"],
+           ["layout",L.name+" · "+L.mode]];
+    document.getElementById("brMeta").innerHTML=M.map(function(m){
+      return '<span class="brm">'+m[0]+' <b>'+m[1]+'</b></span>'; }).join("");
+    document.getElementById("brTxt").innerHTML=
+      "<em>"+L.name.toUpperCase()+"</em> — "+adaptCopy(e,L)+" "+
+      "<span style='color:#8E8074'>"+e.desc+"</span>";
+  }
+
+  /* ── right column ── */
+  function renderRight(){
+    var e=state.ev, T=TEAMS[e.team];
+    document.getElementById("thTeam").textContent=T.name;
+    document.getElementById("thSwatch").innerHTML=
+      [[T.p,"primary"],[T.s,"secondary"],[T.deep,"ground"]].map(function(s){
+        return '<div class="sw" style="background:'+s[0]+'"><span>'+s[0]+'</span></div>'; }).join("");
+    document.getElementById("thKv").innerHTML=
+      [["school",T.name+" "+T.nick],["venue",T.venue],["city",T.city],
+       ["td call",T.td],["signature",T.call],["chant",T.chant],["finish",T.finish]]
+      .map(function(k){ return "<dt>"+k[0]+"</dt><dd>"+k[1]+"</dd>"; }).join("");
+    document.getElementById("chName").textContent=T.chant;
+    document.getElementById("chBeats").innerHTML=T.beats.map(function(b,i){
+      return '<span class="bt '+b.s.toLowerCase()+'" data-b="'+i+'">'+
+        b.t.replace("{OPP}",e.opp)+'<em style="font-style:normal;opacity:.4;font-size:8px"> '+(b.ms||660)+'</em></span>';
+    }).join("");
+    document.getElementById("jsonBox").innerHTML=jsonHTML(payloadFor(e));
+    document.getElementById("tmDur").textContent=(e.d/1000).toFixed(1)+" s";
+    var rows;
+    if(e.cue==="chant"){
+      var acc=1200;
+      rows=[["0.00","1.20","Open",T.chant]];
+      T.beats.forEach(function(b,i){
+        var d=b.ms||660;
+        rows.push([(acc/1000).toFixed(2),((acc+d)/1000).toFixed(2),"Beat "+(i+1),b.t.replace("{OPP}",e.opp)]);
+        acc+=d;
+      });
+      rows.push([(acc/1000).toFixed(2),(e.d/1000).toFixed(2),"Hold",T.call]);
+    }else{
+      rows=(PHASES[e.cue]||[]).map(function(p){
+        return [(p[0]*e.d/1000).toFixed(2),(p[1]*e.d/1000).toFixed(2),p[2],p[3]]; });
+    }
+    document.getElementById("tmTable").innerHTML=
+      "<tr><th>from</th><th>to</th><th>phase</th><th>what</th></tr>"+
+      rows.map(function(r,i){ return '<tr data-ph="'+i+'"><td>'+r[0]+'</td><td>'+r[1]+
+        '</td><td><b>'+r[2]+'</b></td><td>'+r[3]+'</td></tr>'; }).join("");
+  }
+
+  /* ── urls ── */
+  function tvURL(i){
+    var base=location.href.split(/[?#]/)[0];
+    var p=["tv="+(i+1),"event="+state.ev.id,"layout="+state.L.id];
+    if(REST!==2500) p.push("rest="+REST);
+    if(EPOCH!==EPOCH_DEFAULT) p.push("t0="+EPOCH);
+    return base+state.urlStyle+p.join("&");
+  }
+  function renderURLs(){
+    var L=state.L, box=document.getElementById("urls");
+    document.getElementById("urlN").textContent=L.cells.length+" outputs · "+
+      (state.urlStyle==="?"?"query":"hash");
+    box.innerHTML="";
+    L.cells.forEach(function(c,i){
+      var u=tvURL(i);
+      var d=document.createElement("div"); d.className="urow";
+      d.innerHTML='<div class="tvn">'+(L.labels?L.labels[i]:(i+1))+'</div>'+
+        '<div class="u" title="'+u+'">'+u.replace(/^.*\//,"…/")+'</div>'+
+        '<button class="btn">copy</button><button class="btn">open</button>';
+      d.children[2].onclick=function(){
+        navigator.clipboard&&navigator.clipboard.writeText(u);
+        d.children[2].textContent="ok"; setTimeout(function(){ d.children[2].textContent="copy"; },900); };
+      d.children[3].onclick=function(){ window.open(u,"_blank"); };
+      box.appendChild(d);
+    });
+  }
+  document.getElementById("bOpen").onclick=function(){
+    state.L.cells.forEach(function(c,i){ window.open(tvURL(i),"_blank"); });
+  };
+  function urlStyle(s){
+    state.urlStyle=s;
+    document.getElementById("bQ").classList.toggle("on",s==="?");
+    document.getElementById("bH").classList.toggle("on",s==="#");
+    document.getElementById("urlHint").textContent =
+      s==="?" ? "works anywhere" : "switchable live, no reload";
+    renderURLs();
+  }
+  document.getElementById("bQ").onclick=function(){ urlStyle("?"); };
+  document.getElementById("bH").onclick=function(){ urlStyle("#"); };
+
+  /* ── transport ── */
+  var track=document.getElementById("track"), fill=document.getElementById("trackFill");
+  document.getElementById("bPlay").onclick=function(){
+    state.playing=!state.playing; this.textContent=state.playing?"Pause":"Play";
+    this.classList.toggle("on",state.playing); if(state.playing) state.manual=null;
+  };
+  document.getElementById("bBezel").onclick=function(){
+    state.bezel=!state.bezel; this.classList.toggle("on",!state.bezel);
+    stage.querySelectorAll(".scr").forEach(function(s){
+      s.style.boxShadow = state.bezel ? "" : "none"; });
+  };
+  function scrub(e){
+    var r=track.getBoundingClientRect();
+    state.manual=cl((e.clientX-r.left)/r.width,0,1)*state.ev.d;
+    state.playing=false;
+    var b=document.getElementById("bPlay"); b.textContent="Play"; b.classList.remove("on");
+  }
+  track.onmousedown=function(e){ scrub(e);
+    var mv=function(ev2){ scrub(ev2); }, up=function(){
+      document.removeEventListener("mousemove",mv); document.removeEventListener("mouseup",up); };
+    document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up); };
+
+  document.addEventListener("keydown",function(e){
+    if(e.target.tagName==="SELECT"||e.target.tagName==="INPUT") return;
+    var i=EVENTS.indexOf(state.ev);
+    if(e.key==="ArrowDown"||e.key==="j"){ state.ev=EVENTS[(i+1)%EVENTS.length]; e.preventDefault(); }
+    else if(e.key==="ArrowUp"||e.key==="k"){ state.ev=EVENTS[(i-1+EVENTS.length)%EVENTS.length]; e.preventDefault(); }
+    else if(e.key===" "){ document.getElementById("bPlay").click(); e.preventDefault(); return; }
+    else return;
+    state.manual=null; renderList(); renderBrief(); renderRight(); renderURLs();
+    var on=list.querySelector(".ev.on"); if(on) on.scrollIntoView({block:"nearest"});
+  });
+
+  /* ── the loop ── */
+  var lastBeat=-2, lastPh=-2;
+  function currentMs(){
+    return state.manual!==null ? state.manual
+         : Math.min(loopPos(state.ev.d), state.ev.d+REST);
+  }
+  function render(ms){
+    var f=frameAt(state.ev,state.L,ms), W=stage.__W, H=stage.__H;
+    SCREENS.forEach(function(s,i){
+      paintCanvas(s.can,f.layers,W,H);
+      paintScreen(s.ov, f.screens?f.screens[i]:null, s.w, s.h);
+    });
+    return f;
+  }
+  function tick(){
+    var e=state.ev;
+    var ms=currentMs();
+    var f=render(ms);
+    var shown=Math.min(ms,e.d);
+    fill.style.width=(shown/e.d*100)+"%";
+    document.getElementById("tClk").textContent=(shown/1000).toFixed(2)+" / "+(e.d/1000).toFixed(2)+" s";
+    document.getElementById("tPhase").textContent=f.phase||"—";
+    document.getElementById("clk").textContent="wall clock "+new Date(nowMs()).toISOString().slice(11,23);
+    document.getElementById("dEpoch").textContent=EPOCH;
+    document.getElementById("dNow").textContent=nowMs();
+    document.getElementById("dPos").textContent=Math.floor(ms)+" / "+(e.d+REST)+" ms";
+    if(f.beat!==undefined && f.beat!==lastBeat){
+      lastBeat=f.beat;
+      document.querySelectorAll("#chBeats .bt").forEach(function(b){
+        b.classList.toggle("on",+b.dataset.b===f.beat); });
+    }
+    /* highlight the live row of the timing table */
+    var rows=document.querySelectorAll("#tmTable tr[data-ph]"), ri=-1, j;
+    if(e.cue==="chant"){
+      ri = f.beat===undefined||f.beat<0 ? (ms<1200?0:rows.length-1) : f.beat+1;
+    }else{
+      var P=PHASES[e.cue]||[]; var u=Math.min(ms,e.d)/e.d;
+      for(j=0;j<P.length;j++) if(u>=P[j][0]&&u<P[j][1]) ri=j;
+      if(ri<0&&P.length) ri=P.length-1;
+    }
+    if(ri!==lastPh){ lastPh=ri;
+      for(j=0;j<rows.length;j++) rows[j].classList.toggle("now",j===ri); }
+    requestAnimationFrame(tick);
+  }
+
+  /* ── scripting hook. Same shape as the other BarBoards prototypes (§13.1), and
+        the only supported way to drive a frame without waiting for the clock. ── */
+  window.__BB={
+    TEAMS:TEAMS, EVENTS:EVENTS, LAYOUTS:LAYOUTS, GRAMMARS:G,
+    frameAt:frameAt, payload:payloadFor, url:tvURL,
+    get:function(){ return {event:state.ev.id,layout:state.L.id,ms:currentMs(),playing:state.playing}; },
+    set:function(o){
+      o=o||{};
+      if(o.event){ var e=EVENTS.filter(function(x){ return x.id===o.event; })[0];
+                   if(e){ state.ev=e; state.manual=null; } }
+      if(o.layout&&LAYOUTS[o.layout]){ state.L=LAYOUTS[o.layout]; sel.value=o.layout; }
+      buildStage(); renderList(); renderBrief(); renderRight(); renderURLs();
+      return this.get();
+    },
+    seek:function(ms){
+      state.manual=cl(ms,0,state.ev.d+REST); state.playing=false;
+      var b=document.getElementById("bPlay"); b.textContent="Play"; b.classList.remove("on");
+      var f=render(state.manual);
+      return {ms:state.manual,u:+f.u.toFixed(4),phase:f.phase,layers:f.layers.length,
+              screens:f.screens?f.screens.length:0};
+    }
+  };
+
+  renderList(); buildStage(); renderBrief(); renderRight(); renderURLs(); tick();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   12 · BUILD-TIME AUDITS (§14.4)
+   Run on load, reported to the console. Cheap, and they caught real bugs.
+   ══════════════════════════════════════════════════════════════════════════ */
+function audit(){
+  var fails=[], warn=[];
+  var ids={};
+  EVENTS.forEach(function(e){
+    if(ids[e.id]) fails.push("duplicate id "+e.id); ids[e.id]=1;
+    if(!TEAMS[e.team]) fails.push(e.id+": unknown team "+e.team);
+    if(!G[e.cue]) fails.push(e.id+": unknown grammar "+e.cue);
+    /* overrun — every phase table must end at or before 1.0 */
+    var P=PHASES[e.cue];
+    if(P&&P.length&&e.cue!=="chant"&&P[P.length-1][1]>1.0001) fails.push(e.id+": phase overrun");
+    /* pacing — payoff must be longer than the setup that built to it */
+    if(e.cue==="runacross"&&(0.86-0.528)*e.d <= 0.48*e.d*0.6) warn.push(e.id+": payoff short");
+    /* walk every cue on a wide layout, a block and the reference room, and assert the
+       frame is actually renderable: finite geometry, alpha in range, and — the one that
+       caught a real bug — no opaque fill sitting on top of type that is meant to be read */
+    ["row4","jumbo","room14"].forEach(function(lid){
+      var L=LAYOUTS[lid];
+      for(var s=0;s<=20;s++){
+        var f;
+        try{ f=frameAt(e,L,e.d*s/20); }
+        catch(err){ fails.push(e.id+"/"+lid+" @"+s+"/20: "+err.message); continue; }
+        var topFill=-1;
+        f.layers.forEach(function(l,k){ if(l.k==="fill"&&(l.a===undefined||l.a>=0.98)) topFill=k; });
+        f.layers.forEach(function(l,k){
+          if(l.a!==undefined&&(l.a<-0.001||l.a>1.001)) fails.push(e.id+"/"+lid+": "+l.k+" alpha "+l.a);
+          if(l.k==="word"){
+            if(!l.t) fails.push(e.id+"/"+lid+": empty word");
+            if(!isFinite(l.x+l.y+l.h)) fails.push(e.id+"/"+lid+": word geometry NaN");
+            if(k<topFill&&(l.a===undefined||l.a>0.5))
+              fails.push(e.id+"/"+lid+" @"+s+"/20: \""+l.t+"\" is under an opaque fill");
+          }
+          if((l.k==="band"||l.k==="cell")&&!isFinite(l.x+l.y+l.w+l.h))
+            fails.push(e.id+"/"+lid+": "+l.k+" geometry NaN");
+        });
+      }
+    });
+  });
+  /* chant durations must equal intro + beats + tail exactly */
+  EVENTS.filter(function(e){ return e.cue==="chant"; }).forEach(function(e){
+    var ms=0; TEAMS[e.team].beats.forEach(function(b){ ms+=(b.ms||660); });
+    if(1200+ms+1600!==e.d) fails.push(e.id+": chant duration mismatch");
+  });
+  /* every school must be represented */
+  Object.keys(TEAMS).forEach(function(k){
+    if(!EVENTS.some(function(e){ return e.team===k; })) fails.push("no event for "+k);
+  });
+  if(EVENTS.length!==50) fails.push("expected 50 events, found "+EVENTS.length);
+  var tag="BarBoards audit — "+EVENTS.length+" events, "+Object.keys(TEAMS).length+" schools, "+
+          LAYORDER.length+" layouts, "+Object.keys(G).length+" grammars";
+  if(fails.length){ console.error(tag+" — FAIL"); fails.forEach(function(f){ console.error("  ✗ "+f); }); }
+  else console.log("%c"+tag+" — pass","color:#7FC08A");
+  if(warn.length) warn.forEach(function(w){ console.warn("  ! "+w); });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+document.fonts && document.fonts.ready.then(function(){ WCACHE={}; });
+audit();
+if(Q.has("tv")) bootTV(); else bootApp();
+
+})();
+</script>
+</body>
+</html>
