@@ -508,7 +508,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0020";
+var VERSION = "v1.0021";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1581,14 +1581,11 @@ function makeRenderer(cv){
     var layers=f.layers||[], sh=f.shake, i, l, n=layers.length, drawn=0;
 
     /* pull the two static overlays out first — they become layer opacity, not fill */
-    var vig=0, scan=0, start=0;
+    var vig=0, scan=0;
     for(i=0;i<n;i++){
       l=layers[i];
       if(l.k==="vig") vig=Math.max(vig,l.a===undefined?1:l.a);
       else if(l.k==="scan") scan=Math.max(scan,l.a===undefined?1:l.a);
-      /* OCCLUSION: an opaque full-canvas fill hides everything painted before it,
-         so start there. Cues routinely lay a ground colour and then flood over it. */
-      else if((l.k==="fill"||l.k==="flash")&&(l.a===undefined||l.a>=0.999)) start=i;
     }
     setOverlay(vig,scan);
 
@@ -1615,6 +1612,23 @@ function makeRenderer(cv){
       ox=vp.ox-vx0+(sh?sh.x*W:0); oy=vp.oy-vy0+(sh?sh.y*H:0);
       ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
 
+      /* Everything before the last opaque thing that COVERS THIS WINDOW is
+         invisible. Checked per viewport: a band can blanket output 4 and miss
+         output 1 entirely, so a single global start index would be wrong. */
+      var start=0;
+      for(i=0;i<n;i++){
+        l=layers[i];
+        if(l.a!==undefined && l.a<0.999) continue;
+        if(l.k==="fill"||l.k==="flash"){ start=i; continue; }
+        if((l.k==="band"||l.k==="cell") && !l.rot && !l.skew){
+          var bx=l.x*W, by=l.y*H, bw=l.w*W, bh=l.h*H;
+          if(l.sc!==undefined&&l.sc!==1){
+            var qx=bx+bw/2, qy=by+bh/2; bw*=l.sc; bh*=l.sc; bx=qx-bw/2; by=qy-bh/2;
+          }
+          if(bx<=vx0 && by<=vy0 && bx+bw>=vx1 && by+bh>=vy1) start=i;
+        }
+      }
+
       for(i=start;i<layers.length;i++){
         l=layers[i];
         if(l.k==="vig"||l.k==="scan") continue;
@@ -1633,7 +1647,7 @@ function makeRenderer(cv){
     }
     ctx.setTransform(DPR,0,0,DPR,0,0);
     ctx.globalAlpha=1;
-    return {layers:n, drawn:drawn, culledByOcclusion:start, screens:VPS.length};
+    return {layers:n, drawn:drawn, screens:VPS.length};
   }
 
   /* returns true if anything was actually rasterised */
@@ -5009,6 +5023,7 @@ function bootApp(){
       document.body.appendChild(cv);
       var R=makeRenderer(cv); R.resize(w,h,g.rect(L.cells[0]),1);
       var save=LOAD, rows=[], knee60=null, knee120=null, i, lv;
+      try{
       for(lv=1; lv<=(opts.max||24); lv++){
         LOAD=lv;
         var e=makeEvent(cue,team,RIVAL[team]);
@@ -5026,7 +5041,7 @@ function bootApp(){
         if(knee120===null && t[237]>8.33) knee120=lv;
         if(knee60===null && t[237]>16.67){ knee60=lv; break; }
       }
-      LOAD=save; cv.remove();
+      }finally{ LOAD=save; cv.remove(); }   /* never leave the benchmark weight on */
       return {surface:w+"x"+h, cue:cue, fx:fx,
               holds120upTo:(knee120===null?(">"+rows.length):(knee120-1)),
               holds60upTo:(knee60===null?(">"+rows.length):(knee60-1)),
