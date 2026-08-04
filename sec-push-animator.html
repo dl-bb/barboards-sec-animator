@@ -96,7 +96,9 @@ input[type=range]{accent-color:var(--cue);height:16px}
    and cannot bleed onto a neighbour — the wall is a continuous surface. */
 .scr{position:absolute;background:#000;overflow:hidden}
 .stage.seams .scr{box-shadow:inset 0 0 0 1px rgba(150,132,118,.42)}
-.scr .fb,#tvscreen .fb{position:absolute;left:0;top:0;display:block}
+.fb{position:absolute;left:0;top:0;display:block}
+.scr.hitbox{background:none;pointer-events:auto}
+.stage.seams .scr.hitbox{box-shadow:inset 0 0 0 1px rgba(150,132,118,.42)}
 /* The vignette and scanlines never change. Blending them into the canvas cost a
    full screen-area of GPU fill EACH, every frame — 28% of all fill on this wall,
    for a static image. As composited layers they are rasterised once and the only
@@ -443,7 +445,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0009";
+var VERSION = "v1.0010";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1355,14 +1357,30 @@ function makeRenderer(cv){
      150 frames of full-screen fill for a picture that has not changed */
   var lastKey="";
 
+  /* Every screen this canvas hosts: where it sits on the canvas, and which
+     window of the wall it shows. One entry for an output, N for the preview. */
+  var VPS=[], CW=0, CH=0;
+
   function resize(screenW, screenH, c, dpr){
-    cell=c; DPR=Math.min(dpr||1,2);
-    SW=screenW; SH=screenH;
-    cv.width=Math.round(SW*DPR); cv.height=Math.round(SH*DPR);
-    cv.style.width=SW+"px"; cv.style.height=SH+"px";
-    W=SW/cell.w; H=SH/cell.h;                 /* the whole wall, in CSS px */
-    vx0=cell.x*W; vy0=cell.y*H; vx1=vx0+SW; vy1=vy0+SH;
-    lastKey=""; vigA=-1; scanA=-1;
+    return viewports([{ox:0,oy:0,w:screenW,h:screenH,cell:c}], screenW, screenH, dpr);
+  }
+
+  function viewports(list, canvasW, canvasH, dpr){
+    DPR=Math.min(dpr||1,2);
+    CW=canvasW; CH=canvasH;
+    cv.width=Math.round(CW*DPR); cv.height=Math.round(CH*DPR);
+    cv.style.width=CW+"px"; cv.style.height=CH+"px";
+    VPS=list.map(function(v){
+      var w=v.w/v.cell.w, h=v.h/v.cell.h;      /* the whole wall, in CSS px */
+      return {ox:v.ox, oy:v.oy, sw:v.w, sh:v.h, cell:v.cell,
+              W:w, H:h, vx0:v.cell.x*w, vy0:v.cell.y*h,
+              vx1:v.cell.x*w+v.w, vy1:v.cell.y*h+v.h};
+    });
+    /* the first viewport is what geo() reports, for the single-screen case */
+    var f0=VPS[0]||{W:0,H:0,sw:0,sh:0,cell:c};
+    W=f0.W; H=f0.H; SW=f0.sw; SH=f0.sh; cell=f0.cell;
+    vx0=f0.vx0; vy0=f0.vy0; vx1=f0.vx1; vy1=f0.vy1;
+    lastKey=""; vigA=-1; scanA=-1; invalidate();
     return {W:W,H:H,SW:SW,SH:SH};
   }
   function geo(){ return {W:W,H:H,SW:SW,SH:SH,DPR:DPR,cell:cell}; }
@@ -1419,31 +1437,43 @@ function makeRenderer(cv){
     if(key && key===lastKey && !screenSpec) return {layers:n,drawn:0,skipped:true};
     lastKey=key;
 
+    /* one clear for the whole canvas, then each screen in turn */
     ctx.setTransform(DPR,0,0,DPR,0,0);
-    ctx.globalAlpha=1;
-    ctx.fillStyle="#000";
-    ctx.fillRect(0,0,SW,SH);
+    ctx.globalAlpha=1; ctx.fillStyle="#000";
+    ctx.fillRect(0,0,CW,CH);
 
-    /* wall space: everything below is in wall CSS px, offset to this window */
-    ox=-vx0+(sh?sh.x*W:0); oy=-vy0+(sh?sh.y*H:0);
-    ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
+    for(var v=0;v<VPS.length;v++){
+      var vp=VPS[v];
+      W=vp.W; H=vp.H; SW=vp.sw; SH=vp.sh;
+      vx0=vp.vx0; vy0=vp.vy0; vx1=vp.vx1; vy1=vp.vy1;
 
-    for(i=start;i<layers.length;i++){
-      l=layers[i];
-      if(l.k==="vig"||l.k==="scan") continue;
-      if(l.k==="dot"){
-        var ab=Math.round((l.a===undefined?1:l.a)*32), j=i, m;
-        while(j+1<layers.length && (m=layers[j+1]).k==="dot" && m.col===l.col &&
-              Math.round((m.a===undefined?1:m.a)*32)===ab) j++;
-        if(j>i){ drawn+=drawDotRun(layers,i,j,l.col,ab/32); i=j; continue; }
+      /* clip so a screen cannot bleed into its neighbour across the bezel gap */
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(vp.ox,vp.oy,vp.sw,vp.sh); ctx.clip();
+
+      ox=vp.ox-vx0+(sh?sh.x*W:0); oy=vp.oy-vy0+(sh?sh.y*H:0);
+      ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
+
+      for(i=start;i<layers.length;i++){
+        l=layers[i];
+        if(l.k==="vig"||l.k==="scan") continue;
+        if(l.k==="dot"){
+          var ab=Math.round((l.a===undefined?1:l.a)*32), j=i, m;
+          while(j+1<layers.length && (m=layers[j+1]).k==="dot" && m.col===l.col &&
+                Math.round((m.a===undefined?1:m.a)*32)===ab) j++;
+          if(j>i){ drawn+=drawDotRun(layers,i,j,l.col,ab/32); i=j; continue; }
+        }
+        if(drawLayer(l)) drawn++;
       }
-      if(drawLayer(l)) drawn++;
-    }
 
-    if(screenSpec) drawScreen(screenSpec);
+      var spec = screenSpec && (screenSpec.length!==undefined ? screenSpec[v] : screenSpec);
+      if(spec) drawScreen(spec, vp);
+      ctx.restore(); invalidate();
+    }
     ctx.setTransform(DPR,0,0,DPR,0,0);
     ctx.globalAlpha=1;
-    return {layers:n, drawn:drawn, culledByOcclusion:start};
+    return {layers:n, drawn:drawn, culledByOcclusion:start, screens:VPS.length};
   }
 
   /* returns true if anything was actually rasterised */
@@ -1569,33 +1599,35 @@ function makeRenderer(cv){
   }
 
   /* per-output overlay: drawn in SCREEN space, after the wall */
-  function drawScreen(sp){
-    ctx.setTransform(DPR,0,0,DPR,0,0);
+  function drawScreen(sp, vp){
+    var X=vp?vp.ox:0, Y=vp?vp.oy:0, SWv=vp?vp.sw:SW, SHv=vp?vp.sh:SH;
+    ctx.setTransform(DPR,0,0,DPR,X*DPR,Y*DPR);
     var s;
     if(sp.bg){ s=splitCol(sp.bg); ctx.globalAlpha=(sp.a===undefined?1:sp.a)*s.a;
-               ctx.fillStyle=s.c; ctx.fillRect(0,0,SW,SH); }
-    if(sp.dim){ ctx.globalAlpha=sp.dim; ctx.fillStyle=sp.tint||"#000"; ctx.fillRect(0,0,SW,SH); }
+               ctx.fillStyle=s.c; ctx.fillRect(0,0,SWv,SHv); }
+    if(sp.dim){ ctx.globalAlpha=sp.dim; ctx.fillStyle=sp.tint||"#000"; ctx.fillRect(0,0,SWv,SHv); }
     if(sp.hair!==undefined&&sp.hair!==null){
-      var inset=sp.hair*0.5*SW;
+      var inset=sp.hair*0.5*SWv;
       ctx.globalAlpha=(sp.hairA===undefined?1:sp.hairA);
       ctx.fillStyle="#EFE7DA";
-      ctx.fillRect(inset,0,1,SH); ctx.fillRect(SW-inset-1,0,1,SH);
+      ctx.fillRect(inset,0,1,SHv); ctx.fillRect(SWv-inset-1,0,1,SHv);
     }
     if(sp.txt){
-      var fs=SH*(sp.txtH||0.3), bk=bucketFor(fs), k=fs/bk;
+      var fs=SHv*(sp.txtH||0.3), bk=bucketFor(fs), k=fs/bk;
       ctx.globalAlpha=(sp.txtA===undefined?1:sp.txtA);
       ctx.fillStyle=sp.txtCol||"#fff";
-      ctx.save(); ctx.translate(SW/2,SH/2); ctx.scale(k,k);
+      ctx.save(); ctx.translate(SWv/2,SHv/2); ctx.scale(k,k);
       ctx.font="400 "+bk+"px Anton, 'Arial Narrow', sans-serif";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(sp.txt,0,0); ctx.restore(); invalidate();
     }
     if(sp.flash){ ctx.globalAlpha=sp.flash; ctx.fillStyle=sp.flashCol||"#fff";
-                  ctx.fillRect(0,0,SW,SH); }
+                  ctx.fillRect(0,0,SWv,SHv); }
     ctx.globalAlpha=1;
   }
 
-  return {resize:resize, draw:draw, geo:geo, ctx:function(){ return ctx; }};
+  return {resize:resize, viewports:viewports, draw:draw, geo:geo,
+          ctx:function(){ return ctx; }};
 }
 /* ══════════════════════════════════════════════════════════════════════════
    4b · SMOOTHNESS HARNESS
@@ -3292,7 +3324,7 @@ function bootApp(){
               playing:true, seams:true, plates:false, urlStyle:"?", manual:null };
   state.ev=makeEvent(state.type,state.team,state.opp);
   var stage=document.getElementById("stage");
-  var SCREENS=[];
+  var SCREENS=[], stageR=null;
 
   /* Re-cross the two axes and refresh everything that reads from the result. */
   function reselect(o){
@@ -3410,17 +3442,32 @@ function bootApp(){
     stage.style.width=W+"px"; stage.style.height=H+"px";
     stage.classList.toggle("seams",state.seams);
     stage.classList.toggle("plates",state.plates);
+
+    /* ONE canvas for the whole wall, not one per screen.
+       This is the lesson from every browser game that holds a frame: a game is a
+       single canvas and almost no other DOM, because each element is a compositor
+       layer and every style write is a layout risk. The preview used to be up to
+       fourteen canvases plus twenty-eight overlay divs, all recomposited every
+       frame. It is now one canvas, drawn once, with the screens as viewports
+       inside it — and it still runs the same renderer as the outputs, so the
+       preview cannot disagree with the wall. */
+    var can=document.createElement("canvas"); can.className="fb wall";
+    stage.appendChild(can);
+    stageR=makeRenderer(can);
+    var vps=L.cells.map(function(c){
+      var r=geo.rect(c);
+      return {ox:r.x*W, oy:r.y*H, w:r.w*W, h:r.h*H, cell:r};
+    });
+    stageR.viewports(vps, W, H, DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1));
+
+    /* the seams, labels and hit targets stay as DOM, but they are STATIC —
+       nothing in the frame loop touches them, so they cost one composite and
+       never a repaint */
     L.cells.forEach(function(c,i){
       var r=geo.rect(c);
-      var d=document.createElement("div"); d.className="scr";
+      var d=document.createElement("div"); d.className="scr hitbox";
       d.style.left=(r.x*W)+"px"; d.style.top=(r.y*H)+"px";
       d.style.width=(r.w*W)+"px"; d.style.height=(r.h*H)+"px";
-      var can=document.createElement("canvas"); can.className="fb";
-      d.appendChild(can);
-      /* the SAME renderer the outputs use — one code path, so the preview
-         cannot quietly disagree with the wall */
-      var R=makeRenderer(can);
-      R.resize(r.w*W, r.h*H, r, DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1));
       var pl=document.createElement("div"); pl.className="plate";
       pl.textContent=(L.labels?L.labels[i]:("TV "+(i+1)));
       d.appendChild(pl);
@@ -3428,7 +3475,7 @@ function bootApp(){
       d.onmouseleave=function(){ d.classList.remove("hi"); };
       d.onclick=function(){ window.open(tvURL(i),"_blank"); };
       stage.appendChild(d);
-      SCREENS.push({el:d,R:R,w:r.w*W,h:r.h*H});
+      SCREENS.push({el:d,w:r.w*W,h:r.h*H});
     });
     stage.__W=W; stage.__H=H;
     render(currentMs());          /* paint at once — do not wait for the next frame */
@@ -3716,9 +3763,8 @@ function bootApp(){
   }
   function render(ms){
     var f=frameAt(state.ev,state.L,ms);
-    SCREENS.forEach(function(s,i){
-      s.R.draw(f, f.screens?f.screens[i]:null);
-    });
+    /* one draw call for the entire wall */
+    if(stageR) stageR.draw(f, f.screens||null);
     return f;
   }
   function tick(ts){
