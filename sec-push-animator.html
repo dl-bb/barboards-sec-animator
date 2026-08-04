@@ -489,7 +489,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0012";
+var VERSION = "v1.0013";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1597,16 +1597,22 @@ function makeRenderer(cv){
     switch(l.k){
       case "fill":
       case "qr":
-        /* rasterised once per URL into a sprite, then blitted — a QR is a lot
-           of little rects and redrawing them every frame would be silly */
         var Q=qrSprite(l.t);
         if(!Q) return false;
         w=l.h*H; x=l.x*W-w/2; y=l.y*H-w/2;
         if(x+w<vx0||x>vx1||y+w<vy0||y>vy1) return false;
+        /* into device space: modules must be whole pixels or they scan badly */
+        var mods=Q.width;
+        var devX=Math.round((x+ox)*DPR), devY=Math.round((y+oy)*DPR);
+        var mod=Math.max(1,Math.floor((w*DPR)/mods));
+        var side=mod*mods;
+        devX+=Math.round((w*DPR-side)/2); devY+=Math.round((w*DPR-side)/2);
+        ctx.setTransform(1,0,0,1,0,0);
         ctx.globalAlpha=a;
         ctx.imageSmoothingEnabled=false;
-        ctx.drawImage(Q,x,y,w,w);
+        ctx.drawImage(Q,0,0,mods,mods,devX,devY,side,side);
         ctx.imageSmoothingEnabled=true;
+        ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
         return true;
 
       case "flash":
@@ -1899,17 +1905,28 @@ function installDevHUD(){
   var cvs=document.createElement("canvas");
   host.appendChild(txt); host.appendChild(cvs);
   var g=makeFrameGraph(cvs,200,30);
-  return function(F,buf,jsMs){
+  return function(F,buf,jsMs,extra){
     if(!F){ txt.textContent="fps  measuring…"; return; }
     var budget=F.hz>90?8.33:16.67;
     var p3=function(v){ return String(v).padStart(3," "); };
     var p5=function(v){ return String(v).padStart(5," "); };
+    /* OUTPUT is what a television is doing — reported by the screens themselves
+       when any are connected, otherwise the local wall-render cost. PANEL is
+       this page, which is a dev tool and always heavier. */
+    var reps=(typeof LINK!=="undefined"&&LINK.reports)?LINK.reports():{};
+    var live=Object.keys(reps).filter(function(k){ return reps[k]&&reps[k].fps; });
+    var oFps=0,oMin=999,oDrop=0;
+    live.forEach(function(k){ var R=reps[k];
+      oFps=Math.max(oFps,R.fps); oMin=Math.min(oMin,R.fmin||0);
+      oDrop=Math.max(oDrop,R.fdrop||0); });
+    var head = live.length
+      ? ("OUTPUT  fps "+p3(oFps)+"  min "+p3(oMin===999?0:oMin)+"  drop "+oDrop+"%  ("+live.length+" live)")
+      : ("OUTPUT  render "+p5((extra&&extra.wall!==undefined?extra.wall:0).toFixed(2))+" ms   no screens");
     txt.textContent =
-      "fps  "+p3(F.cur)+"   hz "+p3(F.hz)+"\n"+
-      "min  "+p3(F.min)+"  avg "+p3(F.avg)+"  max "+p3(F.max)+"\n"+
-      "drop "+p5(F.dropPct.toFixed(1))+"%\n"+
-      "ours "+p5(F.worstJsMs.toFixed(2))+" ms  worst frame\n"+
-      "brwsr"+p5(F.worstOtherMs.toFixed(2))+" ms  "+F.blame+"\n"+
+      head+"\n"+
+      "PANEL   fps "+p3(F.cur)+"  min "+p3(F.min)+"  avg "+p3(F.avg)+"  hz "+p3(F.hz)+"\n"+
+      "        drop "+p5(F.dropPct.toFixed(1))+"%  js "+p5(F.worstJsMs.toFixed(2))+" ms\n"+
+      "        browser "+p5(F.worstOtherMs.toFixed(2))+" ms  "+F.blame+"\n"+
       VERSION;
     txt.style.color = F.dropPct>1 ? "#E23B2E" : (F.min < F.hz*0.9 ? "#F0B03A" : "#7FC08A");
     if(buf) g(buf.gaps,buf.n,buf.N,budget);
@@ -3551,8 +3568,13 @@ function bootTV(){
      ms/u are recomputed here rather than read from the last painted frame, so a
      throttled tab still reports the truth about where it OUGHT to be. */
   LINK.report=function(){
+    var F=FPS.stats();
     return {ms:Math.round(loopPos(ev.d)), u:+cl(loopPos(ev.d)/ev.d,0,1).toFixed(4),
-            ev:ev.id, period:ev.d+REST, vis:document.hidden?0:1};
+            ev:ev.id, period:ev.d+REST, vis:document.hidden?0:1,
+            /* the output's own frame rate, so the control room can show what the
+               screens are really doing rather than what this page is doing */
+            fps:F?F.cur:0, fmin:F?F.min:0, favg:F?F.avg:0, fdrop:F?F.dropPct:0,
+            fjs:F?F.jsMaxMs:0};
   };
   LINK.onTap=function(m){ if(m&&m.x!==undefined) WAR.add(m.t,m.x,m.y,m.s); };
   LINK.start("tv", rawIdx+1, arm);
@@ -4275,6 +4297,9 @@ function bootApp(){
   /* ── the loop ── */
   var lastBeat=-2, lastPh=-2, tmRows=[];
   var FPS=makeFPS(240), fpsEl=document.getElementById("fps");
+  /* the wall render is what an output would pay; everything else on this page
+     is control-panel overhead and must not be confused with it */
+  var wallMs=0, panelMs=0;
   var drawGraph=makeFrameGraph(document.getElementById("fpsgraph"),240,34);
   var devHUD=installDevHUD();
   document.getElementById("ver").textContent=VERSION;
@@ -4292,7 +4317,9 @@ function bootApp(){
     var e=state.ev;
     var t0=performance.now();
     var ms=currentMs();
+    var wt=performance.now();
     var f=render(ms);
+    wallMs=performance.now()-wt;
     FPS.tick(ts||t0, performance.now()-t0);
     var shown=Math.min(ms,e.d);
     /* scaleX, not width: a width write invalidates layout for this row every
@@ -4316,10 +4343,11 @@ function bootApp(){
                           "  max "+pad(F.max)+(F.drops?("  "+F.dropPct+"% drop"):"  ok");
         fpsEl.style.color = F.dropPct>1 ? "var(--tally)" : "var(--good)";
         var B_=FPS.buf(); drawGraph(B_.gaps,B_.n,B_.N, F.hz>90?8.33:16.67);
-        if(devHUD) devHUD(F,B_);
+        if(devHUD) devHUD(F,B_,undefined,{wall:wallMs,panel:panelMs});
       }
       renderLink();
     }
+    panelMs=(performance.now()-t0)-wallMs;
     if(f.beat!==undefined && f.beat!==lastBeat){
       lastBeat=f.beat;
       document.querySelectorAll("#chBeats .bt").forEach(function(b){
