@@ -568,7 +568,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0032";
+var VERSION = "v1.0033";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1818,19 +1818,103 @@ var LAYOUTS = {
                       {cx:8.8,cy:0.55},{cx:9.8,cy:0.55},{cx:10.8,cy:0.55},{cx:11.8,cy:0.55}],gap:0.9},
               {left:[0,1,2,3],mid:[4,5,6,7,8,9],right:[10,11,12,13]})
 };
-var LAYORDER = ["single","pair","row3","row4","row6","strip8","quad","jumbo","eight","tower","split44","room14"];
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE ROOM WALL — 42 · 75 · 42 over 3 × 50
+
+   Measured in inches from the diagonals, because that is the only thing that
+   makes a mixed wall line up: a 16:9 panel is diagonal × 0.87157 wide and
+   diagonal × 0.49026 tall, so
+
+       42"  ->  36.606 × 20.591
+       75"  ->  65.368 × 36.770
+       50"  ->  43.579 × 24.513
+
+   The top row hangs on a COMMON BOTTOM EDGE — which is how it is actually
+   mounted, and why the 75" runs 16" higher than its neighbours rather than
+   being centred on them. The bottom row butts underneath and is centred on the
+   top row, which leaves it inset about 4" at each end.
+
+   The canvas is therefore 138.6 × 61.3 inches, 2.26:1, and the two corners
+   ABOVE the 42"s are wall rather than picture. That is not a flaw to design
+   around: it is what the room looks like, and a cue that puts its hero in the
+   middle plays across the 75" and the centre 50" exactly as it should.
+
+   Every panel is 1080p, so pixel density differs — 52 ppi on the 42"s, 44 on
+   the 50"s, 29 on the 75". Nothing needs to know that. Position is physical and
+   each output renders its own window at its own resolution, so a line drawn
+   across the wall is physically continuous even though the 75" spends fewer
+   pixels per inch drawing its share of it.
+
+   If the real mounting differs — bottom row shoved left, a real gap between the
+   rows — the numbers below are inches and are the only thing to edit. */
+(function(){
+  /* Derived from the diagonal rather than typed as rounded inches, because a
+     16:9 panel is w = D·16/√337 and h = D·9/√337, and rounding those to two
+     decimals leaves every panel 0.0002 off square. That is invisible on a wall
+     and wrong in a file whose whole claim is that the cells frame identically. */
+  function panel(d){ var k=d/Math.sqrt(337); return {w:16*k, h:9*k}; }
+  var p42=panel(42), p75=panel(75), p50=panel(50);
+  var W42=p42.w, H42=p42.h, W75=p75.w, H75=p75.h, W50=p50.w, H50=p50.h;
+  var topH=H75;                        /* the 75" sets the height of the top row  */
+  var y42=topH-H42;                    /* common bottom edge                      */
+  var topW=W42+W75+W42;
+  var botW=3*W50, botX=(topW-botW)/2;  /* the lower row, centred under the upper  */
+  LAYOUTS.wall6 = LAY("wall6","Room wall · 42·75·42 / 3×50",
+    "The real wall, in inches: a 75\" between two 42\"s hung on a common bottom "+
+    "edge, three 50\"s butted underneath and centred. Mixed panel sizes, so the "+
+    "canvas is the physical bounding box — the corners above the 42\"s are wall, "+
+    "not picture. Bezel gap does not apply; the real separations are measured in.",
+    "grid",
+    {cells:[
+      {ux:0,            uy:y42, uw:W42, uh:H42},
+      {ux:W42,          uy:0,   uw:W75, uh:H75},
+      {ux:W42+W75,      uy:y42, uw:W42, uh:H42},
+      {ux:botX,         uy:topH,uw:W50, uh:H50},
+      {ux:botX+W50,     uy:topH,uw:W50, uh:H50},
+      {ux:botX+2*W50,   uy:topH,uw:W50, uh:H50}
+    ],gap:0},
+    {top:[0,1,2], bottom:[3,4,5], hero:[1,4]});
+  LAYOUTS.wall6.labels = ["42 L","75 C","42 R","50 L","50 C","50 R"];
+})();
+
+var LAYORDER = ["single","pair","row3","row4","row6","strip8","quad","jumbo","eight","tower","split44","room14","wall6"];
 LAYOUTS.room14.labels = ["L1","L2","L3","L4","J1","J2","J3","J4","J5","J6","R1","R2","R3","R4"];
 
 function geoOf(L){
   /* GAP overrides whatever the layout was authored with — the wall separations in
-     room14 and split44 live in the cell coordinates, not the gap, so they survive. */
-  var UW=16, UH=9, g=GAP, maxX=0, maxY=0;
+     room14 and split44 live in the cell coordinates, not the gap, so they survive.
+
+     TWO KINDS OF CELL. The grid form — cx, cy — is every layout in this file, and
+     it assumes each output is the same 16×9 panel at an integer step. A real wall
+     is not that: a 75" between two 42"s is a different SHAPE, not a different
+     position, and no amount of grid stepping expresses it.
+
+     So a cell may instead give ABSOLUTE units — ux, uy, uw, uh — in whatever unit
+     the wall was measured in, and the canvas becomes the physical bounding box of
+     the panels. Everything downstream already goes through rect(), so the stage,
+     the outputs, the renderer and the benchmarks all follow with no change.
+
+     GAP does not apply to an absolute layout, and must not: the real separations
+     are already in the measurements, and adding a synthetic bezel on top would
+     move every panel off the wall it was measured against. */
+  var UW=16, UH=9, g=GAP, maxX=0, maxY=0, abs=false;
   L.cells.forEach(function(c){
-    maxX=Math.max(maxX, c.cx*(UW+g)+UW);
-    maxY=Math.max(maxY, c.cy*(UH+g)+UH);
+    if(c.uw!==undefined){
+      abs=true;
+      maxX=Math.max(maxX, c.ux+c.uw);
+      maxY=Math.max(maxY, c.uy+c.uh);
+    }else{
+      maxX=Math.max(maxX, c.cx*(UW+g)+UW);
+      maxY=Math.max(maxY, c.cy*(UH+g)+UH);
+    }
   });
-  return {AW:maxX, AH:maxY, UW:UW, UH:UH, g:g,
-    rect:function(c){ return {x:c.cx*(UW+g)/maxX, y:c.cy*(UH+g)/maxY, w:UW/maxX, h:UH/maxY}; }};
+  return {AW:maxX, AH:maxY, UW:UW, UH:UH, g:g, abs:abs,
+    rect:function(c){
+      return (c.uw!==undefined)
+        ? {x:c.ux/maxX, y:c.uy/maxY, w:c.uw/maxX, h:c.uh/maxY}
+        : {x:c.cx*(UW+g)/maxX, y:c.cy*(UH+g)/maxY, w:UW/maxX, h:UH/maxY};
+    }};
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

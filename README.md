@@ -139,7 +139,7 @@ rises as a standing wave; Vanderbilt drops an anchor.
 
 ## Layouts
 
-Twelve arrangements. The cue changes **shape**, not just scale:
+Thirteen arrangements. The cue changes **shape**, not just scale:
 
 | Mode | Layouts | What the cue does |
 |---|---|---|
@@ -148,6 +148,49 @@ Twelve arrangements. The cue changes **shape**, not just scale:
 | `split` | facing walls 4+4, reference room 14 | The word is thrown, not travelled — left wall calls, right wall answers |
 | `stack` | column of 3 | Travel runs top to bottom |
 | `single` | single screen | Scaled in place |
+
+### A real wall — `wall6`
+
+Every layout above is a grid of identical 16:9 panels at integer steps. An actual room is not
+that, so cells can also be given **absolute measurements** — `ux, uy, uw, uh` in inches — and
+the canvas becomes the physical bounding box of the panels.
+
+`wall6` is the room wall: a **75" between two 42"s** on top, **three 50"s** underneath, all
+1080p.
+
+| | Panel | Inches | Window on the canvas |
+|---|---|---|---|
+| tv=1 | 42" L | 36.61 × 20.59 | x 0.000–0.264, y 0.264–0.600 |
+| tv=2 | 75" C | 65.37 × 36.77 | x 0.264–0.736, y 0.000–0.600 |
+| tv=3 | 42" R | 36.61 × 20.59 | x 0.736–1.000, y 0.264–0.600 |
+| tv=4 | 50" L | 43.58 × 24.51 | x 0.028–0.343, y 0.600–1.000 |
+| tv=5 | 50" C | 43.58 × 24.51 | x 0.343–0.657, y 0.600–1.000 |
+| tv=6 | 50" R | 43.58 × 24.51 | x 0.657–0.971, y 0.600–1.000 |
+
+Canvas **138.58 × 61.28 inches, 2.261:1**. The top row hangs on a **common bottom edge**,
+which is why the 75" runs 16" higher than its neighbours rather than sitting centred on them.
+The bottom row butts underneath and is centred, leaving it inset ~3.9" at each end.
+
+The two corners **above the 42"s are wall, not picture**. That is not a flaw to design around
+— it is what the room looks like, and a cue that puts its hero mid-canvas plays across the
+75" and the centre 50" exactly as it should.
+
+Panel sizes are derived from the diagonal (`w = D·16/√337`, `h = D·9/√337`) rather than typed
+as rounded inches, because rounding to two decimals leaves every panel 0.0002 off square —
+invisible on a wall, and wrong in a file whose claim is that cells frame identically.
+Verified: all **73 cells across all 13 layouts are exactly 16:9, zero error**.
+
+**Bezel gap does not apply** to a measured layout and must not — the real separations are
+already in the numbers, and adding a synthetic bezel would move every panel off the wall it
+was measured against.
+
+Pixel density differs (52 ppi on the 42"s, 44 on the 50"s, 29 on the 75") and nothing needs
+to know: position is physical and each output renders its own window at its own resolution,
+so a line drawn across the wall is continuous even though the 75" spends fewer pixels per
+inch on its share of it.
+
+If your mounting differs — bottom row shoved left, a real gap between the rows — the
+constants in the `wall6` block are inches and are the only thing to edit.
 
 ## Permanent TV URLs, driven live from the control panel
 
