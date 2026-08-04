@@ -489,7 +489,7 @@ var GAP = Q.has("gap") ? Math.max(0, Math.min(2, +Q.get("gap")||0)) : GAP_DEFAUL
 /* Stress multiplier for the flyover benchmark. 1 is a real cue; 10 is an
    instrument for finding where the hardware gives out. */
 var LOAD = Q.has("load") ? Math.max(1,Math.min(40,+Q.get("load")||1)) : 1;
-var FX = Q.has("fx") ? Math.max(0, Math.min(2, +Q.get("fx")||0)) : 1;
+var FX = Q.has("fx") ? Math.max(0, Math.min(3, +Q.get("fx")||0)) : 1;
 
 /* ?bench=1 puts a rolling frame-time HUD on an output, so the numbers come
    from the device that is actually rendering rather than from a desktop. */
@@ -508,7 +508,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0022";
+var VERSION = "v1.0023";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -3405,7 +3405,7 @@ G.flyover3d=function(u,C){
    every decay from the clock, so two screens decorate identically or the wall
    tears — the same contract the rest of the file lives under.
    ══════════════════════════════════════════════════════════════════════════ */
-var FX_NAMES=["clean","rizz","max"];
+var FX_NAMES=["normal","rizz","max","new"];
 
 /* progress 0→1 over the second following a flash, from the cue's phase table */
 function impactAt(ev,u){
@@ -3474,7 +3474,7 @@ function fxDecorate(f, ev, C, level){
   }
 
   /* confetti, but only once the school's colour owns the canvas */
-  if(flood && hi){
+  if(flood && hi && level<3){
     var fy;
     for(i=0;i<26;i++){
       fy=((u*0.6+det(i+70))%1);
@@ -3484,8 +3484,87 @@ function fxDecorate(f, ev, C, level){
     }
   }
 
-  add.push({k:"vig",a:hi?0.46:0.30});
-  if(hi) add.push({k:"scan",a:0.16});
+  /* ══ NEW · the broadcast tier ═══════════════════════════════════════════
+     Not "max with more confetti". A different language, taken from how sport
+     is actually cut on air and on a stadium board:
+
+       · ESPN builds its motion on a SPEEDLINE — angled streaks that lead and
+         trail a move rather than radiating from it
+       · its plates are CHAMFERED, never plain rectangles, and carry a bright
+         machined edge that reads as glass
+       · type lives ABOVE AND BEHIND the furniture at once, which is what sells
+         depth on a flat panel
+       · big screens are shot wide and LOW, so verticals lean
+       · a bowl has a RIBBON BOARD, and the ribbon is always moving
+       · broadcast is CLEAN. Restraint is the tell between a network package
+         and a school project, so the particle budget goes DOWN here, not up. */
+  if(level>=3){
+    var acc2=lightOn(T.p)?T.deep:T.p;
+
+    /* chamfered plate under the hero, with a machined leading edge */
+    if(hero){
+      var ph=hero.h*1.34, py=hero.y;
+      pre.push({k:"band",x:-0.06,y:py-ph/2,w:1.12,h:ph,col:hexA("#000000",.42),skew:-11});
+      pre.push({k:"band",x:-0.06,y:py-ph/2,w:1.12,h:ph*0.055,col:hexA("#FFFFFF",.55),skew:-11});
+      pre.push({k:"band",x:-0.06,y:py+ph/2-ph*0.055,w:1.12,h:ph*0.055,
+                col:hexA(acc2,.75),skew:-11});
+      /* the same word, huge and ghosted, sitting BEHIND the plate — the trick
+         that makes flat type read as layered */
+      pre.unshift(Object.assign({},hero,{y:hero.y-0.012,h:hero.h*1.9,
+                  col:hexA("#FFFFFF",.045),a:1,fit:undefined}));
+      /* anamorphic bloom: a horizontal streak, the way a wide lens flares */
+      for(i=-4;i<=4;i++)
+        add.push({k:"glow",x:hero.x+i*0.055,y:hero.y,r:0.055+0.02*(4-Math.abs(i)),
+                  col:hexA("#FFFFFF",0.05*(1-Math.abs(i)/5)),a:1});
+    }
+
+    /* speedlines — they LEAD the motion, they do not radiate from it */
+    var sp=(u*1.6)%1;
+    for(i=0;i<9;i++){
+      var syy=0.06+det(i+301)*0.88;
+      var slen=0.05+det(i+311)*0.20;
+      var sx0=((sp*1.9+det(i+321))%1.6)-0.3;
+      add.push({k:"band",x:sx0,y:syy,w:slen,h:0.0035+det(i+331)*0.004,
+                col:hexA("#FFFFFF",0.10+det(i+341)*0.10),skew:-24});
+    }
+
+    /* the ribbon board: one bright element always running the perimeter */
+    var rp=(u*0.9)%1, RW=0.16;
+    if(rp<0.42)      add.push({k:"band",x:(rp/0.42)*(1+RW)-RW,y:0,w:RW,h:0.012,col:acc2});
+    else if(rp<0.5)  add.push({k:"band",x:1-0.008,y:((rp-0.42)/0.08)*1.0,w:0.008,h:0.13,col:acc2});
+    else if(rp<0.92) add.push({k:"band",x:1-((rp-0.5)/0.42)*(1+RW),y:0.988,w:RW,h:0.012,col:acc2});
+    else             add.push({k:"band",x:0,y:1-((rp-0.92)/0.08)*1.0,w:0.008,h:0.13,col:acc2});
+
+    /* broadcast corner brackets — framing marks, shot wide */
+    var bl=0.055, bt=0.006;
+    [[0,0,1,1],[1,0,-1,1],[0,1,1,-1],[1,1,-1,-1]].forEach(function(c2){
+      add.push({k:"band",x:c2[0]-(c2[2]<0?bl:0),y:c2[1]-(c2[3]<0?bt:0),
+                w:bl,h:bt,col:hexA("#FFFFFF",.30)});
+      add.push({k:"band",x:c2[0]-(c2[2]<0?bt:0),y:c2[1]-(c2[3]<0?bl*0.6:0),
+                w:bt,h:bl*0.6,col:hexA("#FFFFFF",.30)});
+    });
+
+    /* impact: directional shards, not a radial puff */
+    if(imp>=0){
+      var e2=eo(imp);
+      for(i=0;i<14;i++){
+        var dir=(det(i+401)<0.5)?-1:1;
+        var dx2=dir*(0.06+det(i+411)*0.9)*e2;
+        add.push({k:"band",x:0.5+dx2,y:0.12+det(i+421)*0.76,
+                  w:0.02+det(i+431)*0.09*(1-imp),h:0.0035,
+                  col:(i%3)?hexA("#FFFFFF",(1-imp)*0.8):hexA(acc2,(1-imp)*0.9),
+                  skew:-24});
+      }
+      /* cinematic bars snap in on the hit and ease back out */
+      var lb=(1-imp)*0.055;
+      add.push({k:"band",x:0,y:0,w:1,h:lb,col:"#000000"});
+      add.push({k:"band",x:0,y:1-lb,w:1,h:lb,col:"#000000"});
+    }
+  }
+
+  add.push({k:"vig",a:level>=3?0.38:(hi?0.46:0.30)});
+  if(hi&&level<3) add.push({k:"scan",a:0.16});
+  if(level>=3) add.push({k:"scan",a:0.07});
 
   /* glow and ghosts must sit UNDER the hero, everything else over the top */
   var res=[], j;
@@ -4050,7 +4129,7 @@ function bootTV(){
     var nextGap = (s.gap===undefined||s.gap===null) ? GAP : Math.max(0,Math.min(2,+s.gap||0));
     var geoChanged = (nextL!==L) || (nextGap!==GAP);
     L=nextL; GAP=nextGap;
-    if(s.fx!==undefined) FX=Math.max(0,Math.min(2,+s.fx||0));
+    if(s.fx!==undefined) FX=Math.max(0,Math.min(3,+s.fx||0));
     if(s.rest!==undefined && +s.rest>=0) REST=+s.rest;
     if(s.epoch!==undefined && +s.epoch>0) EPOCH=+s.epoch;
     var t=s.type||ev.typeId, tm=s.team||ev.team, op=s.opp||ev.opp;
@@ -4862,7 +4941,7 @@ function bootApp(){
   }
   paintFxBtn();
   bFx.onclick=function(){
-    FX=(FX+1)%3; paintFxBtn();
+    FX=(FX+1)%4; paintFxBtn();
     render(currentMs()); renderBrief(); renderURLs(); pushLink();
   };
   document.getElementById("bSeams").onclick=function(){
@@ -5139,7 +5218,7 @@ function audit(){
       for(var s=0;s<=12;s++){
         var f;
         checked++;
-        try{ f=frameAt(e,L,e.d*s/12); }
+        try{ f=frameAt(e,L,e.d*s/12, s%4); }   /* rotate through all four FX tiers */
         catch(err){ fails.push(e.id+"/"+lid+" @"+s+"/12: "+err.message); continue; }
         var topFill=-1;
         f.layers.forEach(function(l,k){ if(l.k==="fill"&&(l.a===undefined||l.a>=0.98)) topFill=k; });
