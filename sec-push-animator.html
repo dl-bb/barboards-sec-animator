@@ -234,6 +234,16 @@ body.playing #pjoin{display:none}
 #pwall canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
 #pfoot{text-align:center;padding:10px 14px 18px;font-family:"IBM Plex Mono",monospace;
   font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer)}
+#joinqr{display:none;position:fixed;inset:0;z-index:2147483646;background:rgba(8,6,5,.94);
+  align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(3px)}
+body.joinqr #joinqr{display:flex}
+.jq{display:flex;flex-direction:column;align-items:center;gap:14px}
+#jqCanvas{image-rendering:pixelated;border:18px solid #fff;border-radius:4px;
+  box-shadow:0 20px 60px rgba(0,0,0,.7)}
+.jqurl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.06em;
+  color:var(--dim);max-width:70vw;overflow-wrap:anywhere;text-align:center}
+.jqhint{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--dimmer)}
 #devfps{position:fixed;left:10px;top:10px;z-index:2147483647;pointer-events:none;
   width:216px;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
   font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5;letter-spacing:.04em;
@@ -279,6 +289,7 @@ body.bench #tvbench{display:block}
   <span class="lb" id="fps">fps —</span>
   <canvas id="fpsgraph" title="every frame, last ~240. green under budget, amber late, red a dropped flip"></canvas>
   <span class="lb" id="clk">wall clock —</span>
+  <button class="btn" id="bJoinQR" title="Full-size QR for patrons to scan">Join QR</button>
   <button class="btn" id="bOpen">Open all TVs</button>
 </header>
 
@@ -432,6 +443,7 @@ body.bench #tvbench{display:block}
     <div id="pfoot">Tap the wall — hold and drag to keep painting</div>
   </div>
 </div>
+<div id="joinqr"><div class="jq"><canvas id="jqCanvas"></canvas><div class="jqurl" id="jqURL"></div><div class="jqhint">Scan to pick a side · tap anywhere to close</div></div></div>
 <div id="devfps"></div>
 <div id="tvbench"></div>
 <canvas id="tvgraph"></canvas>
@@ -489,7 +501,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0013";
+var VERSION = "v1.0014";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1807,6 +1819,39 @@ function makeFPS(window_){
       for(i=0;i<c;i++) a.push(+gaps[(n-c+i+N)%N].toFixed(2));
       return a; },
     buf:function(){ return {gaps:gaps,n:n,N:N}; },
+    /* Diagnose the CADENCE, not the cost. Returns what the frame timing looks
+       like it is being paced by, and whether that pacing is self-consistent. */
+    cadence:function(){
+      var c=Math.min(n,N); if(c<30) return null;
+      var h={}, i, g, key, best=0, mode=16.7;
+      for(i=0;i<c;i++){ g=gaps[i]; key=Math.round(g*2)/2;
+        h[key]=(h[key]||0)+1; if(h[key]>best){ best=h[key]; mode=key; } }
+      /* how many samples sit near an exact multiple of the dominant gap? */
+      var mult={}, off=0;
+      for(i=0;i<c;i++){
+        var r=gaps[i]/mode, k=Math.round(r);
+        if(k>=1 && Math.abs(r-k)<0.18) mult[k]=(mult[k]||0)+1; else off++;
+      }
+      var m1=mult[1]||0, m2=mult[2]||0, m3=mult[3]||0;
+      var doubled=(m2+m3)/c;
+      return {
+        baseMs:mode, baseHz:Math.round(1000/mode),
+        onCadencePct:+(100*m1/c).toFixed(1),
+        doubledPct:+(100*doubled).toFixed(1),
+        irregularPct:+(100*off/c).toFixed(1),
+        diagnosis:
+          doubled>0.05 && off/c<0.05
+            ? "VSYNC MISMATCH — gaps land on exact multiples of "+mode+" ms with nothing "+
+              "in between. That is the compositor pacing to the wrong clock, not render "+
+              "cost. On Windows this is Chrome using one system-wide refresh rate across "+
+              "monitors of different rates (crbug 40386822). Put the window entirely on "+
+              "one display and retest."
+          : (off/c>0.15
+            ? "IRREGULAR — gaps are smeared rather than quantised, which is real work or "+
+              "GC somewhere on the main thread."
+            : "clean — gaps sit on one cadence")
+      };
+    },
     stats:function(){
       var c=Math.min(n,N); if(c<2) return null;
       var sum=0,js=0,i;
@@ -1897,8 +1942,9 @@ function makeFrameGraph(cv,w,h){
 
 /* One readout, installed the same way in both modes, so #dev behaves
    identically on an output and in the control room. */
-function installDevHUD(){
+function installDevHUD(meter){
   if(!DEV) return null;
+  var api_cadence = meter && meter.cadence ? function(){ return meter.cadence(); } : null;
   document.body.classList.add("dev");
   var host=document.getElementById("devfps");
   var txt=document.createElement("div");
@@ -1922,11 +1968,14 @@ function installDevHUD(){
     var head = live.length
       ? ("OUTPUT  fps "+p3(oFps)+"  min "+p3(oMin===999?0:oMin)+"  drop "+oDrop+"%  ("+live.length+" live)")
       : ("OUTPUT  render "+p5((extra&&extra.wall!==undefined?extra.wall:0).toFixed(2))+" ms   no screens");
+    var CAD=(buf&&F.samples>60&&api_cadence)?api_cadence():null;
     txt.textContent =
       head+"\n"+
       "PANEL   fps "+p3(F.cur)+"  min "+p3(F.min)+"  avg "+p3(F.avg)+"  hz "+p3(F.hz)+"\n"+
       "        drop "+p5(F.dropPct.toFixed(1))+"%  js "+p5(F.worstJsMs.toFixed(2))+" ms\n"+
       "        browser "+p5(F.worstOtherMs.toFixed(2))+" ms  "+F.blame+"\n"+
+      (CAD?("CADENCE "+CAD.baseHz+" Hz  on "+CAD.onCadencePct+"%  x2+ "+CAD.doubledPct+
+            "%  irr "+CAD.irregularPct+"%\n"):"")+
       VERSION;
     txt.style.color = F.dropPct>1 ? "#E23B2E" : (F.min < F.hz*0.9 ? "#F0B03A" : "#7FC08A");
     if(buf) g(buf.gaps,buf.n,buf.N,budget);
@@ -3631,6 +3680,7 @@ function bootTV(){
                   return a; },
                 smoothness:function(){ return smoothReport(); },
                 baseline:baselineTest,
+                cadence:function(){ return FPS.cadence(); },
                 frames:function(){ return FPS.raw(); },
                 epoch:function(){ return {EPOCH:EPOCH,REST:REST,SKEW:SKEW,period:period,d:ev.d}; },
                 seek:function(t){ hold=t; return paint(cl(t,0,period)); },
@@ -3659,7 +3709,7 @@ function bootTV(){
   var bench={n:0,sum:0,max:0,drop:0,last:0,ms:0,drawn:0,culled:0,avg:0};
   var FPS=makeFPS(240);
   var drawGraph=BENCH?makeFrameGraph(document.getElementById("tvgraph"),300,44):null;
-  var devHUD=installDevHUD(), devNext=0;
+  var devHUD=installDevHUD(FPS), devNext=0;
   var GAPS=new Float32Array(600), JSMS=new Float32Array(600), GN=0;
   function pctOf(buf,count,p){
     if(!count) return 0;
@@ -4137,6 +4187,33 @@ function bootApp(){
       box.appendChild(d);
     });
   }
+  document.getElementById("bJoinQR").onclick=function(){
+    var url=patronURL(state.ev.house?state.ev:makeEvent("colorwars",state.team,state.opp));
+    if(!url){ alert("Connect the wall link first — the room code is part of the URL."); return; }
+    var sym=QR.make(url);
+    if(!sym){ alert("URL too long to encode."); return; }
+    var quiet=4, mods=sym.size+quiet*2;
+    /* whole pixels per module, sized to the window — uneven modules are
+       exactly what stops a phone locking on */
+    var target=Math.min(window.innerWidth,window.innerHeight)*0.62;
+    var px=Math.max(4,Math.floor(target/mods));
+    var cv=document.getElementById("jqCanvas");
+    cv.width=cv.height=mods*px;
+    var c=cv.getContext("2d");
+    c.fillStyle="#fff"; c.fillRect(0,0,cv.width,cv.height);
+    c.fillStyle="#000";
+    for(var r=0;r<sym.size;r++) for(var k=0;k<sym.size;k++)
+      if(sym.m[r][k]) c.fillRect((k+quiet)*px,(r+quiet)*px,px,px);
+    document.getElementById("jqURL").textContent=url;
+    document.body.classList.add("joinqr");
+  };
+  document.getElementById("joinqr").onclick=function(){
+    document.body.classList.remove("joinqr");
+  };
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Escape") document.body.classList.remove("joinqr");
+  });
+
   document.getElementById("bOpen").onclick=function(){
     state.L.cells.forEach(function(c,i){ window.open(tvURL(i),"_blank"); });
   };
@@ -4301,7 +4378,7 @@ function bootApp(){
      is control-panel overhead and must not be confused with it */
   var wallMs=0, panelMs=0;
   var drawGraph=makeFrameGraph(document.getElementById("fpsgraph"),240,34);
-  var devHUD=installDevHUD();
+  var devHUD=installDevHUD(FPS);
   document.getElementById("ver").textContent=VERSION;
   function currentMs(){
     return state.manual!==null ? state.manual
@@ -4379,6 +4456,7 @@ function bootApp(){
        number that says whether the wall looks smooth. Run it on the device. */
     frames:function(){ return FPS.raw(); },
     fps:function(){ return FPS.stats(); },
+    cadence:function(){ return FPS.cadence(); },
     baseline:baselineTest,
     env:function(){ return {version:VERSION, dpr:window.devicePixelRatio,
       dprUsed:(DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1)),
