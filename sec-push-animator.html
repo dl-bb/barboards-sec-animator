@@ -508,7 +508,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0017";
+var VERSION = "v1.0018";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1929,6 +1929,26 @@ function eachCueFrame(ev,L,fx,fn,n){
   var i, N=n||64;
   for(i=0;i<=N;i++) fn(frameAt(ev,L,ev.d*i/N,fx));
   fn(frameAt(ev,L,ev.d+1,fx));               /* the rest lockup too */
+}
+
+function gpuInfo(){
+  var out={renderer:"?",vendor:"?",webgl:false,accelerated:null};
+  try{
+    var c=document.createElement("canvas");
+    var gl=c.getContext("webgl2")||c.getContext("webgl");
+    if(gl){
+      out.webgl=true;
+      var dbg=gl.getExtension("WEBGL_debug_renderer_info");
+      if(dbg){
+        out.renderer=gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)||"?";
+        out.vendor=gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)||"?";
+      }
+      /* SwiftShader/llvmpipe in the string means software rasterisation,
+         and software rasterisation at 1080p60 is hopeless by construction */
+      out.accelerated=!/swiftshader|llvmpipe|software/i.test(out.renderer);
+    }
+  }catch(e){}
+  return out;
 }
 
 function baselineTest(seconds){
@@ -3881,6 +3901,7 @@ function bootTV(){
                   return a; },
                 smoothness:function(){ return smoothReport(); },
                 baseline:baselineTest,
+                gpu:gpuInfo,
                 cadence:function(){ return FPS.cadence(); },
                 frames:function(){ return FPS.raw(); },
                 epoch:function(){ return {EPOCH:EPOCH,REST:REST,SKEW:SKEW,period:period,d:ev.d}; },
@@ -3993,6 +4014,13 @@ function bootTV(){
     if(document.body.classList.contains("diag")){
       diag.textContent =
         "build   "+VERSION+"\n"+
+        /* this output's OWN frame rate, so a wall can be read screen by screen
+           rather than judged from whichever one you happen to be standing at */
+        (function(){ var F=FPS.stats(); if(!F) return "fps     measuring…\n";
+          var p=function(v){ return String(v).padStart(3," "); };
+          return "fps     "+p(F.cur)+"   min "+p(F.min)+"  avg "+p(F.avg)+
+                 "  max "+p(F.max)+"\n"+
+                 "        drop "+F.dropPct+"%   js "+F.worstJsMs+" ms   hz ~"+F.hz+"\n"; })()+
         "event   "+ev.id+"  ("+ev.name+")\n"+
         "layout  "+L.id+"   output "+(tvIdx+1)+" of "+L.cells.length+"\n"+
         "cell    x "+r.x.toFixed(4)+"  y "+r.y.toFixed(4)+"  w "+r.w.toFixed(4)+"  gap "+GAP+"\n"+
@@ -4404,6 +4432,16 @@ function bootApp(){
       lines.push("  window        "+window.innerWidth+"x"+window.innerHeight);
       lines.push("  cores         "+(navigator.hardwareConcurrency||"?"));
       lines.push("  dpr in use    "+(DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1)));
+      var G=gpuInfo();
+      lines.push("  gpu           "+G.renderer);
+      lines.push("  vendor        "+G.vendor);
+      lines.push("  accelerated   "+(G.accelerated===null?"unknown":G.accelerated));
+      if(G.accelerated===false)
+        lines.push("  !! SOFTWARE RASTERISATION — 1080p60 is not achievable like this.");
+      if(/intel|iris|uhd/i.test(G.renderer))
+        lines.push("  !! integrated GPU. On a laptop with a discrete card this often means");
+        lines.push("     Chrome is on the wrong one — check chrome://gpu and Windows");
+        lines.push("     Graphics Settings, and set Chrome to High Performance.");
       lines.push("");
       lines.push("CONTROL — empty rAF loop, this page, drawing NOTHING");
       lines.push("  display       ~"+base.displayHz+" Hz");
@@ -4714,6 +4752,7 @@ function bootApp(){
     fps:function(){ return FPS.stats(); },
     cadence:function(){ return FPS.cadence(); },
     baseline:baselineTest,
+    gpu:gpuInfo,
     /* Walk the load up until the draw crosses the frame budget and report the
        knee. This is the number that decides how much a QCS6490 can be asked to
        draw — run it on the device, not here. */
