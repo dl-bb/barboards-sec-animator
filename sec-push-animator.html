@@ -95,7 +95,7 @@ input[type=range]{accent-color:var(--cue);height:16px}
    and cannot bleed onto a neighbour — the wall is a continuous surface. */
 .scr{position:absolute;background:#000;overflow:hidden}
 .stage.seams .scr{box-shadow:inset 0 0 0 1px rgba(150,132,118,.42)}
-.scr .canvas{position:absolute;overflow:hidden;transform:translateZ(0)}
+.scr .fb,#tvscreen .fb{position:absolute;left:0;top:0;display:block}
 .scr .plate{position:absolute;left:0;right:0;bottom:2px;text-align:center;
   font-family:"IBM Plex Mono",monospace;font-size:7px;letter-spacing:.14em;color:rgba(200,186,172,.30);
   pointer-events:none;opacity:0;transition:opacity .15s}
@@ -192,6 +192,10 @@ body.tvmode .top,body.tvmode .wrap{display:none}
   color:#F0B03A;background:rgba(0,0,0,.72);border:1px solid #3A2D25;padding:8px 11px;border-radius:3px;display:none;z-index:9;
   white-space:pre;letter-spacing:.04em}
 body.diag #tvdiag{display:block}
+#tvbench{position:fixed;right:10px;top:10px;font-family:"IBM Plex Mono",monospace;font-size:12px;
+  line-height:1.55;color:#7FC08A;background:rgba(0,0,0,.78);border:1px solid #2A3A2C;padding:8px 11px;
+  border-radius:3px;display:none;z-index:10;white-space:pre;letter-spacing:.03em}
+body.bench #tvbench{display:block}
 #tvhint{position:fixed;right:12px;bottom:10px;font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.14em;
   color:#3A2D25;z-index:9;text-transform:uppercase}
 </style>
@@ -356,6 +360,7 @@ body.diag #tvdiag{display:block}
 <div id="tvroot"><div id="tvscreen"></div></div>
 <div id="tvdiag"></div>
 <div id="tvhint" style="display:none">i · diagnostics</div>
+<div id="tvbench"></div>
 
 <script>
 (function(){
@@ -395,6 +400,10 @@ var GAP = Q.has("gap") ? Math.max(0, Math.min(2, +Q.get("gap")||0)) : GAP_DEFAUL
 /* Visual gain: 0 clean · 1 rizz · 2 max. Shared over the link, because a wall
    where one screen is decorated and the others are not is a broken wall. */
 var FX = Q.has("fx") ? Math.max(0, Math.min(2, +Q.get("fx")||0)) : 1;
+
+/* ?bench=1 puts a rolling frame-time HUD on an output, so the numbers come
+   from the device that is actually rendering rather than from a desktop. */
+var BENCH = Q.get("bench")==="1";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1194,10 +1203,38 @@ function geoOf(L){
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   4 · PAINTER
-   One canvas spec → N identical canvases at N different negative offsets.
-   Screens sharing a surface are byte-identical by construction (§14.2).
+   4 · RENDERER — immediate mode, one framebuffer per output
+   ══════════════════════════════════════════════════════════════════════════
+
+   This replaced a retained-mode DOM painter that put up to 131 absolutely
+   positioned elements per screen and restyled every one of them each frame,
+   paying style-recalc → layout → paint → composite on all of them. Measured
+   frame build in JS is 11 µs; the DOM was the entire cost.
+
+   Two decisions carry almost all of the win:
+
+   1 · CULLING. Every output used to rasterise the WHOLE wall and crop it with
+       overflow:hidden — 4× the pixels on a row of four, 8× on a rail of eight,
+       26.9× on the reference room. On a device driving two 1080p60 surfaces
+       that is ~1 Gpx/s of composite to show 249 Mpx/s of actual picture. The
+       context is now translated to this screen's window and any layer whose
+       bounding box misses it is rejected before a single pixel is touched.
+
+   2 · IMMEDIATE MODE. A display list drawn into one opaque canvas — the layer
+       array already WAS a display list. No nodes, no style invalidation, and
+       the whole frame flips as a single surface, so elements cannot tear
+       against each other.
+
+   Everything else is the old bag of tricks: glyph sizes quantised to buckets so
+   the browser's glyph atlas actually gets reused instead of being invalidated
+   every frame by a fractional font-size; gradients cached rather than rebuilt;
+   the vignette and scanlines baked once into an offscreen surface and blitted;
+   circles under a couple of pixels drawn as rects because nobody can tell.
+
+   One renderer, used by both the control-room preview and the outputs, so the
+   preview cannot drift from what the wall actually shows.
    ══════════════════════════════════════════════════════════════════════════ */
+
 var MEAS = document.createElement("div");
 MEAS.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;"+
   "font-family:Anton,'Arial Narrow',sans-serif;text-transform:uppercase;font-size:100px;line-height:.82";
@@ -1211,118 +1248,255 @@ function natW(t,track){
   WCACHE[k]=w; return w;
 }
 
-function ensure(host,kind,n){
-  var pool = host.__pool || (host.__pool={});
-  var arr = pool[kind] || (pool[kind]=[]);
-  while(arr.length<n){
-    var e=document.createElement("div"); e.className="L L-"+kind;
-    host.appendChild(e); arr.push(e);
+/* Alpha is carried separately from colour so the caches stay small and so a
+   fading layer does not mint a new gradient or a new glyph run every frame. */
+var COLC={};
+function splitCol(c){
+  if(COLC[c]) return COLC[c];
+  var o={c:c,a:1}, m=/^rgba\(([^)]+)\)$/.exec(c);
+  if(m){
+    var p=m[1].split(",");
+    o.a=parseFloat(p[3]); o.c="rgb("+p[0]+","+p[1]+","+p[2]+")";
   }
-  return arr;
+  COLC[c]=o; return o;
 }
-function px(v){ return v.toFixed(2)+"px"; }
-
-/* z is the layer's index in the spec. Elements are pooled per kind, so their DOM
-   order is whatever order the kinds were first needed in and has nothing to do with
-   stacking — the spec's own order has to be restated as z-index every frame. */
-function applyLayer(e,l,W,H,z){
-  var s=e.style; s.display="block"; s.opacity = (l.a===undefined?1:l.a); s.zIndex=z;
-  switch(l.k){
-    case "fill":
-      s.left="0";s.top="0";s.width=px(W);s.height=px(H);s.background=l.col;s.transform="none";s.borderRadius="0";break;
-    case "band":
-      s.left="0";s.top="0";s.width=px(l.w*W);s.height=px(l.h*H);s.background=l.col;
-      s.borderRadius=(l.r||0)+"px";
-      s.transform="translate("+px(l.x*W)+","+px(l.y*H)+")"+
-        (l.rot?" rotate("+l.rot+"deg)":"")+(l.skew?" skewX("+l.skew+"deg)":"");
-      break;
-    case "cell":
-      s.left="0";s.top="0";s.width=px(l.w*W);s.height=px(l.h*H);s.background=l.col;s.borderRadius="0";
-      s.transform="translate("+px(l.x*W)+","+px(l.y*H)+") scale("+(l.sc===undefined?1:l.sc)+")";break;
-    case "dot":
-      s.left="0";s.top="0";s.width=px(l.r*2*W);s.height=px(l.r*2*W);s.background=l.col;
-      s.transform="translate("+px(l.x*W-l.r*W)+","+px(l.y*H-l.r*W)+")";break;
-    case "ring":
-      s.left="0";s.top="0";s.width=px(l.r*2*W);s.height=px(l.r*2*W);
-      s.border=(l.w||3)+"px solid "+l.col;
-      s.transform="translate("+px(l.x*W-l.r*W)+","+px(l.y*H-l.r*W)+")";break;
-    case "tri":
-      s.left="0";s.top="0";
-      s.borderLeft=px(l.w*W/2)+" solid transparent";
-      s.borderRight=px(l.w*W/2)+" solid transparent";
-      s.borderTop = l.dir==="down" ? px(l.h*H)+" solid "+l.col : "0";
-      s.borderBottom = l.dir==="up" ? px(l.h*H)+" solid "+l.col : "0";
-      s.transform="translate("+px(l.x*W-l.w*W/2)+","+px(l.y*H)+")";break;
-    case "word":
-      var fs=l.h*H, track=(l.track||0);
-      var w=natW(l.t,track)*fs/100;
-      if(l.fit && w > l.fit*W){ fs = fs*(l.fit*W)/w; w=l.fit*W; }
-      s.left="0";s.top="0";s.fontSize=px(fs);s.letterSpacing=track+"em";s.color=l.col;
-      s.transform="translate("+px(l.x*W-w/2)+","+px(l.y*H-fs*0.46)+") scale("+(l.sc===undefined?1:l.sc)+")"+
-                  (l.rot?" rotate("+l.rot+"deg)":"");
-      if(e.textContent!==l.t) e.textContent=l.t;
-      break;
-    case "flash":
-      s.left="0";s.top="0";s.width=px(W);s.height=px(H);s.background="#fff";s.transform="none";break;
-    case "glow":
-      s.left="0";s.top="0";s.width=px(l.r*2*W);s.height=px(l.r*2*W);
-      s.background="radial-gradient(closest-side,"+l.col+","+hexA("#000000",0)+")";
-      s.transform="translate("+px(l.x*W-l.r*W)+","+px(l.y*H-l.r*W)+")";break;
-    case "scan":
-      s.left="0";s.top="0";s.width=px(W);s.height=px(H);s.transform="none";
-      s.background="repeating-linear-gradient(0deg,"+hexA("#000000",.5)+" 0 1px,"+
-        hexA("#000000",0)+" 1px "+Math.max(2,Math.round(H/220))+"px)";break;
-    case "vig":
-      s.left="0";s.top="0";s.width=px(W);s.height=px(H);s.transform="none";
-      s.background="radial-gradient(ellipse at center,"+hexA("#000000",0)+" 45%,"+
-        hexA("#000000",.85)+" 100%)";break;
-  }
+/* Quantising the pixel size is what lets the glyph atlas be reused; the
+   residual is taken up by a transform scale, which is free. */
+var BUCKETS=[16,24,32,48,64,96,128,192,256,384,512,768,1024];
+function bucketFor(px){
+  for(var i=0;i<BUCKETS.length;i++) if(BUCKETS[i]>=px) return BUCKETS[i];
+  return BUCKETS[BUCKETS.length-1];
 }
+/* sin/cos are called a few hundred times a frame by the particle cues */
+var SINT=new Float32Array(1024);
+for(var _i=0;_i<1024;_i++) SINT[_i]=Math.sin(_i/1024*Math.PI*2);
+function fsin(t){ return SINT[((t*1024/(Math.PI*2))|0)&1023]; }
 
-function paintCanvas(host,layers,W,H,shake){
-  /* the canvas is positioned with left/top, so transform is free for the shake —
-     and because the shake is a pure function of u it is identical on every output */
-  host.style.transform = shake ? ("translate("+px(shake.x*W)+","+px(shake.y*H)+")") : "";
-  var counts={},used={},i,l;
-  for(i=0;i<layers.length;i++){ l=layers[i]; counts[l.k]=(counts[l.k]||0)+1; }
-  for(i=0;i<layers.length;i++){
-    l=layers[i];
-    var idx = used[l.k]=(used[l.k]||0);
-    used[l.k]=idx+1;
-    var arr=ensure(host,l.k,counts[l.k]);
-    applyLayer(arr[idx],l,W,H,i);
+function makeRenderer(cv){
+  var ctx=cv.getContext("2d",{alpha:false, desynchronized:true});
+  var W=0,H=0,SW=0,SH=0,DPR=1,cell={x:0,y:0,w:1,h:1};
+  var vx0=0,vy0=0,vx1=0,vy1=0;
+  var grads={}, overlay=null, overlayKey="";
+
+  function resize(screenW, screenH, c, dpr){
+    cell=c; DPR=Math.min(dpr||1,2);
+    SW=screenW; SH=screenH;
+    cv.width=Math.round(SW*DPR); cv.height=Math.round(SH*DPR);
+    cv.style.width=SW+"px"; cv.style.height=SH+"px";
+    W=SW/cell.w; H=SH/cell.h;                 /* the whole wall, in CSS px */
+    vx0=cell.x*W; vy0=cell.y*H; vx1=vx0+SW; vy1=vy0+SH;
+    grads={}; overlay=null; overlayKey="";
+    return {W:W,H:H,SW:SW,SH:SH};
   }
-  var pool=host.__pool||{};
-  for(var k in pool){
-    var from=used[k]||0;
-    for(var j=from;j<pool[k].length;j++) pool[k][j].style.display="none";
+  function geo(){ return {W:W,H:H,SW:SW,SH:SH,DPR:DPR,cell:cell}; }
+
+  /* baked once per size — a full-screen radial plus a scanline pattern would
+     otherwise be the two most expensive things in the frame */
+  function overlayFor(vigA,scanA){
+    var key=SW+"x"+SH+"|"+(vigA>0)+"|"+(scanA>0);
+    if(overlay&&overlayKey===key) return overlay;
+    var o=document.createElement("canvas");
+    o.width=Math.max(1,Math.round(SW*DPR)); o.height=Math.max(1,Math.round(SH*DPR));
+    var c2=o.getContext("2d");
+    c2.scale(DPR,DPR);
+    if(vigA>0){
+      var g=c2.createRadialGradient(SW/2,SH/2,Math.min(SW,SH)*0.28,
+                                    SW/2,SH/2,Math.max(SW,SH)*0.72);
+      g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(1,"rgba(0,0,0,1)");
+      c2.fillStyle=g; c2.fillRect(0,0,SW,SH);
+    }
+    if(scanA>0){
+      var step=Math.max(2,Math.round(SH/220));
+      c2.fillStyle="rgba(0,0,0,1)";
+      for(var y=0;y<SH;y+=step) c2.fillRect(0,y,SW,1);
+    }
+    overlay=o; overlayKey=key; return overlay;
   }
+  function gradFor(col,r){
+    var rb=Math.max(1,Math.round(r/8)*8), k=col+"|"+rb;
+    if(grads[k]) return grads[k];
+    var g=ctx.createRadialGradient(0,0,0,0,0,rb);
+    var s=splitCol(col);
+    g.addColorStop(0,s.c); g.addColorStop(1,"rgba(0,0,0,0)");
+    grads[k]={g:g,r:rb,a:s.a}; return grads[k];
+  }
+
+  function draw(f, screenSpec){
+    var layers=f.layers||[], sh=f.shake, i, l, n=0, drawn=0;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.globalAlpha=1;
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,0,SW,SH);
+
+    /* wall space: everything below is in wall CSS px, offset to this window */
+    var ox=-vx0+(sh?sh.x*W:0), oy=-vy0+(sh?sh.y*H:0);
+    ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
+
+    var vig=0, scan=0;
+    for(i=0;i<layers.length;i++){
+      l=layers[i]; n++;
+      if(l.k==="vig"){ vig=Math.max(vig,l.a===undefined?1:l.a); continue; }
+      if(l.k==="scan"){ scan=Math.max(scan,l.a===undefined?1:l.a); continue; }
+      if(drawLayer(l)) drawn++;
+    }
+
+    if(vig>0||scan>0){
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+      ctx.globalAlpha=1;
+      var ov=overlayFor(vig,scan);
+      if(vig>0||scan>0){
+        ctx.globalAlpha=Math.max(vig,scan);
+        ctx.drawImage(ov,0,0,ov.width,ov.height,0,0,SW,SH);
+      }
+    }
+
+    if(screenSpec) drawScreen(screenSpec);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.globalAlpha=1;
+    return {layers:n, drawn:drawn};
+  }
+
+  /* returns true if anything was actually rasterised */
+  function drawLayer(l){
+    var a=(l.a===undefined?1:l.a);
+    if(a<=0.004) return false;
+    var s,x,y,w,h,r,fs,bk,sc,tw;
+
+    switch(l.k){
+      case "fill":
+      case "flash":
+        s=splitCol(l.k==="flash"?"#ffffff":l.col);
+        ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
+        /* only the visible window, never the whole wall */
+        ctx.fillRect(vx0,vy0,SW,SH);
+        return true;
+
+      case "band":
+      case "cell":
+        x=l.x*W; y=l.y*H; w=l.w*W; h=l.h*H;
+        if(l.rot||l.skew){
+          /* generous margin — a rotated box can reach outside its own bbox */
+          var m=Math.max(w,h);
+          if(x+w+m<vx0||x-m>vx1||y+h+m<vy0||y-m>vy1) return false;
+          s=splitCol(l.col); ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
+          ctx.save(); ctx.translate(x,y);
+          if(l.rot) ctx.rotate(l.rot*Math.PI/180);
+          if(l.skew) ctx.transform(1,0,Math.tan(l.skew*Math.PI/180),1,0,0);
+          if(l.sc!==undefined&&l.sc!==1){ ctx.translate(w/2,h/2); ctx.scale(l.sc,l.sc); ctx.translate(-w/2,-h/2); }
+          ctx.fillRect(0,0,w,h); ctx.restore();
+          return true;
+        }
+        if(l.sc!==undefined&&l.sc!==1){
+          var cx=x+w/2, cy=y+h/2; w*=l.sc; h*=l.sc; x=cx-w/2; y=cy-h/2;
+        }
+        if(x+w<vx0||x>vx1||y+h<vy0||y>vy1) return false;
+        s=splitCol(l.col); ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
+        ctx.fillRect(x,y,w,h);
+        return true;
+
+      case "dot":
+        r=l.r*W; x=l.x*W; y=l.y*H;
+        if(x+r<vx0||x-r>vx1||y+r<vy0||y-r>vy1) return false;
+        s=splitCol(l.col); ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
+        /* under a couple of pixels a square and a circle are the same picture,
+           and a rect costs no path */
+        if(r<1.4){ ctx.fillRect(x-r,y-r,r*2,r*2); return true; }
+        ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill();
+        return true;
+
+      case "ring":
+        r=l.r*W; x=l.x*W; y=l.y*H; w=(l.w||3);
+        if(x+r+w<vx0||x-r-w>vx1||y+r+w<vy0||y-r-w>vy1) return false;
+        s=splitCol(l.col); ctx.globalAlpha=a*s.a; ctx.strokeStyle=s.c; ctx.lineWidth=w;
+        ctx.beginPath(); ctx.arc(x,y,Math.max(0.5,r),0,6.2832); ctx.stroke();
+        return true;
+
+      case "glow":
+        r=l.r*W; x=l.x*W; y=l.y*H;
+        if(x+r<vx0||x-r>vx1||y+r<vy0||y-r>vy1) return false;
+        var G=gradFor(l.col,r);
+        ctx.save(); ctx.translate(x,y); ctx.scale(r/G.r,r/G.r);
+        ctx.globalAlpha=a*G.a; ctx.fillStyle=G.g;
+        ctx.beginPath(); ctx.arc(0,0,G.r,0,6.2832); ctx.fill();
+        ctx.restore();
+        return true;
+
+      case "tri":
+        w=l.w*W; h=l.h*H; x=l.x*W; y=l.y*H;
+        if(x+w<vx0||x-w>vx1||y+h<vy0||y-h>vy1) return false;
+        s=splitCol(l.col); ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
+        ctx.beginPath();
+        if(l.dir==="down"){ ctx.moveTo(x-w/2,y); ctx.lineTo(x+w/2,y); ctx.lineTo(x,y+h); }
+        else { ctx.moveTo(x-w/2,y+h); ctx.lineTo(x+w/2,y+h); ctx.lineTo(x,y); }
+        ctx.closePath(); ctx.fill();
+        return true;
+
+      case "word":
+        fs=l.h*H;
+        tw=natW(l.t,l.track||0)*fs/100;
+        if(l.fit && tw>l.fit*W){ fs=fs*(l.fit*W)/tw; tw=l.fit*W; }
+        sc=(l.sc===undefined?1:l.sc);
+        x=l.x*W; y=l.y*H;
+        w=tw*sc; h=fs*sc;
+        if(x+w/2<vx0||x-w/2>vx1||y+h<vy0||y-h>vy1) return false;
+        s=splitCol(l.col); ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
+        /* bucket the px size so the glyph atlas is reused, then take up the
+           remainder with a transform — the classic mip trick */
+        bk=bucketFor(fs);
+        var k=fs/bk;
+        ctx.save();
+        ctx.translate(x,y);
+        ctx.scale(k*sc,k*sc);
+        ctx.font="400 "+bk+"px Anton, 'Arial Narrow', sans-serif";
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        if(l.rot) ctx.rotate(l.rot*Math.PI/180);
+        if(l.track){
+          /* canvas has no letter-spacing everywhere yet, so pre-measure and
+             step the glyphs; only used by the tracked-out small caps */
+          var str=l.t, gw=[], tot=0, sp=(l.track||0)*bk, j;
+          for(j=0;j<str.length;j++){ gw[j]=ctx.measureText(str[j]).width; tot+=gw[j]+sp; }
+          tot-=sp;
+          var px0=-tot/2;
+          ctx.textAlign="left";
+          for(j=0;j<str.length;j++){ ctx.fillText(str[j],px0,0); px0+=gw[j]+sp; }
+        }else{
+          ctx.fillText(l.t,0,0);
+        }
+        ctx.restore();
+        return true;
+    }
+    return false;
+  }
+
+  /* per-output overlay: drawn in SCREEN space, after the wall */
+  function drawScreen(sp){
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    var s;
+    if(sp.bg){ s=splitCol(sp.bg); ctx.globalAlpha=(sp.a===undefined?1:sp.a)*s.a;
+               ctx.fillStyle=s.c; ctx.fillRect(0,0,SW,SH); }
+    if(sp.dim){ ctx.globalAlpha=sp.dim; ctx.fillStyle=sp.tint||"#000"; ctx.fillRect(0,0,SW,SH); }
+    if(sp.hair!==undefined&&sp.hair!==null){
+      var inset=sp.hair*0.5*SW;
+      ctx.globalAlpha=(sp.hairA===undefined?1:sp.hairA);
+      ctx.fillStyle="#EFE7DA";
+      ctx.fillRect(inset,0,1,SH); ctx.fillRect(SW-inset-1,0,1,SH);
+    }
+    if(sp.txt){
+      var fs=SH*(sp.txtH||0.3), bk=bucketFor(fs), k=fs/bk;
+      ctx.globalAlpha=(sp.txtA===undefined?1:sp.txtA);
+      ctx.fillStyle=sp.txtCol||"#fff";
+      ctx.save(); ctx.translate(SW/2,SH/2); ctx.scale(k,k);
+      ctx.font="400 "+bk+"px Anton, 'Arial Narrow', sans-serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(sp.txt,0,0); ctx.restore();
+    }
+    if(sp.flash){ ctx.globalAlpha=sp.flash; ctx.fillStyle=sp.flashCol||"#fff";
+                  ctx.fillRect(0,0,SW,SH); }
+    ctx.globalAlpha=1;
+  }
+
+  return {resize:resize, draw:draw, geo:geo, ctx:function(){ return ctx; }};
 }
-
-function paintScreen(ov,sp,w,h){
-  if(!sp) sp={};
-  ov.bg.style.background = sp.bg||"transparent";
-  ov.bg.style.opacity = sp.bg? (sp.a===undefined?1:sp.a) : 0;
-  ov.tint.style.background = sp.tint||"#000";
-  ov.tint.style.opacity = sp.dim||0;
-  ov.flash.style.background = sp.flashCol||"#fff";
-  ov.flash.style.opacity = sp.flash||0;
-  var hp = sp.hair;
-  if(hp===undefined || hp===null){ ov.h1.style.opacity=0; ov.h2.style.opacity=0; }
-  else{
-    var inset = hp*0.5*w;
-    ov.h1.style.opacity=sp.hairA===undefined?1:sp.hairA; ov.h1.style.left=px(inset);
-    ov.h2.style.opacity=sp.hairA===undefined?1:sp.hairA; ov.h2.style.left=px(w-inset-1);
-  }
-  if(sp.txt){
-    ov.txt.textContent=sp.txt;
-    ov.txt.style.opacity=sp.txtA===undefined?1:sp.txtA;
-    ov.txt.style.color=sp.txtCol||"#fff";
-    ov.txt.style.fontSize=px(h*(sp.txtH||0.3));
-    ov.txt.style.letterSpacing=(sp.txtTrack||0)+"em";
-  } else ov.txt.style.opacity=0;
-}
-
 /* ══════════════════════════════════════════════════════════════════════════
    5 · EASING + SMALL HELPERS
    ══════════════════════════════════════════════════════════════════════════ */
@@ -2554,13 +2728,15 @@ function bootTV(){
 
   document.body.classList.add("tvmode");
   if(Q.get("diag")==="1") document.body.classList.add("diag");
+  if(BENCH) document.body.classList.add("bench");
+  var hud=document.getElementById("tvbench");
   document.title = ev.name+" · TV "+(tvIdx+1)+" · "+L.name;
 
   var root=document.getElementById("tvroot");
   var scr=document.getElementById("tvscreen");
-  var can=document.createElement("div"); can.className="canvas"; can.style.position="absolute";
+  var can=document.createElement("canvas"); can.className="fb";
   scr.appendChild(can);
-  var ov=mkOverlay(); scr.appendChild(ov.root);
+  var R=makeRenderer(can);
   document.getElementById("tvhint").style.display = Q.get("bezel")==="0" ? "none" : "block";
 
   var geo, r, W=0,H=0,SW=0,SH=0;
@@ -2575,10 +2751,8 @@ function bootTV(){
     SW=vw; SH=vw*9/16;
     if(SH>vh){ SH=vh; SW=vh*16/9; }
     scr.style.width=SW+"px"; scr.style.height=SH+"px";
-    W=SW/r.w; H=SH/r.h;
-    can.style.width=W+"px"; can.style.height=H+"px";
-    can.style.left=(-r.x*W)+"px"; can.style.top=(-r.y*H)+"px";
-    ov.txt.style.fontSize=(SH*0.3)+"px";
+    var g=R.resize(SW,SH,r,window.devicePixelRatio||1);
+    W=g.W; H=g.H;
     /* == null catches the boot call, where hold is declared but not yet assigned */
     paint(hold==null ? loopPos(ev.d) : cl(hold,0,ev.d+REST));
   }
@@ -2705,11 +2879,14 @@ function bootTV(){
   var period=ev.d+REST;
   function paint(p){
     var f=frameAt(ev,L,p);
-    paintCanvas(can,f.layers,W,H,f.shake);
-    paintScreen(ov, f.screens?f.screens[tvIdx]:null, SW, SH);
+    R.draw(f, f.screens?f.screens[tvIdx]:null);
     return {ms:p,u:+f.u.toFixed(4),phase:f.phase,layers:f.layers.length};
   }
+  /* rolling frame cost, measured on the device that is actually rendering —
+     a desktop's numbers say nothing about what a QCS6490 will do */
+  var bench={n:0,sum:0,max:0,drop:0,last:0,ms:0,drawn:0,culled:0};
   (function tick(){
+    var t0=performance.now();
     /* the armed switch lands here, inside the frame loop, so it takes effect
        within one frame of `at` on every screen holding it */
     if(pending && Date.now()>=pending.at){ var q=pending; pending=null; applyState(q.s); }
@@ -2717,12 +2894,11 @@ function bootTV(){
     if(!active){
       /* This output has no cell in the current layout. Say so — clamping would
          silently duplicate another screen and look like the wall is working. */
-      paintCanvas(can,[
+      R.draw({layers:[
         {k:"fill",col:"#0A0807"},
         {k:"word",t:"OUTPUT "+(rawIdx+1),x:.5,y:.44,h:.16,col:hexA("#EFE7DA",.5),fit:.7,track:.16},
         {k:"word",t:"NOT IN "+L.name.toUpperCase(),x:.5,y:.62,h:.07,col:hexA("#EFE7DA",.28),fit:.7,track:.2}
-      ],SW,SH);
-      paintScreen(ov,null,SW,SH);
+      ]}, null);
       if(document.body.classList.contains("diag"))
         diag.textContent="output  "+(rawIdx+1)+" — idle\nlayout  "+L.id+" has "+
           L.cells.length+" cells\nlink    "+LINK.status+" · "+LINK.mode+" · room "+(LINK.room||"—");
@@ -2731,12 +2907,25 @@ function bootTV(){
 
     var p = hold!==null ? cl(hold,0,period) : loopPos(ev.d);
     var f=frameAt(ev,L,p);
-    paintCanvas(can,f.layers,W,H,f.shake);
-    paintScreen(ov, f.screens?f.screens[tvIdx]:null, SW, SH);
+    var st=R.draw(f, f.screens?f.screens[tvIdx]:null);
     /* A ring buffer of frames ACTUALLY PAINTED, so sync can be checked against
        what reached the glass rather than against what the maths intended. */
     trace.push({t:Date.now(),ms:Math.round(p),u:+f.u.toFixed(5),ev:ev.id});
     if(trace.length>TRACE_MAX) trace.shift();
+
+    var dt=performance.now()-t0;
+    bench.n++; bench.sum+=dt; bench.ms=dt; bench.drawn=st.drawn; bench.culled=st.layers-st.drawn;
+    if(dt>bench.max) bench.max=dt;
+    if(bench.last && (t0-bench.last)>25) bench.drop++;     /* missed a 60 Hz slot */
+    bench.last=t0;
+    if(bench.n>=120){ bench.avg=bench.sum/bench.n; bench.sum=0; bench.n=0; bench.max=0; }
+    if(BENCH) hud.textContent=
+      "frame  "+dt.toFixed(2)+" ms   avg "+(bench.avg||dt).toFixed(2)+
+      "   budget 16.67\nlayers "+st.drawn+" drawn / "+st.layers+" ("+
+      (st.layers-st.drawn)+" culled)\ndrops  "+bench.drop+"   dpr "+
+      (R.geo().DPR)+"   wall "+Math.round(R.geo().W)+"×"+Math.round(R.geo().H)+
+      "\nout    "+Math.round(SW)+"×"+Math.round(SH)+"   overdraw saved "+
+      (R.geo().W*R.geo().H/(SW*SH)).toFixed(1)+"×";
     if(document.body.classList.contains("diag")){
       diag.textContent =
         "event   "+ev.id+"  ("+ev.name+")\n"+
@@ -2753,14 +2942,6 @@ function bootTV(){
     }
     requestAnimationFrame(tick);
   })();
-}
-function mkOverlay(){
-  var d=document.createElement("div"); d.className="sov";
-  d.innerHTML='<div class="sbg"></div><div class="stint"></div>'+
-    '<div class="shair"><i></i><i></i></div><div class="stxt"></div><div class="sflash"></div>';
-  return {root:d, bg:d.children[0], tint:d.children[1],
-          h1:d.children[2].children[0], h2:d.children[2].children[1],
-          txt:d.children[3], flash:d.children[4]};
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2899,11 +3080,12 @@ function bootApp(){
       var d=document.createElement("div"); d.className="scr";
       d.style.left=(r.x*W)+"px"; d.style.top=(r.y*H)+"px";
       d.style.width=(r.w*W)+"px"; d.style.height=(r.h*H)+"px";
-      var can=document.createElement("div"); can.className="canvas";
-      can.style.width=W+"px"; can.style.height=H+"px";
-      can.style.left=(-r.x*W)+"px"; can.style.top=(-r.y*H)+"px";
+      var can=document.createElement("canvas"); can.className="fb";
       d.appendChild(can);
-      var ov=mkOverlay(); d.appendChild(ov.root);
+      /* the SAME renderer the outputs use — one code path, so the preview
+         cannot quietly disagree with the wall */
+      var R=makeRenderer(can);
+      R.resize(r.w*W, r.h*H, r, window.devicePixelRatio||1);
       var pl=document.createElement("div"); pl.className="plate";
       pl.textContent=(L.labels?L.labels[i]:("TV "+(i+1)));
       d.appendChild(pl);
@@ -2911,7 +3093,7 @@ function bootApp(){
       d.onmouseleave=function(){ d.classList.remove("hi"); };
       d.onclick=function(){ window.open(tvURL(i),"_blank"); };
       stage.appendChild(d);
-      SCREENS.push({el:d,can:can,ov:ov,w:r.w*W,h:r.h*H});
+      SCREENS.push({el:d,R:R,w:r.w*W,h:r.h*H});
     });
     stage.__W=W; stage.__H=H;
     render(currentMs());          /* paint at once — do not wait for the next frame */
@@ -3188,10 +3370,9 @@ function bootApp(){
          : Math.min(loopPos(state.ev.d), state.ev.d+REST);
   }
   function render(ms){
-    var f=frameAt(state.ev,state.L,ms), W=stage.__W, H=stage.__H;
+    var f=frameAt(state.ev,state.L,ms);
     SCREENS.forEach(function(s,i){
-      paintCanvas(s.can,f.layers,W,H,f.shake);
-      paintScreen(s.ov, f.screens?f.screens[i]:null, s.w, s.h);
+      s.R.draw(f, f.screens?f.screens[i]:null);
     });
     return f;
   }
@@ -3231,7 +3412,26 @@ function bootApp(){
         the only supported way to drive a frame without waiting for the clock. ── */
   window.__BB={
     TEAMS:TEAMS, TYPES:TYPES, LAYOUTS:LAYOUTS, GRAMMARS:G, RIVAL:RIVAL, LINK:LINK,
-    teamKeys:TEAMKEYS, makeEvent:makeEvent,
+    teamKeys:TEAMKEYS, makeEvent:makeEvent, makeRenderer:makeRenderer, geoOf:geoOf,
+    /* Benchmark a real output surface. Run this ON the device — a desktop's
+       numbers say nothing about what an Adreno 643 will do. */
+    bench:function(layoutId,typeId,team,w,h,fx,N){
+      var L=LAYOUTS[layoutId]||LAYOUTS.row4, g=geoOf(L);
+      var cv=document.createElement("canvas"), R=makeRenderer(cv);
+      var e=makeEvent(typeId||"td",team||"TEX",RIVAL[team||"TEX"]);
+      N=N||300; w=w||1920; h=h||1080;
+      R.resize(w,h,g.rect(L.cells[0]),1);
+      var i,st=null;
+      for(i=0;i<30;i++) R.draw(frameAt(e,L,e.d*(i/30),fx),null);       /* warm */
+      var t0=performance.now();
+      for(i=0;i<N;i++) st=R.draw(frameAt(e,L,e.d*((i%120)/120),fx),null);
+      var ms=(performance.now()-t0)/N, gg=R.geo();
+      return {layout:L.id,cue:e.typeId,fx:(fx===undefined?FX:fx),surface:w+"x"+h,
+              msPerFrame:+ms.toFixed(3), fps:Math.round(1000/ms),
+              layers:st.layers, drawn:st.drawn, culled:st.layers-st.drawn,
+              wall:Math.round(gg.W)+"x"+Math.round(gg.H),
+              overdrawAvoided:+((gg.W*gg.H)/(w*h)).toFixed(1)};
+    },
     frameAt:frameAt, payload:payloadFor, url:tvURL,
     get:function(){ return {type:state.type,team:state.team,opp:state.opp,
       event:state.ev.id,name:state.ev.name,layout:state.L.id,gap:GAP,

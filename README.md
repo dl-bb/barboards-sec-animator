@@ -160,6 +160,55 @@ all 156 cells in all 12 layouts.
 Params work as a query string **or** a hash. Changing the hash on a running screen swaps
 the cue with no reload and no flash.
 
+## Rendering
+
+Target hardware is a QCS6490 driving two 1080p60 outputs, so the render path is
+immediate-mode rather than retained.
+
+It began as a DOM painter — up to 131 absolutely positioned elements per screen,
+every one restyled each frame, paying style-recalc → layout → paint → composite on
+all of them. Frame *construction* in JS measures 11 µs, so the DOM was the entire cost.
+
+Two changes carry almost all of the win:
+
+**Culling.** Every output used to rasterise the *whole wall* and crop it with
+`overflow:hidden` — 4× the pixels on a row of four, 8× on a rail of eight, **26.9×**
+on the reference room. Driving two 1080p60 surfaces that way is ~1 Gpx/s of composite
+to show 249 Mpx/s of picture. The context is now translated to the output's own window
+and any layer whose bounding box misses it is rejected before a pixel is touched. On
+`room14` that leaves **6 of 101** layers to draw.
+
+**Immediate mode.** One opaque canvas per output, the layer array drawn straight into
+it. The layer array already *was* a display list. No nodes, no style invalidation, and
+the frame flips as a single surface so elements cannot tear against each other.
+
+The rest is the usual bag of tricks: glyph sizes quantised to buckets so the browser's
+glyph atlas is reused instead of being invalidated by a fractional `font-size` every
+frame, with the residual taken up by a transform scale; radial gradients cached rather
+than rebuilt; vignette and scanlines baked once into an offscreen surface and blitted;
+circles under a couple of pixels drawn as rects; a sine lookup table for the particle
+cues; `{alpha:false, desynchronized:true}` on the context.
+
+The control-room preview uses the **same renderer** as the outputs — one code path, so
+the preview cannot quietly disagree with the wall.
+
+### Measuring it on the device
+
+Numbers from a desktop say nothing about an Adreno 643, so measure on the hardware:
+
+```
+…/?tv=1&room=<code>&bench=1
+```
+
+That puts a rolling HUD on the output — frame time, rolling average against the
+16.67 ms budget, layers drawn vs culled, dropped frames, and the overdraw factor
+avoided. `window.__BB.bench(layout, cue, team, w, h, fx, N)` runs a headless sweep on
+the device and returns the same figures.
+
+On a desktop at 1920×1080 with FX at max and a forced GPU flush (pessimistic — the
+readback stalls the pipeline), the heaviest cues land at 3.8–9.8 ms against a 16.67 ms
+budget.
+
 ## Running it locally
 
 ```bash
