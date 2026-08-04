@@ -289,6 +289,7 @@ body.bench #tvbench{display:block}
   <span class="lb" id="fps">fps —</span>
   <canvas id="fpsgraph" title="every frame, last ~240. green under budget, amber late, red a dropped flip"></canvas>
   <span class="lb" id="clk">wall clock —</span>
+  <button class="btn" id="bDiag" title="Run the full frame diagnostic and copy the report">Diagnose</button>
   <button class="btn" id="bJoinQR" title="Full-size QR for patrons to scan">Join QR</button>
   <button class="btn" id="bOpen">Open all TVs</button>
 </header>
@@ -501,7 +502,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0014";
+var VERSION = "v1.0015";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1855,21 +1856,26 @@ function makeFPS(window_){
     stats:function(){
       var c=Math.min(n,N); if(c<2) return null;
       var sum=0,js=0,i;
+      function wMinOf(a,k){ var m=1e9,q; for(q=0;q<k;q++) if(a[q]<m) m=a[q]; return m; }
       for(i=0;i<c;i++){ sum+=gaps[i]; if(jsv[i]>js) js=jsv[i]; }
       var avg=sum/c;
       /* the refresh rate is the FASTEST frame seen, not the average — the average
          is dragged down by every drop and would keep re-labelling the panel */
-      var hz=Math.round(1000/Math.max(1,bestGap));
+      var hz=Math.round(1000/Math.max(1,wMinOf(gaps,c)));
       if(hz>200||hz<20) hz=Math.round(1000/avg);
       /* a dropped flip is a gap of 1.5 refreshes or more */
       var vsync=1000/hz, drops=0;
       for(i=0;i<c;i++) if(gaps[i]>vsync*1.5) drops++;
+      /* true extremes over the same samples the drop count uses */
+      var wMax=0, wMin=1e9;
+      for(i=0;i<c;i++){ if(gaps[i]>wMax) wMax=gaps[i]; if(gaps[i]<wMin) wMin=gaps[i]; }
       return {
         cur:Math.round(1000/Math.max(0.001,ema)),
-        min:Math.round(1000/Math.max(0.001,worstGap)),
+        min:Math.round(1000/Math.max(0.001,wMax)),
+        minHeld:Math.round(1000/Math.max(0.001,worstGap)),
         avg:Math.round(1000/avg),
-        max:Math.round(1000/Math.max(0.001,bestGap)),
-        worstGapMs:+worstGap.toFixed(1), avgGapMs:+avg.toFixed(2), jsMaxMs:+js.toFixed(2),
+        max:Math.round(1000/Math.max(0.001,wMin)),
+        worstGapMs:+wMax.toFixed(1), avgGapMs:+avg.toFixed(2), jsMaxMs:+js.toFixed(2),
         drops:drops, dropPct:+(100*drops/c).toFixed(1), samples:c, hz:hz,
         worstJsMs:+worstJs.toFixed(2), worstOtherMs:+worstOther.toFixed(2),
         blame: worstJs > worstOther ? "render" : "browser"
@@ -4187,6 +4193,57 @@ function bootApp(){
       box.appendChild(d);
     });
   }
+  document.getElementById("bDiag").onclick=function(){
+    var btn=this; btn.textContent="measuring…"; btn.disabled=true;
+    var pre=FPS.stats(), preCad=FPS.cadence();
+    baselineTest(5).then(function(base){
+      var post=FPS.stats(), cad=FPS.cadence();
+      var lines=[];
+      lines.push("BarBoards frame diagnostic  "+VERSION);
+      lines.push("");
+      lines.push("MACHINE");
+      lines.push("  screen        "+screen.width+"x"+screen.height+"  dpr "+window.devicePixelRatio);
+      lines.push("  window        "+window.innerWidth+"x"+window.innerHeight);
+      lines.push("  cores         "+(navigator.hardwareConcurrency||"?"));
+      lines.push("  dpr in use    "+(DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1)));
+      lines.push("");
+      lines.push("CONTROL — empty rAF loop, this page, drawing NOTHING");
+      lines.push("  display       ~"+base.displayHz+" Hz");
+      lines.push("  gap p50/p95   "+base.gapMs.p50+" / "+base.gapMs.p95+" ms");
+      lines.push("  dropped       "+base.dropPct+"%");
+      lines.push("  -> "+base.verdict);
+      lines.push("");
+      lines.push("APP — the same page actually rendering");
+      if(post){
+        lines.push("  cue           "+state.type+"/"+state.team+" on "+state.L.id+"  fx"+FX);
+        lines.push("  fps min/avg   "+post.min+" / "+post.avg+"   worst gap "+post.worstGapMs+" ms");
+        lines.push("  dropped       "+post.dropPct+"%");
+        lines.push("  our render    "+post.worstJsMs+" ms worst frame");
+        lines.push("  browser       "+post.worstOtherMs+" ms worst frame  -> "+post.blame);
+        lines.push("  wall / panel  "+wallMs.toFixed(2)+" / "+panelMs.toFixed(2)+" ms");
+      }
+      lines.push("");
+      lines.push("CADENCE");
+      if(cad){
+        lines.push("  base          "+cad.baseMs+" ms (~"+cad.baseHz+" Hz)");
+        lines.push("  on cadence    "+cad.onCadencePct+"%");
+        lines.push("  x2 or worse   "+cad.doubledPct+"%");
+        lines.push("  irregular     "+cad.irregularPct+"%");
+        lines.push("  -> "+cad.diagnosis);
+      } else lines.push("  not enough samples yet");
+      lines.push("");
+      lines.push("READ IT LIKE THIS");
+      lines.push("  If the CONTROL drops too, the page cannot be the cause and no");
+      lines.push("  render work will help — look at display refresh mismatch first.");
+      lines.push("  If CONTROL is clean but APP drops, it is this page and I can fix it.");
+      var txt=lines.join("\n");
+      console.log("%c"+txt,"font-family:monospace");
+      try{ navigator.clipboard&&navigator.clipboard.writeText(txt); }catch(e){}
+      btn.textContent="Diagnose ✓ copied"; btn.disabled=false;
+      setTimeout(function(){ btn.textContent="Diagnose"; },4000);
+    });
+  };
+
   document.getElementById("bJoinQR").onclick=function(){
     var url=patronURL(state.ev.house?state.ev:makeEvent("colorwars",state.team,state.opp));
     if(!url){ alert("Connect the wall link first — the room code is part of the URL."); return; }
