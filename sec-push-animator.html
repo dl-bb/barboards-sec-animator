@@ -508,7 +508,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0023";
+var VERSION = "v1.0024";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1206,6 +1206,29 @@ var TYPES=[
  name:"AMBIENT RAIL", sub:"TIER ZERO · COSTS NO WINDOW",
  desc:function(c){ return "House cue — the always-on rail"; }, sr:{}},
 
+/* ── broadcast furniture ────────────────────────────────────────────────
+   Framed elements rather than full-bleed. Every value comes off the payload. */
+{id:"scorebug", grp:"tv", label:"Score bug", cue:"scorebug", d:9000, house:true,
+ amp:22,win:0,tier:0,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
+ period:4,clock:"2:41",hs:31,as:24,
+ name:"SCORE BUG", sub:"CLOCK · DOWN · POSSESSION",
+ desc:function(c){ return "Broadcast furniture — the bug, built from the payload"; },
+ sr:{"start_situation.down":4,"start_situation.yfd":2}},
+
+{id:"lower3", grp:"tv", label:"Lower third", cue:"lower3", d:8000, house:true,
+ amp:30,win:0,tier:1,reg:"celebratory", cat:"broadcast",type:null,play:"rush",yards:12,
+ period:4,clock:"0:04",hs:31,as:28,
+ name:"LOWER THIRD", sub:"PLAYER + STAT CALLOUT",
+ desc:function(c){ return c.p(1)+" 12 yd run ("+c.p(3)+" kick)"; },
+ sr:{"rush.touchdown":1,"rush.yards":12}},
+
+{id:"replay", grp:"tv", label:"Replay wipe", cue:"replay", d:9000, house:true,
+ amp:44,win:0,tier:1,reg:"celebratory", cat:"broadcast",type:null,play:"pass",yards:41,
+ period:3,clock:"7:12",hs:24,as:21,
+ name:"REPLAY", sub:"WIPE IN · SCRUB · WIPE OUT",
+ desc:function(c){ return c.p(0)+" 41 yd pass to "+c.p(2)+" to the "+c.ok+" 18"; },
+ sr:{"pass.yards":41}},
+
 /* ── benchmark ─────────────────────────────────────────────────────────
    Deliberately heavy. Not for a wall on a Saturday; for finding the knee. */
 {id:"flyover", grp:"bench", label:"Stadium flyover", cue:"flyover", d:24000, house:true,
@@ -1246,7 +1269,7 @@ var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
 var TYPE_GROUPS=[["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
   ["ritual","Ritual"],["house","House cues · no push event"],
-  ["patron","Patron · interactive"],["bench","Benchmark"]];
+  ["patron","Patron · interactive"],["tv","Broadcast furniture"],["bench","Benchmark"]];
 var TEAMKEYS=Object.keys(TEAMS);
 
 /* Cross a type with a school. Everything downstream — grammars, payload, timing
@@ -3392,6 +3415,184 @@ G.flyover3d=function(u,C){
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
+   6e · BROADCAST FURNITURE
+   ══════════════════════════════════════════════════════════════════════════
+
+   Every cue so far is full-bleed. Broadcast alternates full-bleed with FRAMED
+   elements — a bug in the corner, a third that slides over the picture, a wipe
+   that hands you to a replay. That alternation is most of what makes something
+   read as televised rather than as a screensaver.
+
+   All three are assembled from the event's real payload: the same scores,
+   clock, down, distance, possession and play description that came off the
+   feed. Nothing here is decorative text.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* A chamfered plate. Broadcast furniture is never a plain rectangle — the
+   angled end is the whole visual signature, and the bright edge sells it as
+   a machined object rather than a coloured box. */
+function plate(o,x,y,w,h,col,a,edge,skew){
+  var sk=(skew===undefined)?-13:skew;
+  o.push({k:"band",x:x,y:y,w:w,h:h,col:col,a:a,skew:sk});
+  if(edge) o.push({k:"band",x:x,y:y,w:w,h:h*0.075,col:edge,a:a,skew:sk});
+}
+/* the name out of a play description: "M. Woods 62 yd interception return" */
+function playerOfDesc(d){
+  if(!d) return "";
+  var m=/([A-Z]\.\s?[A-Z][a-zA-Z'\-]+)/.exec(d);
+  return m?m[1].toUpperCase():"";
+}
+function statOfDesc(d){
+  if(!d) return "";
+  var t=d.replace(/^[A-Z]\.\s?[A-Z][a-zA-Z'\-]+\s*/,"");
+  t=t.replace(/\s*\([^)]*\)\s*$/,"");
+  return t.toUpperCase().slice(0,44);
+}
+
+/* ── the score bug ───────────────────────────────────────────────────────── */
+G.scorebug=function(u,C){
+  var T=C.T, O=TEAMS[C.ev.opp]||T, ev=C.ev, o=[];
+  o.push({k:"fill",col:T.deep==="#000000"?"#07090E":T.deep});
+  /* a quiet field wash so the bug has something to sit over */
+  o.push({k:"band",x:0,y:0.34,w:1,h:0.40,col:"#0C2A16",a:0.85});
+  var i;
+  for(i=0;i<=10;i++)
+    o.push({k:"band",x:0.06+i*0.088,y:0.34,w:0.0016,h:0.40,col:hexA("#FFFFFF",.16)});
+
+  /* the bug builds left to right: plate, then chips, then numbers, then the
+     down-and-distance tab underneath — the order a real one animates in */
+  var slide=eo(seg(u,0.02,0.20));
+  var bx=mix(-0.62,0.055,slide), by=0.795, bh=0.115;
+  plate(o,bx,by,0.50,bh,hexA("#0A0D14",.96),1,hexA("#FFFFFF",.20));
+
+  var pos=(u%1)<0.5;                              /* possession alternates    */
+  function side(px,tm,score,has){
+    plate(o,px,by+bh*0.14,0.055,bh*0.72,tm.p,1,null,-13);
+    o.push({k:"word",t:tm.ab,x:px+0.085,y:by+bh*0.50,h:0.042,
+            col:"#FFFFFF",fit:.06,track:.02});
+    o.push({k:"word",t:score,x:px+0.155,y:by+bh*0.50,h:0.055,
+            col:has?"#FFFFFF":hexA("#FFFFFF",.74),fit:.045});
+    /* possession: a small wedge, the way every network marks it */
+    if(has) o.push({k:"tri",x:px+0.038,y:by+bh*0.30,w:0.016,h:0.028,
+                    col:"#FFE08A",dir:"up"});
+  }
+  if(slide>0.45){
+    side(bx+0.012,T,ev.hs,pos);
+    side(bx+0.205,O,ev.as,!pos);
+    o.push({k:"band",x:bx+0.196,y:by+bh*0.18,w:0.0015,h:bh*0.64,col:hexA("#FFFFFF",.28)});
+    /* clock block */
+    plate(o,bx+0.375,by+bh*0.10,0.115,bh*0.80,hexA("#161B26",.98),1,null,-13);
+    o.push({k:"word",t:"Q"+ev.period,x:bx+0.408,y:by+bh*0.34,h:0.026,
+            col:hexA("#FFFFFF",.62),fit:.035,track:.10});
+    o.push({k:"word",t:ev.clock,x:bx+0.435,y:by+bh*0.66,h:0.040,
+            col:"#FFFFFF",fit:.075});
+  }
+  /* down & distance tab drops after the bar lands */
+  var tab=eo(seg(u,0.22,0.34));
+  if(tab>0){
+    var ty=by+bh+0.006;
+    plate(o,0.068,ty,0.235,0.052,hexA(T.p,.95*tab),1,null,-13);
+    o.push({k:"word",t:(ev.sr&&ev.sr["start_situation.down"]===4?"4TH":"1ST")+" & "+
+            (ev.sr&&ev.sr["start_situation.yfd"]?ev.sr["start_situation.yfd"]:10),
+            x:0.145,y:ty+0.026,h:0.030,col:"#FFFFFF",fit:.10,track:.06,a:tab});
+    o.push({k:"word",t:"BALL ON "+T.ab+" 34",x:0.245,y:ty+0.026,h:0.022,
+            col:hexA("#FFFFFF",.72*tab),fit:.09,track:.08});
+  }
+  /* timeouts, as pips — the detail nobody notices until it is missing */
+  if(slide>0.7){
+    for(i=0;i<3;i++){
+      o.push({k:"band",x:bx+0.014+i*0.012,y:by+bh*0.86,w:0.008,h:0.006,
+              col:i<2?hexA("#FFFFFF",.85):hexA("#FFFFFF",.22)});
+      o.push({k:"band",x:bx+0.207+i*0.012,y:by+bh*0.86,w:0.008,h:0.006,
+              col:i<3?hexA("#FFFFFF",.85):hexA("#FFFFFF",.22)});
+    }
+  }
+  /* network tag, top right, the way a broadcast always carries one */
+  o.push({k:"word",t:"BARBOARDS",x:0.93,y:0.075,h:0.026,
+          col:hexA("#FFFFFF",.30),fit:.10,track:.24});
+  return {layers:o,phase:"score bug · "+(tab>0?"down & distance":"bar in")};
+};
+
+/* ── the lower third ─────────────────────────────────────────────────────── */
+G.lower3=function(u,C){
+  var T=C.T, ev=C.ev, o=[];
+  o.push({k:"fill",col:"#07090E"});
+  o.push({k:"band",x:0,y:0.30,w:1,h:0.44,col:"#0C2A16",a:0.8});
+  var i;
+  for(i=0;i<=8;i++)
+    o.push({k:"band",x:0.08+i*0.105,y:0.30,w:0.0016,h:0.44,col:hexA("#FFFFFF",.14)});
+
+  var name=playerOfDesc(ev.desc)||T.name.toUpperCase();
+  var stat=statOfDesc(ev.desc)||ev.sub;
+
+  /* in from the left, out to the left — furniture never crosses the frame */
+  var inn=eo(seg(u,0.04,0.22)), out=1-eo(seg(u,0.80,0.96));
+  var slide=Math.min(inn,out);
+  var x0=mix(-0.70,0.070,slide);
+  var y0=0.700, h1=0.088, h2=0.056;
+
+  /* accent spine, then the name plate, then the stat plate under it */
+  plate(o,x0-0.016,y0,0.020,h1+h2+0.004,T.p,slide,null,-13);
+  plate(o,x0,y0,0.46,h1,hexA("#0A0D14",.97),slide,hexA("#FFFFFF",.18));
+  o.push({k:"word",t:name,x:x0+0.225,y:y0+h1*0.52,h:0.052,
+          col:"#FFFFFF",fit:.42,track:.02,a:seg(u,0.10,0.24)*out});
+
+  var s2=eo(seg(u,0.14,0.30));
+  plate(o,x0+0.006,y0+h1+0.004,0.40,h2,hexA(T.p,.95),Math.min(s2,out),null,-13);
+  o.push({k:"word",t:stat,x:x0+0.206,y:y0+h1+0.004+h2*0.52,h:0.028,
+          col:"#FFFFFF",fit:.36,track:.06,a:Math.min(s2,out)});
+
+  /* a school mark on the right, balancing the composition */
+  if(u>0.30&&u<0.86){
+    var m=seg(u,0.30,0.42)*(1-seg(u,0.78,0.86));
+    plate(o,0.760,y0,0.170,h1,hexA(T.p,.92*m),1,hexA("#FFFFFF",.25*m));
+    o.push({k:"word",t:T.ab,x:0.845,y:y0+h1*0.52,h:0.050,col:"#FFFFFF",fit:.14,a:m});
+  }
+  return {layers:o,phase:"lower third · "+(slide<1?"in":"held")};
+};
+
+/* ── the replay wipe ─────────────────────────────────────────────────────── */
+G.replay=function(u,C){
+  var T=C.T, ev=C.ev, o=[], i;
+  /* the live picture, the wipe across it, the replay treatment, the wipe back */
+  var live=function(tint){
+    o.push({k:"fill",col:"#07090E"});
+    o.push({k:"band",x:0,y:0.28,w:1,h:0.46,col:tint?"#132B3E":"#0C2A16",a:0.9});
+    for(i=0;i<=10;i++)
+      o.push({k:"band",x:0.05+i*0.09,y:0.28,w:0.0016,h:0.46,
+              col:hexA("#FFFFFF",tint?.10:.16)});
+  };
+  var w1=seg(u,0.10,0.28), w2=seg(u,0.72,0.90);
+  var inReplay=(u>=0.24&&u<0.78);
+  live(inReplay);
+
+  if(inReplay){
+    /* the badge that tells you what you are looking at */
+    plate(o,0.055,0.085,0.215,0.070,hexA("#0A0D14",.95),1,hexA(T.p,.9));
+    o.push({k:"word",t:"REPLAY",x:0.163,y:0.120,h:0.036,col:"#FFFFFF",fit:.16,track:.14});
+    /* a scrub bar, because a replay always has one */
+    var pr=seg(u,0.30,0.74);
+    o.push({k:"band",x:0.055,y:0.885,w:0.62,h:0.006,col:hexA("#FFFFFF",.22)});
+    o.push({k:"band",x:0.055,y:0.885,w:0.62*pr,h:0.006,col:T.p});
+    o.push({k:"band",x:0.055+0.62*pr-0.002,y:0.874,w:0.004,h:0.028,col:"#FFFFFF"});
+    o.push({k:"word",t:statOfDesc(ev.desc)||ev.sub,x:0.36,y:0.945,h:0.026,
+            col:hexA("#FFFFFF",.66),fit:.60,track:.08});
+  }
+
+  /* the wipe itself: a hard chamfered edge with a bright leading line */
+  function wipe(p,dir){
+    if(p<=0||p>=1) return;
+    var x=dir>0 ? mix(-0.35,1.35,p) : mix(1.35,-0.35,p);
+    o.push({k:"band",x:x-0.30,y:-0.1,w:0.30,h:1.2,col:T.p,skew:-16});
+    o.push({k:"band",x:x-0.016,y:-0.1,w:0.016,h:1.2,col:"#FFFFFF",skew:-16});
+    o.push({k:"word",t:"REPLAY",x:x-0.15,y:0.5,h:0.075,col:"#FFFFFF",
+            fit:.24,track:.10,a:pulse(p)});
+  }
+  wipe(w1,1); wipe(w2,-1);
+  return {layers:o,phase:"replay · "+(inReplay?"in replay":(w1>0&&w1<1?"wipe in":"live"))};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
    6b · FX — the gain control
    Not a set of new cues. A layer that READS whatever frame a grammar produced
    and decorates it, so all 20 event types and all 16 schools get it without a
@@ -3425,6 +3626,15 @@ function fxDecorate(f, ev, C, level){
      goal-line stand would destroy the one cue whose whole value is that it
      adds nothing — this is the gate that lets the mode exist at all. */
   if(ev.reg==="tense"||ev.reg==="solemn"){ f.fxOff="register: "+ev.reg; return f; }
+  /* Broadcast furniture is CRISP. A score bug with chromatic fringing on the
+     numbers, or a lower third whose name is ghosted three deep, is not a richer
+     lower third — it is a broken one. These cues carry their own finish and the
+     gain control leaves them alone apart from a whisper of vignette. */
+  if(ev.grp==="tv"){
+    f.layers.push({k:"vig",a:level>=3?0.26:0.18});
+    f.fxOff="furniture: rendered crisp";
+    return f;
+  }
 
   var T=C.T, src=f.layers, hi=level>1, i, l;
   var flashA=0, hero=null, heroI=-1, flood=false;
@@ -3897,6 +4107,12 @@ var PHASES = {
   spotlight:[[0,.80,"Sweep","two passes"],[.80,1,"Reveal","school takes the wall"]],
   rail:[[0,1,"Ambient","continuous ticker"]],
   colorwars:[[0,1,"Live","driven by taps, not by the clock"]],
+  scorebug:[[0,.22,"Bar in","plate, chips, numbers"],[.22,.34,"Tab","down & distance"],
+            [.34,1,"Held","the bug sits"]],
+  lower3:[[0,.22,"Slide in","spine, name plate"],[.22,.30,"Stat","line under it"],
+          [.30,.80,"Held","read it"],[.80,1,"Out","back to the left"]],
+  replay:[[0,.24,"Wipe in","chamfered edge"],[.24,.72,"Replay","badge + scrub"],
+          [.72,1,"Wipe out","back to live"]],
   flyover3d:[[0,.20,"Approach","the bowl appears"],[.20,.40,"The bowl","tiers and roof"],
              [.40,.66,"Card stunt","the crowd spells it"],[.66,.86,"Pyro","3D shells"],
              [.86,1,"Lockup","school + venue"]],
