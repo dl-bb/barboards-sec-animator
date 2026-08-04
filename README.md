@@ -32,10 +32,37 @@ separately, so all 35 cues are available for all 16 schools against any opponent
 | Big plays | explosive play 40+ · fourth-down conversion · fake punt |
 | States & stoppages | red zone · two-minute warning · goal-line stand · review overturned |
 | Ritual | chant / call track |
-| House cues · no push event | the wave · decibel meter · kickoff countdown · rally clap · phones up · spotlight sweep · ambient rail |
+| House cues · no push event | **the team train** · the wave · decibel meter · kickoff countdown · rally clap · phones up · spotlight sweep · ambient rail |
 | Patron · interactive | Color Wars |
 | Broadcast furniture | **BarBoards Sports open** · BarBoards Saturday open · score bug · lower third · replay wipe |
 | Benchmark | stadium flyover · stadium flyover 3D |
+
+## The team train
+
+A side-scroller — which is what a row of four televisions has been asking for since the first
+layout. A steam locomotive hauls a tender and two boxcars the full length of the wall,
+lettered in the school's livery, chuffing as it goes.
+
+**On the mark.** There are no logo images in this file, and team logos are not ours to
+redraw, so the cars carry what a railroad would actually have painted on them: the school in
+its own colours. It themes all sixteen without a single asset.
+
+**On the size.** Everything is built in *height* fractions and converted, because a train
+sized against width is nonsense on this canvas — the same shape would be a locomotive on one
+screen and a mile of freight across a room of fourteen. Fix the size to screen height and the
+length follows physically: about 50% of a single screen, about 13% of a four-wide wall.
+A wall should get a small train with a long way to go.
+
+**On the chuff.** Smoke is emitted on *distance*, four puffs per revolution of the driving
+wheels, which is what a two-cylinder locomotive does. Tie it to the clock instead and the
+exhaust slides against the wheels and the whole thing stops reading as a machine. For the
+same reason the crossing is **linear**: ease-in-out was the first instinct and it is wrong
+twice over — it sprints through the middle and leaves the wall a quarter of the cue early,
+and it makes the exhaust beat accelerate and decelerate.
+
+Band rotation is rigid in pixels, so a spoke takes its length as a width fraction and its
+thickness as a height fraction, both from the same physical size. That is what keeps the
+wheels round and the coupling rods attached to their crank pins.
 
 ## BarBoards Sports — the network open
 

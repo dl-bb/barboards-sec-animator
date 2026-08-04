@@ -568,7 +568,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0031";
+var VERSION = "v1.0032";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1647,6 +1647,13 @@ var TYPES=[
  sub:function(T){ return TXT3 || T.venue.toUpperCase(); },
  desc:function(c){ return "Custom message on the touchdown animation"; },
  sr:{}},
+
+{id:"train", grp:"house", label:"The team train", cue:"train", d:11000, house:true,
+ amp:78,win:0,tier:2,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:2,clock:"8:20",hs:14,as:7,
+ name:function(T){ return T.ab+" LINE"; },
+ sub:function(T){ return "SIDE-SCROLLER · "+T.word; },
+ desc:function(c){ return "House cue — the team train, lettered and rolling"; }, sr:{}},
 
 {id:"bbsports", grp:"tv", label:"BarBoards Sports open", cue:"bbsports", d:12000, house:true,
  amp:95,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
@@ -3079,6 +3086,236 @@ G.runacross=function(u,C){
     o.push({k:"word",t:"Q"+C.ev.period+"  "+C.ev.clock,x:.5,y:.82,h:.06,col:hexA("#FFFFFF",.5),
             fit:.4,track:.2,a:cl(v3*4,0,1)});
   }
+  return {layers:o,phase:ph};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE TEAM TRAIN
+
+   A side-scroller, which is what a wall of four televisions in a row has been
+   asking for since the first layout: something that travels the whole canvas
+   instead of playing four times.
+
+   GEOMETRY. Everything here is built in HEIGHT fractions and converted, because
+   a train sized against width is nonsense on this canvas -- the same shape would
+   be a locomotive on one screen and a mile of freight on a room of fourteen. Fix
+   the size to the screen HEIGHT and the length follows physically: about 60% of
+   a single screen, about 15% of a four-wide wall, which is exactly right. A wall
+   should get a small train with a long way to go.
+
+     hw = AH/AW converts a height fraction to a width fraction.
+
+   Band rotation is rigid in PIXELS -- w*W by h*H, then rotate -- so a spoke takes
+   its length as a width fraction and its thickness as a height fraction, and both
+   come from the same physical size through hw. That is what makes the wheels
+   round and the coupling rods stay attached.
+
+   THE MARK. There are no logo images in this file and team logos are not ours to
+   redraw, so the cars carry what a railroad would actually have painted on them:
+   the school in its own livery, lettered on the boxcar. It themes all sixteen
+   without a single asset.
+
+   THE CHUFF. Smoke is emitted on DISTANCE, not on time -- four puffs per
+   revolution of the driving wheels, which is what a two-cylinder locomotive
+   does. Tie it to the clock instead and the smoke slides against the wheels and
+   the whole thing stops reading as a machine. */
+G.train=function(u,C){
+  var T=C.T, o=[], i, k;
+  var hw=C.geo.AH/C.geo.AW;            /* height fraction -> width fraction */
+  var WF=function(q){ return q*hw; };
+
+  /* ── ground ── */
+  var horizon=0.62, railY=0.815;
+  o.push({k:"fill",col:"#0A0E16"});
+  o.push({k:"lgrad",x:0,y:0,w:1,h:horizon,c0:mixHex("#0A0E16",T.deep,0.5),c1:"#0A0E16",dir:"v"});
+  /* a low skyline so there is something for the train to pass */
+  for(i=0;i<26;i++){
+    var bx=(i*0.041+det(i+11)*0.02)%1.02-0.01;
+    var bh=0.05+det(i+21)*0.10, bw=0.012+det(i+31)*0.02;
+    o.push({k:"band",x:bx,y:horizon-bh,w:bw,h:bh,col:hexA("#141B28",0.9)});
+    if(det(i+41)>0.6)
+      o.push({k:"band",x:bx+bw*0.3,y:horizon-bh-0.02,w:bw*0.25,h:0.02,col:hexA("#141B28",0.9)});
+  }
+  o.push({k:"band",x:0,y:horizon,w:1,h:0.40,col:"#0C1119"});
+
+  /* ── track ── */
+  var tie=WF(0.075), scroll=(u*3.2)%1;
+  for(i=-1;i<Math.ceil(1/tie)+2;i++){
+    var tx=(i+scroll)*tie;
+    o.push({k:"band",x:tx,y:railY+0.012,w:WF(0.030),h:0.022,col:"#241B14"});
+  }
+  o.push({k:"band",x:0,y:railY,w:1,h:0.009,col:"#4A5360"});
+  o.push({k:"band",x:0,y:railY,w:1,h:0.003,col:"#7A8694"});
+  o.push({k:"band",x:0,y:railY+0.034,w:1,h:0.006,col:"#39414C"});
+
+  /* ── the train ──────────────────────────────────────────────────────────
+     One consist, measured left to right in height units, then placed. */
+  var H=0.30;                          /* body height, as a canvas-height fraction */
+  var lenH=3.10*H;                     /* consist length, same units               */
+  var lenW=WF(lenH);
+  var sc=1;                            /* a tall narrow canvas must not be given a
+                                          train wider than the room it is in       */
+  if(lenW>0.82){ sc=0.82/lenW; lenW=0.82; }
+  var h=H*sc;
+  /* q is in BODY HEIGHTS. Both conversions, or none — this is the one place that
+     turns the drawing units into canvas units and it has to do the whole job. */
+  var W2=function(q){ return WF(q*h); };
+
+  /* LINEAR, deliberately. Ease-in-out was the first instinct and it is wrong for
+     a train twice over: it sprints through the middle and is off the wall by
+     u=0.72, leaving a quarter of the cue empty; and because the wheels and the
+     chuff are both driven by DISTANCE, an eased crossing means the exhaust beat
+     accelerates and decelerates, which is the one thing that stops a locomotive
+     sounding like a locomotive. Constant speed, all the way across. */
+  var trav=cl(u/0.90,0,1);
+  var x0=mix(-lenW-0.03, 1.03, trav);
+  var dist=(x0+lenW+0.03);             /* how far it has come, in canvas widths */
+
+  var wrB=0.26;                        /* driving wheel radius, in body heights  */
+  var wrW=W2(wrB);
+  /* rolling without slipping: one turn per circumference of ground covered */
+  var ang=(dist/(2*Math.PI*wrW))*360;
+  var base=railY-wrB*h;                /* axle line, a canvas-height fraction    */
+
+  function wheel(cx,cy,r,a,rim,spoke,n){
+    /* own loop variable: this is called from inside loops that count on theirs */
+    var sp=(n||6), q;
+    o.push({k:"ring",x:cx,y:cy,r:r,w:Math.max(1.5,r*260),col:rim});
+    for(q=0;q<sp;q++)
+      o.push({k:"band",x:cx,y:cy,w:r*0.92,h:0.012*sc,col:spoke,rot:a+q*(360/sp)});
+    o.push({k:"dot",x:cx,y:cy,r:r*0.22,col:rim});
+  }
+
+  /* ── the consist, laid out LEFT to RIGHT in body heights ────────────────
+     The engine goes at the RIGHT-HAND end because the train travels right, and
+     a locomotive belongs at the front of its own train. The first cut had the
+     cowcatcher trailing and the cars in front of the engine, which is a train
+     being pushed backwards through a city at night. */
+  var lx=x0;                           /* left end of the consist            */
+  var bodyY=base-h*0.62;               /* top of the bodies                  */
+  var CAR=0.64, GAP=0.08, TND=0.52;
+  var xB=0.00, xA=xB+CAR+GAP, xT=xA+CAR+GAP, LO=xT+TND+0.06;   /* LO+1.08 = 3.10 */
+
+  /* two boxcars, lettered for the school */
+  for(k=0;k<2;k++){
+    var cx0=lx+W2(k===0?xB:xA);
+    o.push({k:"band",x:cx0,y:bodyY-h*0.04,w:W2(CAR),h:h*0.66,col:T.p});
+    o.push({k:"band",x:cx0,y:bodyY-h*0.04,w:W2(CAR),h:h*0.08,col:mixHex(T.p,"#FFFFFF",0.25)});
+    o.push({k:"band",x:cx0,y:bodyY+h*0.56,w:W2(CAR),h:h*0.06,col:mixHex(T.p,"#000000",0.45)});
+    for(i=1;i<5;i++)
+      o.push({k:"band",x:cx0+W2(0.128*i),y:bodyY+h*0.04,w:W2(0.006),h:h*0.52,
+              col:hexA("#000000",0.18)});
+    /* the mark: what a railroad would actually have painted there */
+    o.push({k:"word",t:k===0?T.word:T.ab,x:cx0+W2(CAR/2),y:bodyY+h*0.30,h:h*0.26,
+            col:lightOn(T.p)?T.deep:"#FFFFFF",fit:W2(CAR*0.86),track:0.03});
+    wheel(cx0+W2(0.14),base,W2(0.15),ang*1.73,"#5A6472","#39414C",5);
+    wheel(cx0+W2(CAR-0.14),base,W2(0.15),ang*1.73,"#5A6472","#39414C",5);
+    o.push({k:"band",x:cx0+W2(CAR),y:base-wrB*h*0.30,w:W2(GAP),h:h*0.05,col:"#39414C"});
+  }
+
+  /* tender */
+  var tx0=lx+W2(xT);
+  o.push({k:"band",x:tx0,y:bodyY+h*0.10,w:W2(TND),h:h*0.52,col:mixHex(T.p,"#000000",0.35)});
+  o.push({k:"band",x:tx0,y:bodyY+h*0.10,w:W2(TND),h:h*0.06,col:T.s});
+  for(i=0;i<9;i++)
+    o.push({k:"dot",x:tx0+W2(0.07+(i%5)*0.09),y:bodyY+h*0.13+(i>4?h*0.03:0),
+            r:W2(0.06),col:"#15181E"});
+  o.push({k:"word",t:T.ab,x:tx0+W2(TND/2),y:bodyY+h*0.40,h:h*0.20,
+          col:hexA("#FFFFFF",0.92),fit:W2(TND*0.82),track:0.04});
+  wheel(tx0+W2(0.12),base,W2(0.15),ang*1.73,"#5A6472","#39414C",5);
+  wheel(tx0+W2(TND-0.12),base,W2(0.15),ang*1.73,"#5A6472","#39414C",5);
+  o.push({k:"band",x:tx0+W2(TND),y:base-wrB*h*0.30,w:W2(0.06),h:h*0.05,col:"#39414C"});
+
+  /* ── locomotive, facing right ──────────────────────────────────────────
+     Gunmetal reads as a hole at night, so the boiler is lifted well clear of
+     the ground it sits on and given a lit top edge. A shape this dark against a
+     dark field is not moody, it is missing. */
+  var ex=lx+W2(LO);
+  var BOIL="#566375", BOILT="#6F7F90", DARK="#2A323E";
+  /* running board */
+  o.push({k:"band",x:ex+W2(0.02),y:base-wrB*h*0.42,w:W2(1.02),h:h*0.06,col:DARK});
+  /* cab */
+  o.push({k:"band",x:ex,y:bodyY-h*0.10,w:W2(0.34),h:h*0.72,col:T.p});
+  o.push({k:"band",x:ex-W2(0.02),y:bodyY-h*0.16,w:W2(0.38),h:h*0.09,col:DARK});
+  o.push({k:"band",x:ex+W2(0.07),y:bodyY+h*0.02,w:W2(0.20),h:h*0.24,col:"#0B0F16"});
+  o.push({k:"band",x:ex+W2(0.07),y:bodyY+h*0.02,w:W2(0.20),h:h*0.05,
+          col:hexA("#FFE9A8",0.30)});
+  /* boiler, with a lit top */
+  o.push({k:"band",x:ex+W2(0.30),y:bodyY+h*0.16,w:W2(0.70),h:h*0.46,col:BOIL});
+  o.push({k:"band",x:ex+W2(0.30),y:bodyY+h*0.16,w:W2(0.70),h:h*0.08,col:BOILT});
+  o.push({k:"band",x:ex+W2(0.30),y:bodyY+h*0.56,w:W2(0.70),h:h*0.06,col:DARK});
+  /* boiler bands, so it reads as a riveted cylinder */
+  for(i=1;i<4;i++)
+    o.push({k:"band",x:ex+W2(0.30+i*0.17),y:bodyY+h*0.16,w:W2(0.012),h:h*0.46,
+            col:hexA("#20262F",0.55)});
+  /* smokebox at the front, darker than the boiler */
+  o.push({k:"band",x:ex+W2(0.90),y:bodyY+h*0.13,w:W2(0.12),h:h*0.52,col:DARK});
+  /* chimney and dome */
+  o.push({k:"band",x:ex+W2(0.78),y:bodyY-h*0.14,w:W2(0.13),h:h*0.32,col:DARK});
+  o.push({k:"band",x:ex+W2(0.755),y:bodyY-h*0.18,w:W2(0.18),h:h*0.07,col:"#39414C"});
+  o.push({k:"band",x:ex+W2(0.50),y:bodyY+h*0.06,w:W2(0.12),h:h*0.12,col:"#39414C"});
+  /* headlight, and the beam it throws ahead */
+  o.push({k:"dot",x:ex+W2(0.96),y:bodyY+h*0.26,r:W2(0.09),col:"#FFE9A8"});
+  o.push({k:"glow",x:ex+W2(0.96),y:bodyY+h*0.26,r:W2(0.70),col:hexA("#FFE08A",0.45),a:1});
+  o.push({k:"band",x:ex+W2(1.02),y:bodyY+h*0.12,w:W2(1.20),h:h*0.30,
+          col:hexA("#FFE08A",0.06)});
+  /* cowcatcher */
+  o.push({k:"tri",x:ex+W2(1.05),y:base+wrB*h*0.30,w:W2(0.26),h:h*0.30,
+          col:"#39414C",dir:"down"});
+  /* wheels: drivers under the boiler, pony truck at the front */
+  wheel(ex+W2(0.44),base,wrW,ang,"#6B7686","#39414C",8);
+  wheel(ex+W2(0.76),base,wrW,ang,"#6B7686","#39414C",8);
+  wheel(ex+W2(0.99),base,W2(0.16),ang*1.62,"#5A6472","#39414C",5);
+  /* coupling rod — anchored on the crank pins, so it takes the same angle.
+     cr is a width fraction, so its vertical throw converts back through hw or
+     the rod becomes an ellipse and visibly leaves the wheel. */
+  var cr=wrW*0.60, ar2=ang*Math.PI/180;
+  var px1=ex+W2(0.44)+Math.cos(ar2)*cr, py1=base+Math.sin(ar2)*(cr/hw);
+  o.push({k:"band",x:px1,y:py1,w:W2(0.32),h:0.012*sc,col:"#8C97A6"});
+  o.push({k:"dot",x:px1,y:py1,r:W2(0.05),col:"#B4BEC9"});
+  o.push({k:"dot",x:ex+W2(0.76)+Math.cos(ar2)*cr,y:base+Math.sin(ar2)*(cr/hw),
+          r:W2(0.05),col:"#B4BEC9"});
+  /* ── the chuff ─────────────────────────────────────────────────────────
+     Emitted on distance travelled, four to a wheel revolution. Each puff is
+     pinned to WHERE the chimney was when it left, so the smoke stays behind
+     the engine instead of riding along with it. */
+  var rev=dist/(2*Math.PI*wrW), chuffs=Math.floor(rev*4);
+  for(i=0;i<18;i++){
+    var id=chuffs-i;
+    if(id<0) continue;
+    var age=(rev*4-id)/4;                       /* revolutions since emission */
+    var d0=age*(2*Math.PI*wrW);                 /* distance travelled since   */
+    var life=cl(d0/0.42,0,1);
+    if(life>=1) continue;
+    var sxp=lx+W2(LO+0.845)-d0*0.96;            /* stays where it was made   */
+    var syp=bodyY-h*0.30-life*0.46-det(i+61)*0.015;
+    var rr=W2(0.16)+life*W2(0.52);
+    o.push({k:"glow",x:sxp+(det(i+71)-0.5)*life*0.02,y:syp,r:rr,
+            col:hexA(mixHex("#C9D3E0","#5A6472",life),(1-life)*0.40),a:1});
+    /* the hot core, only while the puff is fresh out of the chimney */
+    if(life<0.30)
+      o.push({k:"glow",x:sxp,y:syp,r:rr*0.55,col:hexA("#FFFFFF",(0.30-life)*0.55),a:1});
+  }
+  /* cylinder steam, low and fast */
+  var st=(rev*4)%1;
+  for(i=0;i<7;i++){
+    var sl=(st+i*0.14)%1;
+    o.push({k:"glow",x:lx+W2(LO+0.34)-sl*W2(1.5),y:base+wrB*h*0.55-sl*h*0.16,
+            r:W2(0.14)+sl*W2(0.55),col:hexA("#D7DEE8",(1-sl)*0.34),a:1});
+  }
+
+  /* ── the call, once the train owns the frame ── */
+  var ph="the crossing";
+  if(u<0.10){ ph="approach"; }
+  else if(u>0.90){
+    ph="lockup";
+    var lv=seg(u,.90,1);
+    o.push({k:"word",t:T.word,x:0.5,y:0.34,h:0.20,col:T.p,fit:0.72,track:0.02,
+            a:cl(lv*4,0,1)});
+    o.push({k:"word",t:T.call,x:0.5,y:0.50,h:0.055,col:hexA("#FFFFFF",0.62*cl(lv*3,0,1)),
+            fit:0.62,track:0.14});
+  }
+  o.push({k:"vig",a:0.34});
   return {layers:o,phase:ph};
 };
 
@@ -5127,6 +5364,9 @@ var PHASES = {
   custom:[[0,.24,"Run","line one crosses"],[.24,.48,"Land","line two"],
           [.48,.528,"Flash","384 ms"],[.528,.86,"Payoff","team finish"],
           [.86,1,"Lockup","line two + line three"]],
+  train:[[0,.10,"Approach","headlight, then the engine"],
+         [.10,.90,"The crossing","the consist runs the canvas"],
+         [.90,1,"Lockup","the call, once it has passed"]],
   bbsports:[[0,.12,"Ignition","one streak, cold field"],
             [.12,.30,"Searchlights","beams off the horizon"],
             [.30,.50,"Assembly","the parts fly in and seat"],
