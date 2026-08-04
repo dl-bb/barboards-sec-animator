@@ -223,7 +223,10 @@ notice, above that is visible and worth chasing.
 
 ### Running the screens remotely
 
-The outputs are on poles and in ceilings, so both of these are driven from the panel:
+The outputs are on poles and in ceilings, so these are driven from the panel. They live in
+the **Wall link** panel — first section of the right-hand column, under **The screens** —
+next to the link status and the output dots, because an operator reaching for "reload the
+screens" is already looking at the screens.
 
 | Control | What it does |
 |---|---|

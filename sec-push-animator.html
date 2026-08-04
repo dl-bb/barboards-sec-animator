@@ -29,8 +29,15 @@ h1,h2,h3{font-family:Anton,"Arial Narrow",sans-serif;font-weight:400;text-transf
 ::-webkit-scrollbar-track{background:transparent}
 
 /* ══ chrome ══ */
-.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 16px;
-  border-bottom:1px solid var(--hair);background:#0E0B0A;height:46px}
+/* nowrap, NOT wrap. The height is fixed at 46px because the grid below is
+   calc(100vh - 46px), so a wrapped second row is not a second row -- it is a
+   clipped one, and anything on it is simply gone with no visual clue. Scrolling
+   is the honest failure mode: crowded, but nothing is lost. */
+.top{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;padding:8px 16px;
+  border-bottom:1px solid var(--hair);background:#0E0B0A;height:46px;
+  overflow-x:auto;overflow-y:hidden}
+.top>*{flex:0 0 auto}
+.top .sp{flex:1 1 auto}      /* the spacer still gets to push, when there is room */
 .brand{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--dimmer);white-space:nowrap}
 .brand b{color:var(--bone);font-weight:600}
 #ver{display:block;margin-top:2px;color:#5A4E45;letter-spacing:.16em;font-size:8.5px}
@@ -286,11 +293,11 @@ body.badge #badge{display:flex}
 <body>
 
 <header class="top">
-  <div class="brand"><b>BarBoards</b> · SEC push-event animator<span id="ver"></span></div>
+  <div class="brand"><b>BarBoards</b><span id="ver"></span></div>
   <span class="lb" style="color:#3A2D25">|</span>
   <label class="lb">Layout</label>
   <select id="selLayout"></select>
-  <label class="lb">Bezel gap</label>
+  <label class="lb">Gap</label>
   <select id="selGap" title="Gap between panels, in screen widths. 0 = video wall, pixel to pixel.">
     <option value="0">0 · pixel to pixel</option>
     <option value="0.02">0.02 · hairline</option>
@@ -308,10 +315,7 @@ body.badge #badge{display:flex}
   <span class="lb" id="clk">wall clock —</span>
   <button class="btn" id="bDiag" title="Run the full frame diagnostic and copy the report">Diagnose</button>
   <button class="btn" id="bJoinQR" title="Full-size QR for patrons to scan">Join QR</button>
-  <button class="btn" id="bSync" title="Measure every output against this panel directly">Sync test</button>
-  <button class="btn" id="bIdent" title="Flash each screen with its output number — for mapping the room">Ident</button>
-  <button class="btn" id="bReload" title="Reload every output together. Shift-click for a cache-busting reload.">Reload TVs</button>
-  <button class="btn" id="bOpen">Open all TVs</button>
+  <button class="btn" id="bOpen">Open TVs</button>
 </header>
 
 <div class="wrap">
@@ -357,6 +361,41 @@ body.badge #badge{display:flex}
   <section class="col scroll" id="rightcol">
 
     <div class="sect">
+      <div class="secthd"><h3>Wall link</h3><span class="k" id="linkStat">off</span></div>
+      <div class="sectbody">
+        <div class="note">The TV URLs below are <b>permanent</b> — set them once and never touch
+          them again. This panel then drives what plays. Timing still comes from the wall clock,
+          so the link only carries <i>which</i> cue; it cannot desync anything.</div>
+        <dl class="kv" style="margin-top:8px">
+          <dt>room</dt><dd><input type="text" id="inRoom" style="width:100%" placeholder="room code"></dd>
+          <dt>broker</dt><dd><input type="text" id="inBroker" style="width:100%"></dd>
+          <dt>lead</dt><dd><input type="number" id="inLead" min="0" max="5000" step="100" style="width:74px"> ms
+            before outputs switch</dd>
+        </dl>
+        <div style="display:flex;gap:4px;margin-top:7px;flex-wrap:wrap">
+          <button class="btn" id="bLinkSave">Connect</button>
+          <button class="btn" id="bNewRoom">New room code</button>
+          <button class="btn" id="bRefire" title="Re-send the current cue so every screen restarts it together">Re-fire</button>
+        </div>
+        <!-- Wall operations live WITH the wall, not in the global header. An
+             operator reaching for "reload the screens" is already looking at
+             the screens. The header was also a fixed 46px with flex-wrap on,
+             so anything added to it wrapped onto a clipped second row. -->
+        <div class="k" style="margin-top:11px">The screens</div>
+        <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">
+          <button class="btn" id="bReload"
+            title="Reload every output together, on a shared instant. They flash red, then green with their build number when they return. Shift-click to bust the cache.">Reload TVs</button>
+          <button class="btn" id="bIdent"
+            title="Flash each screen with its own output number — for mapping physical positions to tv= indices">Ident</button>
+          <button class="btn" id="bSync"
+            title="Probe every output directly and report how far apart the screens really are">Sync test</button>
+        </div>
+        <div class="outs" id="outs" style="margin-top:9px"></div>
+        <div class="note warn" style="margin-top:8px" id="linkNote">—</div>
+      </div>
+    </div>
+
+    <div class="sect">
       <div class="secthd"><h3>Team theme</h3><span class="k" id="thTeam">—</span></div>
       <div class="sectbody">
         <div class="swatches" id="thSwatch"></div>
@@ -382,28 +421,6 @@ body.badge #badge{display:flex}
     <div class="sect">
       <div class="secthd"><h3>Timing</h3><span class="k" id="tmDur">—</span></div>
       <div class="sectbody"><table class="t" id="tmTable"></table></div>
-    </div>
-
-    <div class="sect">
-      <div class="secthd"><h3>Wall link</h3><span class="k" id="linkStat">off</span></div>
-      <div class="sectbody">
-        <div class="note">The TV URLs below are <b>permanent</b> — set them once and never touch
-          them again. This panel then drives what plays. Timing still comes from the wall clock,
-          so the link only carries <i>which</i> cue; it cannot desync anything.</div>
-        <dl class="kv" style="margin-top:8px">
-          <dt>room</dt><dd><input type="text" id="inRoom" style="width:100%" placeholder="room code"></dd>
-          <dt>broker</dt><dd><input type="text" id="inBroker" style="width:100%"></dd>
-          <dt>lead</dt><dd><input type="number" id="inLead" min="0" max="5000" step="100" style="width:74px"> ms
-            before outputs switch</dd>
-        </dl>
-        <div style="display:flex;gap:4px;margin-top:7px;flex-wrap:wrap">
-          <button class="btn" id="bLinkSave">Connect</button>
-          <button class="btn" id="bNewRoom">New room code</button>
-          <button class="btn" id="bRefire" title="Re-send the current cue so every screen restarts it together">Re-fire</button>
-        </div>
-        <div class="outs" id="outs" style="margin-top:9px"></div>
-        <div class="note warn" style="margin-top:8px" id="linkNote">—</div>
-      </div>
     </div>
 
     <div class="sect">
@@ -549,7 +566,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0028";
+var VERSION = "v1.0029";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -6059,7 +6076,7 @@ function bootApp(){
   /* the wall render is what an output would pay; everything else on this page
      is control-panel overhead and must not be confused with it */
   var wallMs=0, panelMs=0;
-  var drawGraph=makeFrameGraph(document.getElementById("fpsgraph"),240,34);
+  var drawGraph=makeFrameGraph(document.getElementById("fpsgraph"),120,34);
   var devHUD=installDevHUD(FPS);
   document.getElementById("ver").textContent=VERSION;
   function currentMs(){
@@ -6094,13 +6111,15 @@ function bootApp(){
       document.getElementById("dEpoch").textContent=EPOCH;
       document.getElementById("dNow").textContent=nowMs();
       document.getElementById("dPos").textContent=Math.floor(ms)+" / "+(e.d+REST)+" ms";
-      document.getElementById("clk").textContent="wall clock "+new Date(nowMs()).toISOString().slice(11,23);
+      document.getElementById("clk").textContent=new Date(nowMs()).toISOString().slice(11,19);
       var F=FPS.stats();
       if(F && (!tick.fpsNext || t0>tick.fpsNext)){
         tick.fpsNext=t0+250;
         var pad=function(v){ return String(v).padStart(3," "); };
-        fpsEl.textContent="fps "+pad(F.cur)+"  min "+pad(F.min)+"  avg "+pad(F.avg)+
-                          "  max "+pad(F.max)+(F.drops?("  "+F.dropPct+"% drop"):"  ok");
+        /* cur, then the two that matter: worst and average. Full detail is one
+           #dev away, and the header has buttons that need the room. */
+        fpsEl.textContent=pad(F.cur)+" fps "+pad(F.min)+" /"+pad(F.avg)+
+                          (F.drops?("  "+F.dropPct+"%"):"");
         fpsEl.style.color = F.dropPct>1 ? "var(--tally)" : "var(--good)";
         var B_=FPS.buf(); drawGraph(B_.gaps,B_.n,B_.N, F.hz>90?8.33:16.67);
         if(devHUD) devHUD(F,B_,undefined,{wall:wallMs,panel:panelMs,calls:lastCalls});
