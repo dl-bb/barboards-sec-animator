@@ -39,10 +39,10 @@ const json = (o, status = 200) =>
     }
   });
 
-const FIELDS = ["type", "team", "opp", "layout", "gap", "rest", "epoch", "at"];
+const FIELDS = ["type", "team", "opp", "layout", "gap", "fx", "rest", "epoch", "at"];
 const DEFAULT_STATE = {
   seq: 0, type: "td", team: "TEX", opp: "OU",
-  layout: "row4", gap: 0, rest: 2500, epoch: 1735689600000, at: 0, t: 0
+  layout: "row4", gap: 0, fx: 1, rest: 2500, epoch: 1735689600000, at: 0, t: 0
 };
 
 export class Board {
