@@ -445,7 +445,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0010";
+var VERSION = "v1.0011";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1385,6 +1385,37 @@ function makeRenderer(cv){
   }
   function geo(){ return {W:W,H:H,SW:SW,SH:SH,DPR:DPR,cell:cell}; }
 
+  /* the exact size this layer will be drawn at — must mirror drawLayer */
+  function bucketOf(l){
+    var fs=l.h*H, tw=natW(l.t,l.track||0)*fs/100;
+    if(l.fit && tw>l.fit*W) fs=fs*(l.fit*W)/tw;
+    return bucketFor(fs);
+  }
+  /* Rasterise each distinct glyph run once. Drawn at a whisper of alpha into
+     the real context, because the atlas is what we are filling, and the frame
+     that follows clears the canvas anyway. */
+  function prewarm(frames){
+    if(!W||!H) return 0;
+    var seen={}, n=0, i, j, l, k, bk;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.globalAlpha=0.004; ctx.fillStyle="#000";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    for(i=0;i<frames.length;i++){
+      var ls=frames[i].layers; if(!ls) continue;
+      for(j=0;j<ls.length;j++){
+        l=ls[j]; if(l.k!=="word"||!l.t) continue;
+        bk=bucketOf(l); k=l.t+"|"+bk+"|"+(l.track||0);
+        if(seen[k]) continue;
+        seen[k]=1; n++;
+        setLS((l.track&&HAS_LS)?((l.track*bk)+"px"):"0px");
+        setFont("400 "+bk+"px Anton,'Arial Narrow',sans-serif");
+        ctx.fillText(l.t, SW/2, SH/2);
+      }
+    }
+    ctx.globalAlpha=1; invalidate(); lastKey="";
+    return n;
+  }
+
   /* A radial gradient fill costs 3 us; blitting a pre-rendered sprite costs
      0.67 us. Baked once per colour at 256px and scaled on the way out. */
   var glowSprites={};
@@ -1626,7 +1657,7 @@ function makeRenderer(cv){
     ctx.globalAlpha=1;
   }
 
-  return {resize:resize, viewports:viewports, draw:draw, geo:geo,
+  return {resize:resize, viewports:viewports, draw:draw, geo:geo, prewarm:prewarm,
           ctx:function(){ return ctx; }};
 }
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1707,6 +1738,15 @@ function makeFPS(window_){
    frame and exactly how late it was. One tall red bar is one visible hitch. */
 /* Bare rAF, zero work. The control against which any drop count must be read:
    if an empty loop stalls, the page cannot be the cause. */
+/* Sample a cue densely enough that no string it ever shows is missed. 96 slices
+   catches text that appears for a single beat. */
+function cueFrames(ev,L,fx,n){
+  var out=[], i, N=n||96;
+  for(i=0;i<=N;i++) out.push(frameAt(ev,L,ev.d*i/N,fx));
+  out.push(frameAt(ev,L,ev.d+1,fx));            /* the rest lockup too */
+  return out;
+}
+
 function baselineTest(seconds){
   return new Promise(function(res){
     var gaps=[], prev=0, t0=performance.now(), until=t0+(seconds||5)*1000;
@@ -3082,6 +3122,7 @@ function bootTV(){
   }
   size(); window.addEventListener("resize",size);
   if(window.ResizeObserver) new ResizeObserver(size).observe(root);
+  try{ R.prewarm(cueFrames(ev,L,FX)); }catch(e){}
 
   /* ── the command channel ──────────────────────────────────────────────────
      A cue arriving here is NOT applied on arrival. It is applied at s.at, a
@@ -3110,6 +3151,8 @@ function bootTV(){
     ev=makeEvent(t,tm,op);
     period=ev.d+REST; hold=null;
     if(geoChanged){ regeo(); size(); }
+    /* hot the glyph atlas for the new cue before it is ever shown */
+    try{ R.prewarm(cueFrames(ev,L,FX)); }catch(e){}
     document.title=ev.name+" · TV "+(rawIdx+1)+" · "+L.name;
   }
   /* The armed switch is driven by a TIMER, never by the render loop.
@@ -3341,6 +3384,7 @@ function bootApp(){
     state.ev=makeEvent(state.type,state.team,state.opp);
     state.manual=null;
     renderTeams(); renderList(); renderOpp(); renderBrief(); renderRight(); renderURLs();
+    if(stageR){ try{ stageR.prewarm(cueFrames(state.ev,state.L,FX)); }catch(e){} }
     render(currentMs());
     if(o.push!==false) pushLink();
   }
@@ -3478,6 +3522,7 @@ function bootApp(){
       SCREENS.push({el:d,w:r.w*W,h:r.h*H});
     });
     stage.__W=W; stage.__H=H;
+    try{ stageR.prewarm(cueFrames(state.ev,L,FX)); }catch(e){}
     render(currentMs());          /* paint at once — do not wait for the next frame */
   }
   /* rebuild whenever the container's box actually changes — covers first layout,
