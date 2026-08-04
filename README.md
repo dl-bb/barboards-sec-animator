@@ -139,7 +139,7 @@ rises as a standing wave; Vanderbilt drops an anchor.
 
 ## Layouts
 
-Thirteen arrangements. The cue changes **shape**, not just scale:
+Fourteen arrangements. The cue changes **shape**, not just scale:
 
 | Mode | Layouts | What the cue does |
 |---|---|---|
@@ -191,6 +191,23 @@ inch on its share of it.
 
 If your mounting differs — bottom row shoved left, a real gap between the rows — the
 constants in the `wall6` block are inches and are the only thing to edit.
+
+### The same frame everywhere — `mirror6`
+
+Every output shows the **whole frame** rather than a slice of one, so the room reads the same
+cue from any seat and no screen depends on its neighbours. It works on panels of any size or
+arrangement, and it is the fallback when a wall is mid-repair.
+
+This is the one place where **outputs and cells stop being the same number**: a mirror is one
+canvas shown whole on six screens, so `mirror6` has **one cell and six outputs**. Keeping the
+single cell matters — the stage draws one screen and the preview pays for one viewport rather
+than six identical ones, and `C.n` stays 1 so grammars compose for a single screen, which is
+what each one now is. Mode is `single`, so a cue that would have run across a wall scales in
+place instead.
+
+**Sync matters more here, not less.** On a sliced wall a small skew shifts a seam; on a
+mirrored one it shows the same motion twice at slightly different times, side by side, which
+is exactly the comparison an eye is good at.
 
 ## Permanent TV URLs, driven live from the control panel
 

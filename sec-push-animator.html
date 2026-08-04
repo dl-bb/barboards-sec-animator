@@ -568,7 +568,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0033";
+var VERSION = "v1.0034";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1878,8 +1878,34 @@ var LAYOUTS = {
   LAYOUTS.wall6.labels = ["42 L","75 C","42 R","50 L","50 C","50 R"];
 })();
 
-var LAYORDER = ["single","pair","row3","row4","row6","strip8","quad","jumbo","eight","tower","split44","room14","wall6"];
+/* MIRROR. Every output shows the WHOLE frame rather than a slice of one, so the
+   room reads the same cue from any seat and no screen depends on its neighbours.
+   One cell, six outputs, and mode "single" because that is what each screen now
+   is — a cue that would have run across a wall scales in place instead.
+
+   Sync matters MORE here, not less: on a sliced wall a small skew shifts a seam,
+   but on a mirrored one it shows the same motion twice at slightly different
+   times, side by side, which is exactly the comparison an eye is good at. */
+LAYOUTS.mirror6 = LAY("mirror6","Mirror · every screen the same",
+  "One 16:9 frame, shown whole on every output. Nothing is sliced and no screen "+
+  "needs its neighbours, so it works on panels of any size or arrangement — and "+
+  "it is the fallback when a wall is mid-repair.",
+  "single", {cells:[{ux:0,uy:0,uw:16,uh:9}],gap:0});
+LAYOUTS.mirror6.mirror = true;
+LAYOUTS.mirror6.outputs = 6;
+LAYOUTS.mirror6.labels = ["1","2","3","4","5","6"];
+
+var LAYORDER = ["single","pair","row3","row4","row6","strip8","quad","jumbo","eight","tower","split44","room14","wall6","mirror6"];
 LAYOUTS.room14.labels = ["L1","L2","L3","L4","J1","J2","J3","J4","J5","J6","R1","R2","R3","R4"];
+
+/* How many televisions this layout drives, and which cell a given one shows.
+   These were the same number everywhere until mirroring: a mirrored wall is ONE
+   canvas shown whole on N screens, not N slices of one, so it has one cell and
+   many outputs. Keeping the single cell matters — the stage draws one screen and
+   the preview pays for one viewport instead of six identical ones, and C.n stays
+   1 so the grammars compose for a single screen, which is what each one is. */
+function outsOf(L){ return L.outputs || L.cells.length; }
+function cellOf(L,i){ return L.cells[L.mirror ? 0 : i]; }
 
 function geoOf(L){
   /* GAP overrides whatever the layout was authored with — the wall separations in
@@ -5751,7 +5777,7 @@ function bootTV(){
   var L = LAYOUTS[Q.get("layout")||"row4"]||LAYOUTS.row4;
   var sel = resolveSelection(Q);
   var ev = makeEvent(sel.type, sel.team, sel.opp);
-  var active = tvIdx < L.cells.length;
+  var active = tvIdx < outsOf(L);
 
   document.body.classList.add("tvmode");
   if(Q.get("diag")==="1") document.body.classList.add("diag");
@@ -5768,9 +5794,9 @@ function bootTV(){
 
   var geo, r, W=0,H=0,SW=0,SH=0;
   function regeo(){
-    active = rawIdx < L.cells.length;
+    active = rawIdx < outsOf(L);
     tvIdx  = active ? rawIdx : 0;
-    geo=geoOf(L); r=geo.rect(L.cells[tvIdx]);
+    geo=geoOf(L); r=geo.rect(cellOf(L,tvIdx));
   }
   regeo();
   function size(){
@@ -5982,7 +6008,7 @@ function bootTV(){
       ]}, null);
       if(document.body.classList.contains("diag"))
         diag.textContent="output  "+(rawIdx+1)+" — idle\nlayout  "+L.id+" has "+
-          L.cells.length+" cells\nlink    "+LINK.status+" · "+LINK.mode+" · room "+(LINK.room||"—");
+          outsOf(L)+" outputs\nlink    "+LINK.status+" · "+LINK.mode+" · room "+(LINK.room||"—");
       requestAnimationFrame(tick); return;
     }
 
@@ -6034,7 +6060,7 @@ function bootTV(){
                  "  max "+p(F.max)+"\n"+
                  "        drop "+F.dropPct+"%   js "+F.worstJsMs+" ms   hz ~"+F.hz+"\n"; })()+
         "event   "+ev.id+"  ("+ev.name+")\n"+
-        "layout  "+L.id+"   output "+(tvIdx+1)+" of "+L.cells.length+"\n"+
+        "layout  "+L.id+"   output "+(tvIdx+1)+" of "+outsOf(L)+"\n"+
         "cell    x "+r.x.toFixed(4)+"  y "+r.y.toFixed(4)+"  w "+r.w.toFixed(4)+"  gap "+GAP+"\n"+
         "link    "+LINK.status+" · "+LINK.mode+" · room "+(LINK.room||"—")+" · seq "+LINK.seq+"\n"+
         (pending?("armed   "+ (pending.at-Date.now()) +" ms → "+pending.s.type+"/"+pending.s.team+"\n"):"")+
@@ -6200,7 +6226,7 @@ function bootApp(){
   var sel=document.getElementById("selLayout");
   LAYORDER.forEach(function(id){
     var o=document.createElement("option"); o.value=id;
-    o.textContent=LAYOUTS[id].name+"  ("+LAYOUTS[id].cells.length+")";
+    o.textContent=LAYOUTS[id].name+"  ("+outsOf(LAYOUTS[id])+")";
     sel.appendChild(o);
   });
   sel.value=state.L.id;
@@ -6450,10 +6476,10 @@ function bootApp(){
   }
   function renderURLs(){
     var L=state.L, box=document.getElementById("urls");
-    document.getElementById("urlN").textContent=L.cells.length+" outputs · "+
+    document.getElementById("urlN").textContent=outsOf(L)+" outputs · "+
       (state.urlStyle==="?"?"query":"hash");
     box.innerHTML="";
-    L.cells.forEach(function(c,i){
+    for(var oi=0;oi<outsOf(L);oi++)(function(i){
       var u=tvURL(i);
       var d=document.createElement("div"); d.className="urow";
       d.innerHTML='<div class="tvn">'+(L.labels?L.labels[i]:(i+1))+'</div>'+
@@ -6464,7 +6490,7 @@ function bootApp(){
         d.children[2].textContent="ok"; setTimeout(function(){ d.children[2].textContent="copy"; },900); };
       d.children[3].onclick=function(){ window.open(u,"_blank"); };
       box.appendChild(d);
-    });
+    })(oi);
   }
   document.getElementById("bDiag").onclick=function(){
     var btn=this; btn.textContent="measuring…"; btn.disabled=true;
@@ -6670,7 +6696,7 @@ function bootApp(){
                              down:"var(--tally)",off:"var(--dimmer)"}[st]||"var(--dimmer)";
     document.getElementById("linkStat").innerHTML=
       '<span style="color:'+dot+'">●</span> '+st+(LINK.mode!=="off"?(" · "+LINK.mode):"");
-    var live=LINK.outputs, rep=LINK.reports(), n=state.L.cells.length, i, h="";
+    var live=LINK.outputs, rep=LINK.reports(), n=outsOf(state.L), i, h="";
     /* Every output reports where it thinks it is in the loop. Because position is
        a pure function of the clock, all of them must agree — so the spread across
        outputs IS the sync error, measured rather than asserted. */
