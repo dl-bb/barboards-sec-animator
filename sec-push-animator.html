@@ -204,6 +204,36 @@ body.tvmode .top,body.tvmode .wrap{display:none}
   color:#F0B03A;background:rgba(0,0,0,.72);border:1px solid #3A2D25;padding:8px 11px;border-radius:3px;display:none;z-index:9;
   white-space:pre;letter-spacing:.04em}
 body.diag #tvdiag{display:block}
+#patron{display:none;position:fixed;inset:0;background:#0C0A09;color:var(--bone);
+  flex-direction:column;overscroll-behavior:none;touch-action:none;user-select:none;
+  -webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+body.patron #patron{display:flex}
+body.patron .top,body.patron .wrap{display:none}
+body.patron{overflow:hidden;position:fixed;inset:0}
+#pjoin{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;text-align:center;gap:6px}
+#pjoin h1{font-size:clamp(30px,10vw,58px);letter-spacing:.02em}
+#pjoin p{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--dim)}
+#pRoom{color:#5A4E45;font-size:9px!important;letter-spacing:.2em}
+#pTeams{display:flex;flex-direction:column;gap:12px;width:100%;max-width:420px;margin-top:22px}
+.pteam{font-family:Anton,sans-serif;font-size:clamp(22px,7vw,34px);text-transform:uppercase;
+  border:none;border-radius:10px;padding:26px 16px;cursor:pointer;line-height:1;
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.18)}
+.pteam small{display:block;font-family:"IBM Plex Mono",monospace;font-size:9px;
+  letter-spacing:.2em;opacity:.75;margin-top:7px}
+#pplay{display:none;flex:1;flex-direction:column;min-height:0}
+body.playing #pplay{display:flex}
+body.playing #pjoin{display:none}
+#pbar{display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1px solid var(--hair);
+  font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+#pMine{font-weight:600;padding:4px 9px;border-radius:3px}
+#pLink{margin-left:auto;color:var(--dimmer);font-size:9px}
+#pwall{flex:1;position:relative;margin:12px;border-radius:6px;overflow:hidden;
+  background:#000;box-shadow:0 0 0 1px #2C2420}
+#pwall canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+#pfoot{text-align:center;padding:10px 14px 18px;font-family:"IBM Plex Mono",monospace;
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer)}
 #devfps{position:fixed;left:10px;top:10px;z-index:2147483647;pointer-events:none;
   width:216px;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
   font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5;letter-spacing:.04em;
@@ -388,6 +418,20 @@ body.bench #tvbench{display:block}
 <div id="tvroot"><div id="tvscreen"></div></div>
 <div id="tvdiag"></div>
 <div id="tvhint" style="display:none">i · diagnostics</div>
+<!-- ══ patron controller ( ?patron=1 ) ══ -->
+<div id="patron">
+  <div id="pjoin">
+    <h1 id="pTitle">COLOR WARS</h1>
+    <p id="pSub">Pick a side</p>
+    <div id="pTeams"></div>
+    <p id="pRoom"></p>
+  </div>
+  <div id="pplay">
+    <div id="pbar"><span id="pMine"></span><span id="pLink"></span></div>
+    <div id="pwall"></div>
+    <div id="pfoot">Tap the wall — hold and drag to keep painting</div>
+  </div>
+</div>
 <div id="devfps"></div>
 <div id="tvbench"></div>
 <canvas id="tvgraph"></canvas>
@@ -445,7 +489,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0011";
+var VERSION = "v1.0012";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -586,6 +630,7 @@ var LINK = (function(){
     cli.onopen=function(){
       api.status="live"; retry=0;
       cli.subscribe(topic("state"));
+      cli.subscribe(topic("tap"));
       if(role==="control") cli.subscribe(topic("hello"));
       /* A push issued before the socket was up would otherwise be dropped in
          silence, leaving an untouched control panel publishing nothing and the
@@ -594,6 +639,7 @@ var LINK = (function(){
     };
     cli.onmessage=function(t,payload){
       var m; try{ m=JSON.parse(payload); }catch(e){ return; }
+      if(t===topic("tap")){ if(api.onTap) api.onTap(m); return; }
       if(t===topic("state")) rx(m,"mqtt");
       else if(t===topic("hello")&&m&&m.tv!==undefined){
         var rxAt=Date.now();
@@ -699,6 +745,15 @@ var LINK = (function(){
     if(o.room!==undefined){ api.room=o.room.trim(); store("bb.room",api.room||null); }
     if(o.key!==undefined){ api.key=o.key.trim(); store("bb.key",api.key||null); }
     if(o.lead!==undefined) api.lead=Math.max(0,+o.lead||0);
+  };
+  /* Taps bypass the state machine entirely: no seq, no retain, no `at`. The
+     whole point is that the byte count is tiny and nothing waits on anything. */
+  api.onTap=null;
+  api.tap=function(team,x,y){
+    if(!cli||!cli.connected) return false;
+    cli.publish(topic("tap"), JSON.stringify({t:team,x:+x.toFixed(4),y:+y.toFixed(4),
+      s:Date.now()}), false);
+    return true;
   };
   api.newRoom=function(){
     var a="abcdefghjkmnpqrstuvwxyz23456789", s="", i;
@@ -1132,6 +1187,15 @@ var TYPES=[
  name:"AMBIENT RAIL", sub:"TIER ZERO · COSTS NO WINDOW",
  desc:function(c){ return "House cue — the always-on rail"; }, sr:{}},
 
+/* ── patron ────────────────────────────────────────────────────────────
+   The only cue driven by the room rather than the feed or the clock. */
+{id:"colorwars", grp:"patron", label:"Color Wars", cue:"colorwars", d:20000, house:true,
+ amp:88,win:0,tier:4,reg:"celebratory", cat:"patron",type:null,play:null,yards:0,
+ period:2,clock:"6:00",hs:14,as:14,
+ name:"COLOR WARS", sub:function(T,O){ return T.ab+" vs "+O.ab+" · TAP TO CLAIM"; },
+ desc:function(c){ return "Patron cue — two sides, one wall, whoever taps hardest owns it"; },
+ sr:{}},
+
 /* ── ritual ──────────────────────────────────────────────────────────── */
 {id:"chant", grp:"ritual", label:"Chant / call track", cue:"chant",
  d:function(T){ var ms=0; T.beats.forEach(function(b){ ms+=(b.ms||660); }); return 1200+ms+1600; },
@@ -1146,7 +1210,8 @@ var TYPES=[
 var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
 var TYPE_GROUPS=[["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
-  ["ritual","Ritual"],["house","House cues · no push event"]];
+  ["ritual","Ritual"],["house","House cues · no push event"],
+  ["patron","Patron · interactive"]];
 var TEAMKEYS=Object.keys(TEAMS);
 
 /* Cross a type with a school. Everything downstream — grammars, payload, timing
@@ -1318,6 +1383,22 @@ function fsin(t){ return SINT[((t*1024/(Math.PI*2))|0)&1023]; }
    string but 13.25 µs called per character — a 28× penalty paid every frame by any
    tracked-out line. Measured once, reused forever. */
 var GADV={};
+/* one bitmap per URL; a QR is static so it is built once and blitted after */
+var QRC={};
+function qrSprite(text){
+  if(QRC[text]!==undefined) return QRC[text];
+  var q=null;
+  try{ q=QR.make(text); }catch(e){ q=null; }
+  if(!q){ QRC[text]=null; return null; }
+  var quiet=4, n=q.size+quiet*2, cv=document.createElement("canvas");
+  cv.width=cv.height=n;
+  var c=cv.getContext("2d");
+  c.fillStyle="#fff"; c.fillRect(0,0,n,n);
+  c.fillStyle="#000";
+  for(var r=0;r<q.size;r++) for(var k=0;k<q.size;k++)
+    if(q.m[r][k]) c.fillRect(k+quiet,r+quiet,1,1);
+  QRC[text]=cv; return cv;
+}
 /* Chromium 99+ has ctx.letterSpacing. Stepping a tracked line glyph by glyph
    costs 30.75 us; one fillText with letterSpacing costs 1.25 us — 24.6x. The
    per-glyph path stays as a fallback for engines without it. */
@@ -1515,6 +1596,19 @@ function makeRenderer(cv){
 
     switch(l.k){
       case "fill":
+      case "qr":
+        /* rasterised once per URL into a sprite, then blitted — a QR is a lot
+           of little rects and redrawing them every frame would be silly */
+        var Q=qrSprite(l.t);
+        if(!Q) return false;
+        w=l.h*H; x=l.x*W-w/2; y=l.y*H-w/2;
+        if(x+w<vx0||x>vx1||y+w<vy0||y>vy1) return false;
+        ctx.globalAlpha=a;
+        ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(Q,x,y,w,w);
+        ctx.imageSmoothingEnabled=true;
+        return true;
+
       case "flash":
         s=splitCol(l.k==="flash"?"#ffffff":l.col);
         ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
@@ -2866,12 +2960,289 @@ function fxDecorate(f, ev, C, level){
   if(hi) add.push({k:"scan",a:0.16});
 
   /* glow and ghosts must sit UNDER the hero, everything else over the top */
-  var res=[];
-  for(i=0;i<src.length;i++){ if(i===heroI) res=res.concat(pre); res.push(src[i]); }
-  if(heroI<0) res=pre.concat(res);
-  f.layers=res.concat(add);
+  var res=[], j;
+  if(heroI<0) for(j=0;j<pre.length;j++) res.push(pre[j]);
+  for(i=0;i<src.length;i++){
+    if(i===heroI) for(j=0;j<pre.length;j++) res.push(pre[j]);
+    res.push(src[i]);
+  }
+  for(j=0;j<add.length;j++) res.push(add[j]);
+  f.layers=res;
   return f;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   14 · COLOR WARS — the patron canvas
+   ══════════════════════════════════════════════════════════════════════════
+
+   A QR on the wall opens a controller on a phone. The patron picks a side, sees
+   the wall's own arrangement, and taps it. Each tap sends nothing but a side and
+   a normalised x/y, and blooms on the wall where they pressed.
+
+   The sync trick is the same one the rest of the file lives by: a tap carries the
+   wall-clock instant it happened, so every output animates it from that instant.
+   An output that hears about a tap 200 ms late shows it 200 ms into its life
+   rather than 200 ms behind — the wall stays coherent without anything being
+   synchronised.
+
+   Territory is the cumulative share of taps. The ground colour is the two school
+   colours blended by that share, so a side that out-taps the other literally
+   floods the room in their colour.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── a small QR encoder: byte mode, ECC level L, versions 1–10 ──────────────
+   Written out rather than pulled from a CDN for the same reason as everything
+   else here — this runs on televisions on somebody else's network. */
+var QR=(function(){
+  var EXP=new Uint8Array(512), LOG=new Uint8Array(256), i, x=1;
+  for(i=0;i<255;i++){ EXP[i]=x; LOG[x]=i; x<<=1; if(x&256) x^=285; }
+  for(i=255;i<512;i++) EXP[i]=EXP[i-255];
+  function mul(a,b){ return (a===0||b===0)?0:EXP[LOG[a]+LOG[b]]; }
+  function rsPoly(n){
+    var p=[1], i, j;
+    for(i=0;i<n;i++){ p.push(0);
+      for(j=p.length-1;j>0;j--) p[j]=p[j-1]^mul(p[j],EXP[i]);
+      p[0]=mul(p[0],EXP[i]); }
+    return p;
+  }
+  function rsEncode(data,n){
+    var gen=rsPoly(n), res=new Array(n).fill(0), i, j, f;
+    for(i=0;i<data.length;i++){
+      f=data[i]^res[0]; res.shift(); res.push(0);
+      if(f!==0) for(j=0;j<n;j++) res[j]^=mul(gen[j+1],f);
+    }
+    return res;
+  }
+  /* total codewords, ecc per block, block counts — versions 1..10, level L */
+  var CAP=[[26,7,1,0],[44,10,1,0],[70,15,1,0],[100,20,1,0],[134,26,1,0],
+           [172,18,2,0],[196,20,2,0],[242,24,2,0],[292,30,2,0],[346,18,2,2]];
+  var ALIGN=[[],[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46]];
+
+  function make(text){
+    var bytes=[], j;
+    for(j=0;j<text.length;j++){
+      var c=text.charCodeAt(j);
+      if(c<128) bytes.push(c);
+      else if(c<2048){ bytes.push(192|c>>6,128|c&63); }
+      else { bytes.push(224|c>>12,128|(c>>6&63),128|c&63); }
+    }
+    /* smallest version that fits */
+    var ver=-1, tot, ecc, blocks;
+    for(j=0;j<CAP.length;j++){
+      tot=CAP[j][0]; ecc=CAP[j][1]; blocks=CAP[j][2]+CAP[j][3];
+      var dataCw=tot-ecc*blocks;
+      var need=bytes.length+2+((j+1)>=10?1:0);
+      if(dataCw>=need){ ver=j+1; break; }
+    }
+    if(ver<0) return null;
+    var C=CAP[ver-1]; tot=C[0]; ecc=C[1];
+    var nb1=C[2], nb2=C[3], nblocks=nb1+nb2;
+    var dataCw=tot-ecc*nblocks;
+
+    /* bit stream: mode 0100, length, payload, terminator, pad */
+    var bits=[];
+    function put(v,n){ for(var k=n-1;k>=0;k--) bits.push((v>>k)&1); }
+    put(4,4);
+    put(bytes.length, ver<10?8:16);
+    for(j=0;j<bytes.length;j++) put(bytes[j],8);
+    for(j=0;j<4&&bits.length<dataCw*8;j++) bits.push(0);
+    while(bits.length%8) bits.push(0);
+    var dat=[]; for(j=0;j<bits.length;j+=8){ var b=0,k;
+      for(k=0;k<8;k++) b=(b<<1)|bits[j+k]; dat.push(b); }
+    var pad=[236,17], p=0;
+    while(dat.length<dataCw) dat.push(pad[p++%2]);
+
+    /* split into blocks, interleave data then ecc */
+    var short_=Math.floor(dataCw/nblocks), extra=dataCw%nblocks;
+    var blocksD=[], blocksE=[], off=0;
+    for(j=0;j<nblocks;j++){
+      var len=short_+(j>=nblocks-extra?1:0);
+      var d=dat.slice(off,off+len); off+=len;
+      blocksD.push(d); blocksE.push(rsEncode(d,ecc));
+    }
+    var out=[], maxLen=0;
+    blocksD.forEach(function(b){ if(b.length>maxLen) maxLen=b.length; });
+    for(j=0;j<maxLen;j++) blocksD.forEach(function(b){ if(j<b.length) out.push(b[j]); });
+    for(j=0;j<ecc;j++) blocksE.forEach(function(b){ out.push(b[j]); });
+
+    /* matrix */
+    var size=ver*4+17;
+    var m=[], used=[];
+    for(j=0;j<size;j++){ m.push(new Array(size).fill(0)); used.push(new Array(size).fill(0)); }
+    function set(r,c,v){ m[r][c]=v?1:0; used[r][c]=1; }
+    function finder(r,c){
+      for(var dr=-1;dr<8;dr++) for(var dc=-1;dc<8;dc++){
+        var rr=r+dr, cc=c+dc; if(rr<0||cc<0||rr>=size||cc>=size) continue;
+        var on=(dr>=0&&dr<7&&(dc===0||dc===6))||(dc>=0&&dc<7&&(dr===0||dr===6))||
+               (dr>=2&&dr<=4&&dc>=2&&dc<=4);
+        set(rr,cc,on);
+      }
+    }
+    finder(0,0); finder(0,size-7); finder(size-7,0);
+    for(j=8;j<size-8;j++){ set(6,j,j%2===0); set(j,6,j%2===0); }
+    var al=ALIGN[ver-1];
+    for(var a1=0;a1<al.length;a1++) for(var a2=0;a2<al.length;a2++){
+      var r0=al[a1], c0=al[a2];
+      if((r0<9&&c0<9)||(r0<9&&c0>size-10)||(r0>size-10&&c0<9)) continue;
+      for(var dr2=-2;dr2<=2;dr2++) for(var dc2=-2;dc2<=2;dc2++)
+        set(r0+dr2,c0+dc2, Math.max(Math.abs(dr2),Math.abs(dc2))!==1);
+    }
+    set(size-8,8,1);
+    /* reserve format areas */
+    for(j=0;j<9;j++){ if(!used[8][j]) used[8][j]=1; if(!used[j][8]) used[j][8]=1; }
+    for(j=0;j<8;j++){ used[8][size-1-j]=1; used[size-1-j][8]=1; }
+
+    /* place data, zig-zag from bottom right */
+    var bit=0, dir=-1, col=size-1;
+    function nextBit(){ if(bit>=out.length*8) return 0;
+      var v=(out[bit>>3]>>(7-(bit&7)))&1; bit++; return v; }
+    while(col>0){
+      if(col===6) col--;
+      for(var row=(dir<0?size-1:0); row>=0&&row<size; row+=dir){
+        for(var t=0;t<2;t++){
+          var cc2=col-t;
+          if(used[row][cc2]) continue;
+          m[row][cc2]=nextBit(); used[row][cc2]=1;
+        }
+      }
+      dir=-dir; col-=2;
+    }
+
+    /* mask 0 (checkerboard) — apply only to data modules */
+    var dataMask=[];
+    for(j=0;j<size;j++) dataMask.push(new Array(size).fill(0));
+    /* rebuild "is function module" map cheaply: re-run structure onto a blank */
+    var fn=[]; for(j=0;j<size;j++) fn.push(new Array(size).fill(0));
+    (function(){
+      function f2(r,c){ for(var dr=-1;dr<8;dr++) for(var dc=-1;dc<8;dc++){
+        var rr=r+dr, cc=c+dc; if(rr<0||cc<0||rr>=size||cc>=size) continue; fn[rr][cc]=1; } }
+      f2(0,0); f2(0,size-7); f2(size-7,0);
+      for(var q=0;q<size;q++){ fn[6][q]=1; fn[q][6]=1; }
+      for(var b1=0;b1<al.length;b1++) for(var b2=0;b2<al.length;b2++){
+        var r0=al[b1], c0=al[b2];
+        if((r0<9&&c0<9)||(r0<9&&c0>size-10)||(r0>size-10&&c0<9)) continue;
+        for(var d1=-2;d1<=2;d1++) for(var d2=-2;d2<=2;d2++) fn[r0+d1][c0+d2]=1;
+      }
+      for(var q2=0;q2<9;q2++){ fn[8][q2]=1; fn[q2][8]=1; }
+      for(var q3=0;q3<8;q3++){ fn[8][size-1-q3]=1; fn[size-1-q3][8]=1; }
+      fn[size-8][8]=1;
+    })();
+    for(var r3=0;r3<size;r3++) for(var c3=0;c3<size;c3++)
+      if(!fn[r3][c3] && ((r3+c3)%2===0)) m[r3][c3]^=1;
+
+    /* format info: level L (01), mask 0 */
+    var fmt=(1<<3)|0, d3=fmt<<10, g=0x537;
+    for(j=4;j>=0;j--) if(d3&(1<<(j+10))) d3^=g<<j;
+    var fbits=((fmt<<10)|d3)^0x5412;
+    for(j=0;j<15;j++){
+      var b3=(fbits>>j)&1;
+      if(j<6) m[8][j]=b3; else if(j<8) m[8][j+1]=b3; else m[8][size-15+j]=b3;
+      if(j<8) m[size-1-j][8]=b3; else if(j<9) m[15-j][8]=b3; else m[14-j][8]=b3;
+    }
+    return {size:size, m:m};
+  }
+  return {make:make};
+})();
+
+/* ── live state ────────────────────────────────────────────────────────────
+   Everything else in this file animates from a wall-clock timestamp, so a late
+   output joins a cue already in progress. A tap is the ONE case where that is
+   wrong: starting a bloom at 14% because it arrived 200 ms late makes it pop
+   into existence half-grown, which reads as a glitch. A bloom is local to the
+   screen that was tapped, so cross-screen phase costs nothing here and
+   smoothness is worth more. Splats therefore animate from ARRIVAL, always from
+   zero. The origin stamp is kept only to measure transit. */
+var WAR={
+  splats:[], score:[0,0], LIFE:1400, MAX:90, lat:0, taps:0,
+  add:function(t,x,y,sentAt){
+    var now=Date.now();
+    if(sentAt){ var d=now-sentAt; if(d>=0&&d<5000) this.lat=this.lat?(this.lat*0.8+d*0.2):d; }
+    this.splats.push({t:t?1:0,x:x,y:y,at:now});
+    if(this.splats.length>this.MAX) this.splats.shift();
+    this.score[t?1:0]++; this.taps++;
+  },
+  share:function(){
+    var a=this.score[0], b=this.score[1], tot=a+b;
+    return tot?a/tot:0.5;                  /* 1 = home owns the room */
+  },
+  live:function(now){
+    var L=this.LIFE, out=[], i;
+    for(i=0;i<this.splats.length;i++){
+      var age=now-this.splats[i].at;
+      if(age>=0&&age<L) out.push({s:this.splats[i],v:age/L});
+    }
+    return out;
+  },
+  reset:function(){ this.splats=[]; this.score=[0,0]; this.taps=0; }
+};
+
+/* The address the QR encodes. Kept short — a QR that has to carry a long
+   URL needs a denser symbol and stops scanning from across a room. */
+function patronURL(ev){
+  if(!LINK||!LINK.room) return "";
+  var base=location.href.split(/[?#]/)[0];
+  return base+"?patron=1&room="+encodeURIComponent(LINK.room)+
+         "&team="+ev.team+"&opp="+ev.opp;
+}
+
+/* ── the wall cue ─────────────────────────────────────────────────────── */
+G.colorwars=function(u,C){
+  var T=C.T, O=TEAMS[C.ev.opp]||{p:"#3A2D25",ab:C.ev.opp,word:C.ev.opp};
+  var o=[], now=nowMs(), i;
+  var share=WAR.share();
+
+  /* the ground is the two colours blended by who has been tapping hardest */
+  o.push({k:"fill",col:mixHex(O.p,T.p,share)});
+
+  /* every live tap blooms from where it was pressed: bright at the point,
+     falling away — a pressure point, not a dot */
+  var live=WAR.live(now);
+  for(i=0;i<live.length;i++){
+    var s=live[i].s, v=live[i].v;
+    var col=(s.t===0)?T.p:O.p;
+    var r=0.02+eo(v)*0.20;
+    o.push({k:"glow",x:s.x,y:s.y,r:r*1.7,col:hexA(col,0.55*(1-v)),a:1});
+    o.push({k:"glow",x:s.x,y:s.y,r:r*0.7,col:hexA("#FFFFFF",0.30*(1-v)*(1-v)),a:1});
+    if(v<0.18) o.push({k:"ring",x:s.x,y:s.y,r:r*1.9,col:hexA("#FFFFFF",0.5*(1-v/0.18)),w:2});
+  }
+
+  /* the meter: who owns the room */
+  o.push({k:"band",x:0,y:0.955,w:share,h:0.045,col:T.p});
+  o.push({k:"band",x:share,y:0.955,w:1-share,h:0.045,col:O.p});
+  o.push({k:"band",x:share-0.0015,y:0.945,w:0.003,h:0.055,col:"#fff"});
+  o.push({k:"word",t:T.ab,x:0.035,y:0.977,h:0.028,col:hexA("#FFFFFF",.9),fit:.06});
+  o.push({k:"word",t:O.ab,x:0.965,y:0.977,h:0.028,col:hexA("#FFFFFF",.9),fit:.06});
+  o.push({k:"word",t:Math.round(share*100)+"%",x:0.5,y:0.977,h:0.028,
+          col:hexA("#FFFFFF",.85),fit:.08});
+
+  /* the way in: a QR big enough to scan from across a room, parked on the
+     last screen so it never sits under the action */
+  var idle=WAR.score[0]+WAR.score[1];
+  var url=patronURL(C.ev);
+  if(url){
+    /* A QR sliced across a bezel gap cannot be scanned, so it is pinned inside
+       ONE output rather than placed at wall centre — which on a row of four is
+       exactly the seam between screens two and three. It sits on the last
+       output, away from where the blooms land. */
+    var qi=C.n-1, cr=C.rect(qi), aspect=C.geo.AW/C.geo.AH;
+    var fill=idle?0.42:0.62;
+    var qh=Math.min(cr.h*fill, cr.w*aspect*fill);
+    var qwF=qh/aspect;                       /* the same square, as a width fraction */
+    var qx=cr.x+cr.w/2, qy=cr.y+cr.h/2;
+    o.push({k:"band",x:qx-qwF*0.62,y:qy-qh*0.62,w:qwF*1.24,h:qh*1.24,
+            col:hexA("#FFFFFF",idle?0.72:0.95),r:6});
+    o.push({k:"qr",t:url,x:qx,y:qy,h:qh,a:1});
+    o.push({k:"word",t:"SCAN",x:qx,y:qy+qh*0.78,h:0.030,
+            col:hexA("#FFFFFF",idle?0.5:0.85),fit:qwF,track:.24});
+  }
+  o.push({k:"word",t:"COLOR WARS",x:.5,y:.12,h:.10,
+          col:hexA("#FFFFFF",idle?0.22:0.85),fit:.5,track:.16});
+  if(!idle) o.push({k:"word",t:"SCAN TO PICK A SIDE",x:.5,y:.80,h:.05,
+                    col:hexA("#FFFFFF",.6),fit:.5,track:.24});
+  o.push({k:"word",t:T.word+"  vs  "+(O.word||O.ab),x:.5,y:.24,h:.045,
+          col:hexA("#FFFFFF",idle?0.18:0.5),fit:.6,track:.14});
+  return {layers:o, phase:"color wars · "+WAR.score[0]+" – "+WAR.score[1], qr:true};
+};
 
 /* ── the rest state between loops: a quiet lockup, never a black screen ── */
 function restFrame(C){
@@ -2917,7 +3288,8 @@ var PHASES = {
   lights:[[0,.30,"Prompt","PHONES UP"],[.30,.86,"Starfield","the room lights"],
           [.86,1,"Out","fade"]],
   spotlight:[[0,.80,"Sweep","two passes"],[.80,1,"Reveal","school takes the wall"]],
-  rail:[[0,1,"Ambient","continuous ticker"]]
+  rail:[[0,1,"Ambient","continuous ticker"]],
+  colorwars:[[0,1,"Live","driven by taps, not by the clock"]]
 };
 
 var ADAPT = {
@@ -3132,7 +3504,9 @@ function bootTV(){
      that is the case for a retained message replayed to a screen that just
      powered on, which should join immediately. */
   var pending=null, appliedAt=0, scheduledAt=0, applyErr=0;
-  var trace=[], TRACE_MAX=600;
+  /* ring buffer — shift() on a 600-entry array every frame was 36,000
+     element moves a second to discard one sample */
+  var TRACE_MAX=600, trace=new Array(TRACE_MAX), traceN=0;
   function applyState(s){
     /* recorded so an operator can prove the wall switched together: every output
        aims at the same `at`, and applyErr is how far this one actually missed it */
@@ -3180,6 +3554,7 @@ function bootTV(){
     return {ms:Math.round(loopPos(ev.d)), u:+cl(loopPos(ev.d)/ev.d,0,1).toFixed(4),
             ev:ev.id, period:ev.d+REST, vis:document.hidden?0:1};
   };
+  LINK.onTap=function(m){ if(m&&m.x!==undefined) WAR.add(m.t,m.x,m.y,m.s); };
   LINK.start("tv", rawIdx+1, arm);
   /* Coming back from hidden: settle any switch whose moment passed while the
      timer was throttled, then let the clock put us on the right frame. */
@@ -3228,7 +3603,10 @@ function bootTV(){
   });
 
   window.__BB={ LINK:LINK,
-                trace:function(){ return trace.slice(); },
+                trace:function(){
+                  var c=Math.min(traceN,TRACE_MAX), a=[], i;
+                  for(i=0;i<c;i++) a.push(trace[(traceN-c+i)%TRACE_MAX]);
+                  return a; },
                 smoothness:function(){ return smoothReport(); },
                 baseline:baselineTest,
                 frames:function(){ return FPS.raw(); },
@@ -3307,8 +3685,11 @@ function bootTV(){
     var st=R.draw(f, f.screens?f.screens[tvIdx]:null);
     /* A ring buffer of frames ACTUALLY PAINTED, so sync can be checked against
        what reached the glass rather than against what the maths intended. */
-    trace.push({t:Date.now(),ms:Math.round(p),u:+f.u.toFixed(5),ev:ev.id});
-    if(trace.length>TRACE_MAX) trace.shift();
+    var ti=traceN%TRACE_MAX;
+    var te=trace[ti];
+    if(te){ te.t=Date.now(); te.ms=Math.round(p); te.u=f.u; te.ev=ev.id; }
+    else trace[ti]={t:Date.now(),ms:Math.round(p),u:f.u,ev:ev.id};
+    traceN++;
 
     var dt=performance.now()-t0;
     FPS.tick(t0,dt);
@@ -3349,6 +3730,100 @@ function bootTV(){
         "loop    "+String(Math.floor(p)).padStart(6," ")+" ms   u "+f.u.toFixed(4)+"\n"+
         "phase   "+(f.phase||"—")+"\n"+
         "cycle#  "+Math.floor((nowMs()-EPOCH)/period);
+    }
+    requestAnimationFrame(tick);
+  })();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   10b · PATRON CONTROLLER  ( ?patron=1 )
+   The page behind the QR. Pick a side, then tap the wall as it is actually
+   arranged. A tap sends a side and a normalised x/y and nothing else — no
+   state, no ack, no retained message — because this is the one path in the
+   system where latency is the whole product.
+   ══════════════════════════════════════════════════════════════════════════ */
+function bootPatron(){
+  document.body.classList.add("patron");
+  var sel=resolveSelection(Q);
+  var L=LAYOUTS[Q.get("layout")]||LAYOUTS.row4;
+  var home=TEAMS[sel.team], away=TEAMS[sel.opp];
+  var side=null;
+  document.title="Color Wars · "+home.ab+" vs "+away.ab;
+
+  document.getElementById("pRoom").textContent="room "+(LINK.room||"—");
+  var wrap=document.getElementById("pTeams");
+  [[0,home],[1,away]].forEach(function(pair){
+    var i=pair[0], T=pair[1];
+    var b=document.createElement("button");
+    b.className="pteam"; b.style.background=T.p;
+    b.style.color=lightOn(T.p)?"#000":"#fff";
+    b.innerHTML=T.word+"<small>"+T.nick.toUpperCase()+"</small>";
+    b.onclick=function(){ start(i,T); };
+    wrap.appendChild(b);
+  });
+
+  var cv=document.createElement("canvas");
+  document.getElementById("pwall").appendChild(cv);
+  var R=makeRenderer(cv), box=document.getElementById("pwall");
+  var geo=geoOf(L), W=0,H=0;
+
+  function fit(){
+    var bw=Math.max(80,box.clientWidth), bh=Math.max(80,box.clientHeight);
+    var w=bw, h=w*geo.AH/geo.AW;
+    if(h>bh){ h=bh; w=h*geo.AW/geo.AH; }
+    cv.style.width=w+"px"; cv.style.height=h+"px";
+    cv.style.left=((bw-w)/2)+"px"; cv.style.top=((bh-h)/2)+"px";
+    /* the phone shows the wall exactly as it is arranged, so a tap lands
+       where the patron thinks it will */
+    var vps=L.cells.map(function(c){
+      var r=geo.rect(c);
+      return {ox:r.x*w, oy:r.y*h, w:r.w*w, h:r.h*h, cell:r};
+    });
+    R.viewports(vps, w, h, Math.min(window.devicePixelRatio||1,2));
+    W=w; H=h;
+  }
+  fit(); window.addEventListener("resize",fit);
+  if(window.ResizeObserver) new ResizeObserver(fit).observe(box);
+
+  function start(i,T){
+    side=i;
+    document.body.classList.add("playing");
+    var m=document.getElementById("pMine");
+    m.textContent=T.word; m.style.background=T.p;
+    m.style.color=lightOn(T.p)?"#000":"#fff";
+    fit();
+  }
+
+  /* Coalesce to one send per frame. A finger dragging fires pointermove far
+     faster than 60 Hz and flooding a public broker just adds latency. */
+  var pending=null, sent=0, ok=0, fail=0;
+  function queue(e){
+    if(side===null) return;
+    var r=cv.getBoundingClientRect();
+    var x=(e.clientX-r.left)/r.width, y=(e.clientY-r.top)/r.height;
+    if(x<0||x>1||y<0||y>1) return;
+    pending={x:x,y:y};
+    WAR.add(side,x,y,Date.now());        /* paint locally at once */
+  }
+  cv.addEventListener("pointerdown",function(e){ cv.setPointerCapture(e.pointerId); queue(e); });
+  cv.addEventListener("pointermove",function(e){ if(e.buttons||e.pointerType==="touch") queue(e); });
+  cv.addEventListener("touchmove",function(e){ e.preventDefault(); },{passive:false});
+
+  LINK.onTap=function(m){ if(m&&m.x!==undefined) WAR.add(m.t,m.x,m.y,m.s); };
+  LINK.start("patron",null,function(){});
+
+  var ev=makeEvent("colorwars",sel.team,sel.opp);
+  (function tick(){
+    if(pending){
+      if(LINK.tap(side,pending.x,pending.y)){ sent++; ok++; } else fail++;
+      pending=null;
+    }
+    if(side!==null){
+      R.draw(frameAt(ev,L,loopPos(ev.d),0), null);
+      var st=document.getElementById("pLink");
+      st.textContent=(LINK.status==="live"?"live":LINK.status)+"  "+sent+" taps"+
+        (WAR.lat?("  "+Math.round(WAR.lat)+" ms"):"");
+      st.style.color=LINK.status==="live"?"var(--good)":"var(--tally)";
     }
     requestAnimationFrame(tick);
   })();
@@ -3663,6 +4138,7 @@ function bootApp(){
     LINK.configure({url:inBroker.value, room:inRoom.value, lead:+inLead.value});
     inRoom.value=LINK.room; inBroker.value=LINK.url;
     /* the control panel listens too, so a second operator's change is reflected here */
+    LINK.onTap=function(m){ if(m&&m.x!==undefined) WAR.add(m.t,m.x,m.y,m.s); };
     LINK.start("control",null,function(s){
       if(s.type&&TYPE_BY_ID[s.type]&&
          (s.type!==state.type||s.team!==state.team||s.opp!==state.opp||
@@ -3867,7 +4343,7 @@ function bootApp(){
   /* ── scripting hook. Same shape as the other BarBoards prototypes (§13.1), and
         the only supported way to drive a frame without waiting for the clock. ── */
   window.__BB={
-    TEAMS:TEAMS, TYPES:TYPES, LAYOUTS:LAYOUTS, GRAMMARS:G, RIVAL:RIVAL, LINK:LINK,
+    TEAMS:TEAMS, TYPES:TYPES, LAYOUTS:LAYOUTS, GRAMMARS:G, RIVAL:RIVAL, LINK:LINK, QR:QR, WAR:WAR,
     teamKeys:TEAMKEYS, makeEvent:makeEvent, makeRenderer:makeRenderer, geoOf:geoOf,
     /* Benchmark a real output surface. Run this ON the device — a desktop's
        numbers say nothing about what an Adreno 643 will do. */
@@ -4030,8 +4506,10 @@ function audit(){
 document.fonts && document.fonts.ready.then(function(){ WCACHE={}; });
 /* The matrix audit walks twelve thousand frames. That is fine in the control room
    and unacceptable on an output, which should be painting within a frame of load. */
-if(!Q.has("tv")) audit();
-if(Q.has("tv")) bootTV(); else bootApp();
+if(!Q.has("tv") && !Q.has("patron")) audit();
+if(Q.has("patron")) bootPatron();
+else if(Q.has("tv")) bootTV();
+else bootApp();
 
 })();
 </script>
