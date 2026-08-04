@@ -486,6 +486,9 @@ var GAP = Q.has("gap") ? Math.max(0, Math.min(2, +Q.get("gap")||0)) : GAP_DEFAUL
 
 /* Visual gain: 0 clean · 1 rizz · 2 max. Shared over the link, because a wall
    where one screen is decorated and the others are not is a broken wall. */
+/* Stress multiplier for the flyover benchmark. 1 is a real cue; 10 is an
+   instrument for finding where the hardware gives out. */
+var LOAD = Q.has("load") ? Math.max(1,Math.min(40,+Q.get("load")||1)) : 1;
 var FX = Q.has("fx") ? Math.max(0, Math.min(2, +Q.get("fx")||0)) : 1;
 
 /* ?bench=1 puts a rolling frame-time HUD on an output, so the numbers come
@@ -502,7 +505,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0015";
+var VERSION = "v1.0016";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1200,6 +1203,15 @@ var TYPES=[
  name:"AMBIENT RAIL", sub:"TIER ZERO · COSTS NO WINDOW",
  desc:function(c){ return "House cue — the always-on rail"; }, sr:{}},
 
+/* ── benchmark ─────────────────────────────────────────────────────────
+   Deliberately heavy. Not for a wall on a Saturday; for finding the knee. */
+{id:"flyover", grp:"bench", label:"Stadium flyover", cue:"flyover", d:24000, house:true,
+ amp:99,win:0,tier:3,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0,
+ name:"STADIUM FLYOVER", sub:"BENCHMARK · SCALE WITH ?load=",
+ desc:function(c){ return "Benchmark — a night approach, scaled by ?load= to find the limit"; },
+ sr:{}},
+
 /* ── patron ────────────────────────────────────────────────────────────
    The only cue driven by the room rather than the feed or the clock. */
 {id:"colorwars", grp:"patron", label:"Color Wars", cue:"colorwars", d:20000, house:true,
@@ -1224,7 +1236,7 @@ var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
 var TYPE_GROUPS=[["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
   ["ritual","Ritual"],["house","House cues · no push event"],
-  ["patron","Patron · interactive"]];
+  ["patron","Patron · interactive"],["bench","Benchmark"]];
 var TEAMKEYS=Object.keys(TEAMS);
 
 /* Cross a type with a school. Everything downstream — grammars, payload, timing
@@ -1488,24 +1500,30 @@ function makeRenderer(cv){
   /* Rasterise each distinct glyph run once. Drawn at a whisper of alpha into
      the real context, because the atlas is what we are filling, and the frame
      that follows clears the canvas anyway. */
-  function prewarm(frames){
+  var warmed={};
+  /* `walk` calls back with one frame at a time and is free to discard it,
+     so peak live objects is a single frame rather than a whole cue. */
+  function prewarm(walk, key){
     if(!W||!H) return 0;
-    var seen={}, n=0, i, j, l, k, bk;
+    var sig=(key||"")+"|"+Math.round(W)+"x"+Math.round(H);
+    if(warmed[sig]) return 0;                 /* never warm the same thing twice */
+    warmed[sig]=1;
+    var seen={}, n=0;
     ctx.setTransform(DPR,0,0,DPR,0,0);
     ctx.globalAlpha=0.004; ctx.fillStyle="#000";
     ctx.textAlign="center"; ctx.textBaseline="middle";
-    for(i=0;i<frames.length;i++){
-      var ls=frames[i].layers; if(!ls) continue;
-      for(j=0;j<ls.length;j++){
-        l=ls[j]; if(l.k!=="word"||!l.t) continue;
-        bk=bucketOf(l); k=l.t+"|"+bk+"|"+(l.track||0);
+    walk(function(fr){
+      var ls=fr&&fr.layers; if(!ls) return;
+      for(var j=0;j<ls.length;j++){
+        var l=ls[j]; if(l.k!=="word"||!l.t) continue;
+        var bk=bucketOf(l), k=l.t+"|"+bk+"|"+(l.track||0);
         if(seen[k]) continue;
         seen[k]=1; n++;
         setLS((l.track&&HAS_LS)?((l.track*bk)+"px"):"0px");
         setFont("400 "+bk+"px Anton,'Arial Narrow',sans-serif");
         ctx.fillText(l.t, SW/2, SH/2);
       }
-    }
+    });
     ctx.globalAlpha=1; invalidate(); lastKey="";
     return n;
   }
@@ -1889,13 +1907,14 @@ function makeFPS(window_){
    frame and exactly how late it was. One tall red bar is one visible hitch. */
 /* Bare rAF, zero work. The control against which any drop count must be read:
    if an empty loop stalls, the page cannot be the cause. */
-/* Sample a cue densely enough that no string it ever shows is missed. 96 slices
-   catches text that appears for a single beat. */
-function cueFrames(ev,L,fx,n){
-  var out=[], i, N=n||96;
-  for(i=0;i<=N;i++) out.push(frameAt(ev,L,ev.d*i/N,fx));
-  out.push(frameAt(ev,L,ev.d+1,fx));            /* the rest lockup too */
-  return out;
+/* Walk a cue densely enough that no string it ever shows is missed, WITHOUT
+   ever holding more than one frame alive. Building all 97 at once was over ten
+   thousand simultaneous layer objects — a major-GC trigger, and a major GC is
+   a ~50 ms stall. */
+function eachCueFrame(ev,L,fx,fn,n){
+  var i, N=n||64;
+  for(i=0;i<=N;i++) fn(frameAt(ev,L,ev.d*i/N,fx));
+  fn(frameAt(ev,L,ev.d+1,fx));               /* the rest lockup too */
 }
 
 function baselineTest(seconds){
@@ -2936,6 +2955,162 @@ G.rail=function(u,C){
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
+   6c · THE FLYOVER — a stadium, and a benchmark
+   ══════════════════════════════════════════════════════════════════════════
+
+   A night approach to a full stadium, built out of the same primitives as
+   everything else, and deliberately heavy. Each scene leans on a DIFFERENT part
+   of the renderer so the benchmark says which path gives out first rather than
+   just "it dropped frames":
+
+     approach   thousands of dots        the batched particle path
+     exterior   large soft glows         the sprite-blit path
+     the bowl   hundreds of bands        the fillRect path
+     card stunt one texel lookup a dot   memory bandwidth, not fill
+     pyro       rings and sparks         stroked paths
+     full send  all of it at once        everything, simultaneously
+
+   LOAD scales every count linearly, so the frame cost is a straight line you
+   can walk until it breaks. ?load=1 is a real cue; ?load=10 is an instrument.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* the crowd spells the school's name — one small offscreen bitmap, sampled once
+   per seat, which is how card stunts have always worked */
+var MASKC={};
+function textMask(text){
+  if(MASKC[text]) return MASKC[text];
+  var W=160, H=40;
+  var cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  var c=cv.getContext("2d");
+  c.fillStyle="#000"; c.fillRect(0,0,W,H);
+  c.fillStyle="#fff"; c.textAlign="center"; c.textBaseline="middle";
+  var px=30;
+  c.font="400 "+px+"px Anton,'Arial Narrow',sans-serif";
+  while(c.measureText(text).width>W*0.92 && px>6){ px-=1;
+    c.font="400 "+px+"px Anton,'Arial Narrow',sans-serif"; }
+  c.fillText(text,W/2,H/2);
+  var d=c.getImageData(0,0,W,H).data, m=new Uint8Array(W*H), i;
+  for(i=0;i<W*H;i++) m[i]=d[i*4]>110?1:0;
+  MASKC[text]={w:W,h:H,m:m};
+  return MASKC[text];
+}
+
+G.flyover=function(u,C){
+  var T=C.T, O=TEAMS[C.ev.opp]||T, o=[], i, k;
+  var L=LOAD;                                  /* the benchmark knob */
+  var night="#05070C";
+
+  /* ── camera: a single descent, everything hangs off it ── */
+  var desc=eio(cl(u/0.62,0,1));                /* 0 far away, 1 down at the rim */
+  var horizon=mix(0.34,0.86,desc);
+  var bowlW=mix(0.16,1.55,desc);
+  var bowlH=mix(0.05,0.62,desc);
+  var cx=0.5, cy=horizon;
+
+  o.push({k:"fill",col:night});
+
+  /* ── 1 · the sky. Thousands of stars, thinning as we drop ── */
+  var stars=Math.round(90*L*(1-desc*0.75));
+  for(i=0;i<stars;i++){
+    var sx=det(i*3), sy=det(i*3+1)*horizon*0.98;
+    var tw=0.35+0.65*Math.abs(fsin(u*7+det(i*3+2)*6.283));
+    o.push({k:"dot",x:sx,y:sy,r:0.0009+0.0016*det(i+900),
+            col:"#FFF6E0",a:tw*(1-desc)*0.9});
+  }
+
+  /* ── 2 · the bowl. Concentric tiers of seats, drawn as bands ── */
+  var tiers=Math.round(10+10*L);
+  for(i=0;i<tiers;i++){
+    var t=i/tiers;
+    var rw=bowlW*(0.55+t*0.5), rh=bowlH*(0.55+t*0.5);
+    o.push({k:"band",x:cx-rw/2,y:cy-rh*0.5,w:rw,h:rh*0.035,
+            col:mixHex(night,"#1A2030",0.35+t*0.5),a:0.55});
+  }
+  /* the rim, catching light */
+  o.push({k:"band",x:cx-bowlW/2,y:cy-bowlH*0.52,w:bowlW,h:bowlH*0.03,
+          col:hexA("#8FA3C0",0.5*desc)});
+
+  /* ── 3 · floodlights: big soft glows, the sprite path ── */
+  var lamps=8;
+  for(i=0;i<lamps;i++){
+    var a0=(i/lamps)*6.283, lx=cx+Math.cos(a0)*bowlW*0.52, ly=cy+fsin(a0)*bowlH*0.52;
+    o.push({k:"glow",x:lx,y:ly,r:mix(0.03,0.16,desc),
+            col:hexA("#CFE4FF",0.45),a:1});
+    o.push({k:"dot",x:lx,y:ly,r:0.004,col:"#FFFFFF",a:0.95});
+  }
+
+  /* ── 4 · the crowd. Every seat a dot; this is the heavy part ── */
+  var seats=Math.round(220*L*desc);
+  var stunt=seg(u,0.44,0.62);                   /* the card stunt fades in */
+  var mask=stunt>0?textMask(T.word):null;
+  for(i=0;i<seats;i++){
+    var ang=det(i*5)*6.283;
+    var ring=0.62+det(i*5+1)*0.42;
+    var px2=cx+Math.cos(ang)*bowlW*0.5*ring;
+    var py=cy+fsin(ang)*bowlH*0.5*ring;
+    if(px2<-0.02||px2>1.02) continue;
+    var flick=0.45+0.55*Math.abs(fsin(u*11+det(i*5+2)*6.283));
+    var col="#C8D4E8";
+    if(mask){
+      /* sample the wordmark: seats inside a glyph flip to school colour */
+      var mx=Math.round(cl((px2-(cx-bowlW*0.5))/bowlW,0,0.999)*mask.w);
+      var my=Math.round(cl((py-(cy-bowlH*0.5))/bowlH,0,0.999)*mask.h);
+      if(mask.m[my*mask.w+mx]) col=T.p;
+      else if(stunt>0.5) col="#39404E";
+    }
+    o.push({k:"dot",x:px2,y:py,r:0.0011+0.0011*det(i+77),col:col,
+            a:(0.35+flick*0.6)*Math.min(1,desc*2)});
+  }
+
+  /* ── 5 · the field, once we are low enough ── */
+  if(desc>0.45){
+    var fv=seg(desc,0.45,1);
+    var fw=bowlW*0.52, fh=bowlH*0.42;
+    o.push({k:"band",x:cx-fw/2,y:cy-fh/2,w:fw,h:fh,col:"#12331B",a:fv});
+    for(i=0;i<=20;i++)
+      o.push({k:"band",x:cx-fw/2+fw*i/20,y:cy-fh/2,w:0.0012,h:fh,
+              col:hexA("#FFFFFF",0.20*fv)});
+    o.push({k:"band",x:cx-fw/2,y:cy-fh/2,w:fw*0.09,h:fh,col:hexA(T.p,0.55*fv)});
+    o.push({k:"band",x:cx+fw/2-fw*0.09,y:cy-fh/2,w:fw*0.09,h:fh,col:hexA(O.p,0.55*fv)});
+  }
+
+  /* ── 6 · pyro. Rings and sparks, on the stroked path ── */
+  if(u>0.66){
+    var shells=Math.round(3*L);
+    for(i=0;i<shells;i++){
+      var born=0.66+det(i*7)*0.30;
+      var age=(u-born)/0.16;
+      if(age<0||age>1) continue;
+      var fx0=0.12+det(i*7+1)*0.76, fy0=0.10+det(i*7+2)*0.42;
+      var rr=eo(age)*0.16;
+      o.push({k:"ring",x:fx0,y:fy0,r:rr,col:hexA(i%2?T.p:"#FFE9B0",(1-age)*0.8),
+              w:Math.max(1,4*(1-age))});
+      for(k=0;k<Math.round(10*L);k++){
+        var sa=det(i*97+k)*6.283, sd=rr*(0.5+det(i*97+k+1)*0.7);
+        o.push({k:"dot",x:fx0+Math.cos(sa)*sd*0.55,y:fy0+fsin(sa)*sd,
+                r:0.0012,col:k%3?"#FFE9B0":T.p,a:(1-age)*0.9});
+      }
+    }
+  }
+
+  /* ── 7 · the lockup ── */
+  if(u>0.80){
+    var lv=seg(u,0.80,0.92);
+    o.push({k:"word",t:T.word,x:.5,y:.42,h:.30,col:"#fff",fit:.82,track:.02,
+            a:lv,sc:mix(1.10,1,eo(lv))});
+    o.push({k:"word",t:T.venue.toUpperCase(),x:.5,y:.62,h:.045,
+            col:hexA("#FFFFFF",.7),fit:.8,track:.16,a:seg(u,.84,.94)});
+  }else if(u<0.10){
+    o.push({k:"word",t:"SATURDAY NIGHT",x:.5,y:.5,h:.07,col:hexA("#FFFFFF",.75),
+            fit:.6,track:.3,a:cl(u*14,0,1)*cl((0.10-u)*14,0,1)});
+  }
+
+  var phase = u<0.14?"approach" : u<0.30?"exterior" : u<0.44?"the bowl"
+            : u<0.62?"card stunt" : u<0.80?"pyro" : "lockup";
+  return {layers:o, phase:"flyover · "+phase+" · load "+L};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
    6b · FX — the gain control
    Not a set of new cues. A layer that READS whatever frame a grammar produced
    and decorates it, so all 20 event types and all 16 schools get it without a
@@ -3361,7 +3536,10 @@ var PHASES = {
           [.86,1,"Out","fade"]],
   spotlight:[[0,.80,"Sweep","two passes"],[.80,1,"Reveal","school takes the wall"]],
   rail:[[0,1,"Ambient","continuous ticker"]],
-  colorwars:[[0,1,"Live","driven by taps, not by the clock"]]
+  colorwars:[[0,1,"Live","driven by taps, not by the clock"]],
+  flyover:[[0,.14,"Approach","starfield"],[.14,.30,"Exterior","floodlights"],
+           [.30,.44,"The bowl","tiers"],[.44,.62,"Card stunt","the crowd spells it"],
+           [.62,.80,"Pyro","shells"],[.80,1,"Lockup","school + venue"]]
 };
 
 var ADAPT = {
@@ -3566,7 +3744,7 @@ function bootTV(){
   }
   size(); window.addEventListener("resize",size);
   if(window.ResizeObserver) new ResizeObserver(size).observe(root);
-  try{ R.prewarm(cueFrames(ev,L,FX)); }catch(e){}
+  try{ R.prewarm(function(cb){ eachCueFrame(ev,L,FX,cb); }, ev.id+"|"+L.id+"|"+FX); }catch(e){}
 
   /* ── the command channel ──────────────────────────────────────────────────
      A cue arriving here is NOT applied on arrival. It is applied at s.at, a
@@ -3598,7 +3776,7 @@ function bootTV(){
     period=ev.d+REST; hold=null;
     if(geoChanged){ regeo(); size(); }
     /* hot the glyph atlas for the new cue before it is ever shown */
-    try{ R.prewarm(cueFrames(ev,L,FX)); }catch(e){}
+    try{ R.prewarm(function(cb){ eachCueFrame(ev,L,FX,cb); }, ev.id+"|"+L.id+"|"+FX); }catch(e){}
     document.title=ev.name+" · TV "+(rawIdx+1)+" · "+L.name;
   }
   /* The armed switch is driven by a TIMER, never by the render loop.
@@ -3937,7 +4115,8 @@ function bootApp(){
     state.ev=makeEvent(state.type,state.team,state.opp);
     state.manual=null;
     renderTeams(); renderList(); renderOpp(); renderBrief(); renderRight(); renderURLs();
-    if(stageR){ try{ stageR.prewarm(cueFrames(state.ev,state.L,FX)); }catch(e){} }
+    if(stageR){ try{ stageR.prewarm(function(cb){ eachCueFrame(state.ev,state.L,FX,cb); },
+                     state.ev.id+"|"+state.L.id+"|"+FX); }catch(e){} }
     render(currentMs());
     if(o.push!==false) pushLink();
   }
@@ -4075,7 +4254,8 @@ function bootApp(){
       SCREENS.push({el:d,w:r.w*W,h:r.h*H});
     });
     stage.__W=W; stage.__H=H;
-    try{ stageR.prewarm(cueFrames(state.ev,L,FX)); }catch(e){}
+    try{ stageR.prewarm(function(cb){ eachCueFrame(state.ev,L,FX,cb); },
+                        state.ev.id+"|"+L.id+"|"+FX); }catch(e){}
     render(currentMs());          /* paint at once — do not wait for the next frame */
   }
   /* rebuild whenever the container's box actually changes — covers first layout,
@@ -4515,6 +4695,43 @@ function bootApp(){
     fps:function(){ return FPS.stats(); },
     cadence:function(){ return FPS.cadence(); },
     baseline:baselineTest,
+    /* Walk the load up until the draw crosses the frame budget and report the
+       knee. This is the number that decides how much a QCS6490 can be asked to
+       draw — run it on the device, not here. */
+    stress:function(opts){
+      opts=opts||{};
+      var w=opts.w||1920, h=opts.h||1080, fx=(opts.fx===undefined?FX:opts.fx);
+      var cue=opts.cue||"flyover", team=opts.team||state.team;
+      var L=LAYOUTS[opts.layout||"row4"], g=geoOf(L);
+      var cv=document.createElement("canvas");
+      cv.style.cssText="position:fixed;left:-99999px;top:0";
+      document.body.appendChild(cv);
+      var R=makeRenderer(cv); R.resize(w,h,g.rect(L.cells[0]),1);
+      var save=LOAD, rows=[], knee60=null, knee120=null, i, lv;
+      for(lv=1; lv<=(opts.max||24); lv++){
+        LOAD=lv;
+        var e=makeEvent(cue,team,RIVAL[team]);
+        var fr=[], peak=0, fm;
+        for(i=0;i<=40;i++){ fm=frameAt(e,L,e.d*i/40,fx); fr.push(fm);
+          if(fm.layers.length>peak) peak=fm.layers.length; }
+        R.prewarm(function(cb){ for(var z=0;z<fr.length;z++) cb(fr[z]); }, cue+"|"+lv);
+        for(i=0;i<30;i++) R.draw(fr[i%fr.length],null);
+        var t=[], st=null, t0;
+        for(i=0;i<240;i++){ t0=performance.now();
+          st=R.draw(fr[i%fr.length],null); t.push(performance.now()-t0); }
+        t.sort(function(a,b){ return a-b; });
+        rows.push({load:lv, peakLayers:peak, drawn:st.drawn,
+                   p50ms:+t[120].toFixed(3), p99ms:+t[237].toFixed(3)});
+        if(knee120===null && t[237]>8.33) knee120=lv;
+        if(knee60===null && t[237]>16.67){ knee60=lv; break; }
+      }
+      LOAD=save; cv.remove();
+      return {surface:w+"x"+h, cue:cue, fx:fx,
+              holds120upTo:(knee120===null?(">"+rows.length):(knee120-1)),
+              holds60upTo:(knee60===null?(">"+rows.length):(knee60-1)),
+              rows:rows,
+              note:"p99 of the DRAW only — the browser adds its own overhead on top"};
+    },
     env:function(){ return {version:VERSION, dpr:window.devicePixelRatio,
       dprUsed:(DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1)),
       desync:DESYNC, fx:FX, gap:GAP, layout:state.L.id,
