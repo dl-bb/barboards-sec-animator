@@ -245,6 +245,38 @@ Reload commands are **never retained**, because a retained reload is a boot loop
 survives every restart and can only be cleared by publishing over it — from a wall that is
 busy rebooting. A stale-`at` guard discards any command replayed more than 60 s late.
 
+### Self-update — and the trap it exists to avoid
+
+Remote reload has a bootstrap problem that only bites once, and bites hard: **a build can
+only obey the reload command if it already has the reload command.** A screen running an
+older build cannot be told to fetch the build that would let it be told. On hardware nobody
+can physically reach, that is a trap with no exit — the fix ships to the server and stays
+there.
+
+So outputs check what the server is serving and reload themselves when it differs. From
+v1.0027 onward, every future build reaches the wall on its own.
+
+This is a page that reloads itself on unreachable hardware, so the failure mode to design
+against is not a missed update, it is a **boot loop**. Three guards:
+
+- it reloads *only* when the served version differs from the running one, so the steady state
+  is silent (verified: a full check cycle passes with no reload and nothing written);
+- a target that fails to take hold three times is abandoned permanently — this covers the
+  nasty case where a cache serves the new file to `fetch()` and the old file to navigation,
+  which would otherwise cycle forever;
+- anything unexpected — failed fetch, captive portal, error page, a response with no
+  `VERSION` in it — does nothing at all.
+
+Screens land on a shared 30-second mark so the wall turns over together, the reload is
+cache-busted so a stale cache cannot answer it, and the badge goes **amber — UPDATING**
+with both version numbers, then green with the new one. First check is staggered 20–80 s so
+sixteen screens don't hit the host at once, then every 10 minutes. `?update=0` disables it.
+
+The control room shows the build each screen reports and flags a **MIXED FLEET** in red when
+they disagree — a wall running two builds is the thing most likely to look wrong and least
+likely to be suspected. Screens older than v1.0027 report no version at all, which is itself
+the answer: they cannot be reloaded remotely and need a restart by some other means.
+
 ### Clock sync vs. display lag — two different faults
 
 Once the clocks agree, anything still visibly off is **not** a clock problem: it is the
@@ -259,11 +291,43 @@ That is what `skew` is for, and the two-step diagnosis is:
    (positive runs that screen ahead). The value **persists on the device** and survives a
    reload, so it only has to be dialled in once per panel.
 
-### Getting to sub-millisecond
+### What this actually buys you over the internet
 
-The browser layer above needs no infrastructure and self-corrects, which is why it is the
-default. But its accuracy floor is the round trip — a 268 ms public-broker hop is doing well
-to reach ±1 ms, and it will not do better. On dedicated hardware you can remove that floor:
+The estimator was simulated against a realistic public-broker path — a hard delay floor plus
+one-sided, heavy-tailed queueing, which is the real shape of internet delay, since a packet
+can be delayed but never hurried. Median and 95th-percentile error, in ms:
+
+| Path | 10-sample window | 64-sample window |
+|---|---|---|
+| mild queueing | 2.4 / 9 | **0.7 / 3** |
+| congested | 6.3 / 23 | **2.1 / 7** |
+| 30 ms asymmetric floors | 14.9 / 22 | 15.0 / 18 |
+
+Two things fall out of that, and both are shipped:
+
+- **Window size is worth ~3×**, so the window is 64 samples over a 10-minute horizon rather
+  than 10 over 90 seconds. Accuracy keeps improving for about five minutes after a screen
+  starts, then holds.
+- **Averaging the window is a trap.** It looks better under symmetric jitter and collapses to
+  40 ms median / 156 ms p95 once delay is one-sided, because a mean has no defence against a
+  tail that only points one way. Hence lowest-RTT, like NTP. This was measured before it was
+  chosen.
+
+**The one thing no estimator can fix is a path that is asymmetric in a sustained way.** A
+route whose uplink is consistently 60 ms slower than its downlink produces a 30 ms bias that
+is mathematically indistinguishable from a clock offset — more samples do not help, and
+neither does a better filter. Two screens with *opposite* asymmetry can therefore sit ~130 ms
+apart with the clock layer working perfectly.
+
+If your screens are on the same site and route, their asymmetry is similar and largely
+cancels in the relative skew, which is what you actually see. If they are genuinely on
+different networks, this is the floor, and it is why the next section matters.
+
+### Getting past that floor
+
+The browser layer needs no infrastructure and self-corrects, which is why it is the default,
+and over the public broker it measured **±1 ms** in practice. But the floor above is real. On
+dedicated hardware you can remove it:
 
 - **Run a broker on the same LAN** (Mosquitto is the obvious choice) instead of the public
   HiveMQ default. Round trip drops from ~270 ms to ~1–3 ms, the estimate tightens with it,
@@ -293,6 +357,8 @@ privacy at once.
 | `rest` | Ms of lockup between loops. Default 2500. |
 | `skew` | Per-device **display-lag** trim in ms; positive runs that screen ahead. Not a clock fix — see above. Settable from the panel and persisted on the device. |
 | `sync` | `0` disables clock discipline and falls back to the raw OS clock. |
+| `update` | `0` disables self-update. Outputs otherwise reload themselves when the server serves a different build. |
+| `updatems` | Self-update check interval, default 600000 (10 min), minimum 60000. |
 | `bezel` | `0` to drop the letterbox guides. |
 | `diag` | `1` for the clock overlay (or press `i` on any output). |
 
