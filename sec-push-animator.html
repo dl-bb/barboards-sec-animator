@@ -33,6 +33,7 @@ h1,h2,h3{font-family:Anton,"Arial Narrow",sans-serif;font-weight:400;text-transf
   border-bottom:1px solid var(--hair);background:#0E0B0A;height:46px}
 .brand{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--dimmer);white-space:nowrap}
 .brand b{color:var(--bone);font-weight:600}
+#ver{display:block;margin-top:2px;color:#5A4E45;letter-spacing:.16em;font-size:8.5px}
 .btn{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;
   background:#191311;border:1px solid var(--line);color:var(--dim);padding:5px 10px;border-radius:2px;cursor:pointer;transition:.14s}
 .btn:hover{color:var(--bone);border-color:#5A483C}
@@ -135,7 +136,8 @@ input[type=range]{accent-color:var(--cue);height:16px}
 .brtxt em{font-style:normal;color:var(--cue)}
 .transport{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid var(--hair);background:#0C0A09;flex:none}
 .track{flex:1;height:6px;background:#1C1613;border-radius:3px;position:relative;cursor:pointer;overflow:hidden}
-.track i{position:absolute;left:0;top:0;bottom:0;background:var(--cue);border-radius:3px}
+.track i{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--cue);border-radius:3px;
+  transform-origin:0 50%;will-change:transform}
 .track u{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.18)}
 .tclk{font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--dim);min-width:92px;text-align:right}
 
@@ -201,11 +203,14 @@ body.tvmode .top,body.tvmode .wrap{display:none}
   white-space:pre;letter-spacing:.04em}
 body.diag #tvdiag{display:block}
 #devfps{position:fixed;left:10px;top:10px;z-index:2147483647;pointer-events:none;
+  width:216px;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
   font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5;letter-spacing:.04em;
   color:#7FC08A;background:rgba(0,0,0,.82);border:1px solid #2A3A2C;border-radius:3px;
   padding:6px 10px;white-space:pre;display:none}
 #devfps canvas{display:block;margin-top:5px;image-rendering:pixelated;border:1px solid #1E2A20}
 body.dev #devfps{display:block}
+#fps{display:inline-block;min-width:230px;font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1}
 #fpsgraph{width:240px;height:34px;border:1px solid #241E1A;border-radius:2px;vertical-align:middle;
   image-rendering:pixelated;background:#0A0807}
 #tvgraph{position:fixed;right:10px;top:118px;border:1px solid #2A3A2C;border-radius:3px;
@@ -222,7 +227,7 @@ body.bench #tvbench{display:block}
 <body>
 
 <header class="top">
-  <div class="brand"><b>BarBoards</b> · SEC push-event animator</div>
+  <div class="brand"><b>BarBoards</b> · SEC push-event animator<span id="ver"></span></div>
   <span class="lb" style="color:#3A2D25">|</span>
   <label class="lb">Layout</label>
   <select id="selLayout"></select>
@@ -242,7 +247,6 @@ body.bench #tvbench{display:block}
   <span class="lb" id="fps">fps —</span>
   <canvas id="fpsgraph" title="every frame, last ~240. green under budget, amber late, red a dropped flip"></canvas>
   <span class="lb" id="clk">wall clock —</span>
-  <span class="lb" id="ver" style="color:#3A2D25"></span>
   <button class="btn" id="bOpen">Open all TVs</button>
 </header>
 
@@ -439,7 +443,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0008";
+var VERSION = "v1.0009";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1610,29 +1614,57 @@ function makeRenderer(cv){
    broken, and only the min shows it. */
 function makeFPS(window_){
   var N=window_||240, gaps=new Float32Array(N), n=0, last=0, jsv=new Float32Array(N);
+  /* Three separate stabilisers, because a readout that jitters is unreadable:
+     · cur is an exponential average, not the last frame — raw instantaneous fps
+       swings several Hz every frame and tells you nothing
+     · min/max are PEAK HELD like a VU meter. A dip that flashes past for 100 ms
+       is invisible; held for two seconds it can actually be read, and it decays
+       back rather than snapping the instant the sample leaves the window
+     · everything is rounded before display so it stops twitching on the last digit */
+  var ema=0, HOLD=2000;
+  var worstGap=0, worstAt=0, bestGap=1e9, bestAt=0;
+  /* worst single frame split into our work and everything else */
+  var worstJs=0, worstOther=0, otherAt=0;
   return {
     tick:function(ts,jsMs){
-      if(last){ gaps[n%N]=ts-last; jsv[n%N]=jsMs||0; n++; }
+      if(last){
+        var g=ts-last;
+        gaps[n%N]=g; jsv[n%N]=jsMs||0; n++;
+        ema = ema ? (ema*0.9 + g*0.1) : g;
+        var now=ts;
+        if(g>=worstGap || now-worstAt>HOLD){ worstGap=g; worstAt=now; worstJs=jsMs||0; }
+        var other=g-(jsMs||0);
+        if(other>=worstOther || now-otherAt>HOLD){ worstOther=other; otherAt=now; }
+        if(g<=bestGap  || now-bestAt >HOLD){ bestGap=g;  bestAt=now;  }
+      }
       last=ts;
     },
-    reset:function(){ n=0; last=0; },
+    reset:function(){ n=0; last=0; ema=0; worstGap=0; bestGap=1e9; },
     raw:function(){ var c=Math.min(n,N), a=[], i;
       for(i=0;i<c;i++) a.push(+gaps[(n-c+i+N)%N].toFixed(2));
       return a; },
     buf:function(){ return {gaps:gaps,n:n,N:N}; },
     stats:function(){
       var c=Math.min(n,N); if(c<2) return null;
-      var mn=1e9,mx=0,sum=0,js=0,i,g;
-      for(i=0;i<c;i++){ g=gaps[i]; if(g<mn)mn=g; if(g>mx)mx=g; sum+=g; if(jsv[i]>js) js=jsv[i]; }
-      var avg=sum/c, med=avg;
+      var sum=0,js=0,i;
+      for(i=0;i<c;i++){ sum+=gaps[i]; if(jsv[i]>js) js=jsv[i]; }
+      var avg=sum/c;
+      /* the refresh rate is the FASTEST frame seen, not the average — the average
+         is dragged down by every drop and would keep re-labelling the panel */
+      var hz=Math.round(1000/Math.max(1,bestGap));
+      if(hz>200||hz<20) hz=Math.round(1000/avg);
       /* a dropped flip is a gap of 1.5 refreshes or more */
-      var drops=0; for(i=0;i<c;i++) if(gaps[i]>med*1.5) drops++;
+      var vsync=1000/hz, drops=0;
+      for(i=0;i<c;i++) if(gaps[i]>vsync*1.5) drops++;
       return {
-        cur:+(1000/gaps[(n-1+N)%N]).toFixed(0),
-        min:+(1000/mx).toFixed(0), avg:+(1000/avg).toFixed(0), max:+(1000/mn).toFixed(0),
-        worstGapMs:+mx.toFixed(1), avgGapMs:+avg.toFixed(2), jsMaxMs:+js.toFixed(2),
-        drops:drops, dropPct:+(100*drops/c).toFixed(1), samples:c,
-        hz:Math.round(1000/med)
+        cur:Math.round(1000/Math.max(0.001,ema)),
+        min:Math.round(1000/Math.max(0.001,worstGap)),
+        avg:Math.round(1000/avg),
+        max:Math.round(1000/Math.max(0.001,bestGap)),
+        worstGapMs:+worstGap.toFixed(1), avgGapMs:+avg.toFixed(2), jsMaxMs:+js.toFixed(2),
+        drops:drops, dropPct:+(100*drops/c).toFixed(1), samples:c, hz:hz,
+        worstJsMs:+worstJs.toFixed(2), worstOtherMs:+worstOther.toFixed(2),
+        blame: worstJs > worstOther ? "render" : "browser"
       };
     }
   };
@@ -1641,6 +1673,37 @@ function makeFPS(window_){
 /* A frame-time graph beats a screen recording for this: a recording is capped
    by its own capture rate and adds its own jank, while this shows every single
    frame and exactly how late it was. One tall red bar is one visible hitch. */
+/* Bare rAF, zero work. The control against which any drop count must be read:
+   if an empty loop stalls, the page cannot be the cause. */
+function baselineTest(seconds){
+  return new Promise(function(res){
+    var gaps=[], prev=0, t0=performance.now(), until=t0+(seconds||5)*1000;
+    function step(ts){
+      if(prev) gaps.push(ts-prev);
+      prev=ts;
+      if(performance.now()<until) requestAnimationFrame(step); else done();
+    }
+    function done(){
+      var s2=gaps.slice().sort(function(a,b){ return a-b; });
+      var p=function(q){ return +s2[Math.min(s2.length-1,Math.floor(s2.length*q))].toFixed(2); };
+      var best=s2[0], hz=Math.round(1000/best);
+      var vsync=1000/hz, drops=0, i;
+      for(i=0;i<gaps.length;i++) if(gaps[i]>vsync*1.5) drops++;
+      res({
+        test:"baseline — empty rAF loop, no drawing",
+        frames:gaps.length, displayHz:hz,
+        gapMs:{p50:p(0.5),p95:p(0.95),p99:p(0.99),max:p(1)},
+        drops:drops, dropPct:+(100*drops/gaps.length).toFixed(1),
+        verdict: drops===0
+          ? "clean — the browser can hold vsync here, so drops in the app are the app"
+          : "THE BROWSER ITSELF DROPS "+(100*drops/gaps.length).toFixed(1)+"% WITH NO WORK AT ALL — "+
+            "look at display refresh mismatch, compositor, GPU driver or other tabs, not the render"
+      });
+    }
+    requestAnimationFrame(step);
+  });
+}
+
 function makeFrameGraph(cv,w,h){
   cv.width=w; cv.height=h; cv.style.width=w+"px"; cv.style.height=h+"px";
   var g=cv.getContext("2d");
@@ -1673,12 +1736,15 @@ function installDevHUD(){
   return function(F,buf,jsMs){
     if(!F){ txt.textContent="fps  measuring…"; return; }
     var budget=F.hz>90?8.33:16.67;
+    var p3=function(v){ return String(v).padStart(3," "); };
+    var p5=function(v){ return String(v).padStart(5," "); };
     txt.textContent =
-      "fps  "+String(F.cur).padStart(3," ")+"\n"+
-      "min  "+String(F.min).padStart(3," ")+"   avg "+String(F.avg).padStart(3," ")+
-      "   max "+String(F.max).padStart(3," ")+"\n"+
-      "drop "+F.dropPct+"%   js "+(jsMs===undefined?F.jsMaxMs:jsMs.toFixed(2))+" ms\n"+
-      "hz   ~"+F.hz+"   "+VERSION;
+      "fps  "+p3(F.cur)+"   hz "+p3(F.hz)+"\n"+
+      "min  "+p3(F.min)+"  avg "+p3(F.avg)+"  max "+p3(F.max)+"\n"+
+      "drop "+p5(F.dropPct.toFixed(1))+"%\n"+
+      "ours "+p5(F.worstJsMs.toFixed(2))+" ms  worst frame\n"+
+      "brwsr"+p5(F.worstOtherMs.toFixed(2))+" ms  "+F.blame+"\n"+
+      VERSION;
     txt.style.color = F.dropPct>1 ? "#E23B2E" : (F.min < F.hz*0.9 ? "#F0B03A" : "#7FC08A");
     if(buf) g(buf.gaps,buf.n,buf.N,budget);
   };
@@ -3089,6 +3155,7 @@ function bootTV(){
   window.__BB={ LINK:LINK,
                 trace:function(){ return trace.slice(); },
                 smoothness:function(){ return smoothReport(); },
+                baseline:baselineTest,
                 frames:function(){ return FPS.raw(); },
                 epoch:function(){ return {EPOCH:EPOCH,REST:REST,SKEW:SKEW,period:period,d:ev.d}; },
                 seek:function(t){ hold=t; return paint(cl(t,0,period)); },
@@ -3179,7 +3246,7 @@ function bootTV(){
     if(bench.last && (t0-bench.last)>25) bench.drop++;     /* missed a 60 Hz slot */
     bench.last=t0;
     if(bench.n>=120){ bench.avg=bench.sum/bench.n; bench.sum=0; bench.n=0; bench.max=0; }
-    if(devHUD && t0>devNext){ devNext=t0+100; devHUD(FPS.stats(),FPS.buf(),dt); }
+    if(devHUD && t0>devNext){ devNext=t0+250; devHUD(FPS.stats(),FPS.buf(),dt); }
     if(BENCH && !DEV){
       var F=FPS.stats();
       hud.textContent = F ?
@@ -3661,7 +3728,9 @@ function bootApp(){
     var f=render(ms);
     FPS.tick(ts||t0, performance.now()-t0);
     var shown=Math.min(ms,e.d);
-    fill.style.width=(shown/e.d*100)+"%";
+    /* scaleX, not width: a width write invalidates layout for this row every
+       single frame, and layout is the most expensive thing on the page. */
+    fill.style.transform="scaleX("+(shown/e.d).toFixed(4)+")";
     /* Chrome text at 60 Hz is pure waste and it perturbs the very frame time we
        are trying to measure. Ten a second is faster than anyone can read. */
     if(!tick.next || t0>tick.next){
@@ -3673,13 +3742,15 @@ function bootApp(){
       document.getElementById("dPos").textContent=Math.floor(ms)+" / "+(e.d+REST)+" ms";
       document.getElementById("clk").textContent="wall clock "+new Date(nowMs()).toISOString().slice(11,23);
       var F=FPS.stats();
-      fpsEl.textContent = F
-        ? ("fps "+F.cur+" · min "+F.min+" · avg "+F.avg+" · max "+F.max+
-           (F.drops?("  ⚠ "+F.dropPct+"% dropped"):"  ✓ no drops"))
-        : "fps —";
-      fpsEl.style.color = !F ? "" : (F.dropPct>1 ? "var(--tally)" : "var(--good)");
-      if(F){ var B_=FPS.buf(); drawGraph(B_.gaps,B_.n,B_.N, F.hz>90?8.33:16.67);
-             if(devHUD) devHUD(F,B_); }
+      if(F && (!tick.fpsNext || t0>tick.fpsNext)){
+        tick.fpsNext=t0+250;
+        var pad=function(v){ return String(v).padStart(3," "); };
+        fpsEl.textContent="fps "+pad(F.cur)+"  min "+pad(F.min)+"  avg "+pad(F.avg)+
+                          "  max "+pad(F.max)+(F.drops?("  "+F.dropPct+"% drop"):"  ok");
+        fpsEl.style.color = F.dropPct>1 ? "var(--tally)" : "var(--good)";
+        var B_=FPS.buf(); drawGraph(B_.gaps,B_.n,B_.N, F.hz>90?8.33:16.67);
+        if(devHUD) devHUD(F,B_);
+      }
       renderLink();
     }
     if(f.beat!==undefined && f.beat!==lastBeat){
@@ -3713,6 +3784,7 @@ function bootApp(){
        number that says whether the wall looks smooth. Run it on the device. */
     frames:function(){ return FPS.raw(); },
     fps:function(){ return FPS.stats(); },
+    baseline:baselineTest,
     env:function(){ return {version:VERSION, dpr:window.devicePixelRatio,
       dprUsed:(DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1)),
       desync:DESYNC, fx:FX, gap:GAP, layout:state.L.id,
