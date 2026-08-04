@@ -200,6 +200,17 @@ body.tvmode .top,body.tvmode .wrap{display:none}
   color:#F0B03A;background:rgba(0,0,0,.72);border:1px solid #3A2D25;padding:8px 11px;border-radius:3px;display:none;z-index:9;
   white-space:pre;letter-spacing:.04em}
 body.diag #tvdiag{display:block}
+#devfps{position:fixed;left:10px;top:10px;z-index:2147483647;pointer-events:none;
+  font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5;letter-spacing:.04em;
+  color:#7FC08A;background:rgba(0,0,0,.82);border:1px solid #2A3A2C;border-radius:3px;
+  padding:6px 10px;white-space:pre;display:none}
+#devfps canvas{display:block;margin-top:5px;image-rendering:pixelated;border:1px solid #1E2A20}
+body.dev #devfps{display:block}
+#fpsgraph{width:240px;height:34px;border:1px solid #241E1A;border-radius:2px;vertical-align:middle;
+  image-rendering:pixelated;background:#0A0807}
+#tvgraph{position:fixed;right:10px;top:118px;border:1px solid #2A3A2C;border-radius:3px;
+  display:none;z-index:10;image-rendering:pixelated}
+body.bench #tvgraph{display:block}
 #tvbench{position:fixed;right:10px;top:10px;font-family:"IBM Plex Mono",monospace;font-size:12px;
   line-height:1.55;color:#7FC08A;background:rgba(0,0,0,.78);border:1px solid #2A3A2C;padding:8px 11px;
   border-radius:3px;display:none;z-index:10;white-space:pre;letter-spacing:.03em}
@@ -229,6 +240,7 @@ body.bench #tvbench{display:block}
   <button class="btn on" id="bSeams">Seams</button>
   <button class="btn" id="bPlates">Labels</button>
   <span class="lb" id="fps">fps —</span>
+  <canvas id="fpsgraph" title="every frame, last ~240. green under budget, amber late, red a dropped flip"></canvas>
   <span class="lb" id="clk">wall clock —</span>
   <span class="lb" id="ver" style="color:#3A2D25"></span>
   <button class="btn" id="bOpen">Open all TVs</button>
@@ -370,7 +382,9 @@ body.bench #tvbench{display:block}
 <div id="tvroot"><div id="tvscreen"></div></div>
 <div id="tvdiag"></div>
 <div id="tvhint" style="display:none">i · diagnostics</div>
+<div id="devfps"></div>
 <div id="tvbench"></div>
+<canvas id="tvgraph"></canvas>
 
 <script>
 (function(){
@@ -413,12 +427,19 @@ var FX = Q.has("fx") ? Math.max(0, Math.min(2, +Q.get("fx")||0)) : 1;
 
 /* ?bench=1 puts a rolling frame-time HUD on an output, so the numbers come
    from the device that is actually rendering rather than from a desktop. */
-var BENCH = Q.get("bench")==="1";
+/* `#dev` (or ?dev=1) pins a min/avg/max readout to the top-left of whatever page
+   you are on — output or control room — with no other diagnostics attached. */
+var DEV   = Q.has("dev");
+var BENCH = Q.get("bench")==="1" || DEV;
 var DESYNC = Q.get("desync")==="1";
+/* A hi-DPI panel reports devicePixelRatio 2, which is FOUR TIMES the pixels for
+   no benefit on a television that is 1:1. Outputs pin to 1; the control-room
+   preview may use the real value because its screens are small. ?dpr= overrides. */
+var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : null;
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0007";
+var VERSION = "v1.0008";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1291,6 +1312,11 @@ function fsin(t){ return SINT[((t*1024/(Math.PI*2))|0)&1023]; }
    string but 13.25 µs called per character — a 28× penalty paid every frame by any
    tracked-out line. Measured once, reused forever. */
 var GADV={};
+/* Chromium 99+ has ctx.letterSpacing. Stepping a tracked line glyph by glyph
+   costs 30.75 us; one fillText with letterSpacing costs 1.25 us — 24.6x. The
+   per-glyph path stays as a fallback for engines without it. */
+var HAS_LS=(function(){ try{ var c=document.createElement("canvas").getContext("2d");
+  c.letterSpacing="10px"; return c.letterSpacing==="10px"; }catch(e){ return false; } })();
 
 function makeRenderer(cv){
   /* `desynchronized` lets the canvas present WITHOUT waiting for vsync. It cuts
@@ -1300,13 +1326,13 @@ function makeRenderer(cv){
   var ctx=cv.getContext("2d",{alpha:false, desynchronized:DESYNC});
   var W=0,H=0,SW=0,SH=0,DPR=1,cell={x:0,y:0,w:1,h:1};
   var vx0=0,vy0=0,vx1=0,vy1=0,ox=0,oy=0;
-  var grads={};
   /* Assigning ctx.font reparses the font shorthand and drops the glyph cache:
      0.63 µs when unchanged, 13.4 µs when it churns. Memoised, and every
      save/restore invalidates it because restore() rolls the font back too. */
-  var curFont="";
+  var curFont="", curLS="0px";
   function setFont(f){ if(f!==curFont){ ctx.font=f; curFont=f; } }
-  function invalidate(){ curFont=""; }
+  function setLS(v){ if(HAS_LS && v!==curLS){ ctx.letterSpacing=v; curLS=v; } }
+  function invalidate(){ curFont=""; curLS="__"; }
   /* static composited layers for the vignette and scanlines — see the CSS note */
   var vigEl=null, scanEl=null, vigA=-1, scanA=-1;
   function overlayEls(){
@@ -1332,18 +1358,23 @@ function makeRenderer(cv){
     cv.style.width=SW+"px"; cv.style.height=SH+"px";
     W=SW/cell.w; H=SH/cell.h;                 /* the whole wall, in CSS px */
     vx0=cell.x*W; vy0=cell.y*H; vx1=vx0+SW; vy1=vy0+SH;
-    grads={}; lastKey=""; vigA=-1; scanA=-1;
+    lastKey=""; vigA=-1; scanA=-1;
     return {W:W,H:H,SW:SW,SH:SH};
   }
   function geo(){ return {W:W,H:H,SW:SW,SH:SH,DPR:DPR,cell:cell}; }
 
-  function gradFor(col,r){
-    var rb=Math.max(1,Math.round(r/8)*8), k=col+"|"+rb;
-    if(grads[k]) return grads[k];
-    var g=ctx.createRadialGradient(0,0,0,0,0,rb);
-    var s=splitCol(col);
-    g.addColorStop(0,s.c); g.addColorStop(1,"rgba(0,0,0,0)");
-    grads[k]={g:g,r:rb,a:s.a}; return grads[k];
+  /* A radial gradient fill costs 3 us; blitting a pre-rendered sprite costs
+     0.67 us. Baked once per colour at 256px and scaled on the way out. */
+  var glowSprites={};
+  function glowFor(col){
+    var g=glowSprites[col];
+    if(g) return g;
+    var c=document.createElement("canvas"); c.width=c.height=256;
+    var q=c.getContext("2d"), s=splitCol(col);
+    var rg=q.createRadialGradient(128,128,0,128,128,128);
+    rg.addColorStop(0,s.c); rg.addColorStop(1,"rgba(0,0,0,0)");
+    q.fillStyle=rg; q.fillRect(0,0,256,256);
+    g={cv:c,a:s.a}; glowSprites[col]=g; return g;
   }
 
   /* One path for a run of same-colour particles instead of one path each:
@@ -1469,11 +1500,9 @@ function makeRenderer(cv){
       case "glow":
         r=l.r*W; x=l.x*W; y=l.y*H;
         if(x+r<vx0||x-r>vx1||y+r<vy0||y-r>vy1) return false;
-        var G=gradFor(l.col,r);
-        ctx.save(); ctx.translate(x,y); ctx.scale(r/G.r,r/G.r);
-        ctx.globalAlpha=a*G.a; ctx.fillStyle=G.g;
-        ctx.beginPath(); ctx.arc(0,0,G.r,0,6.2832); ctx.fill();
-        ctx.restore(); invalidate();
+        var GS=glowFor(l.col);
+        ctx.globalAlpha=a*GS.a;
+        ctx.drawImage(GS.cv, x-r, y-r, r*2, r*2);
         return true;
 
       case "tri":
@@ -1505,9 +1534,14 @@ function makeRenderer(cv){
         if(l.rot) ctx.rotate(l.rot*Math.PI/180);
         setFont(fnt);
         ctx.textBaseline="middle";
-        if(l.track){
-          /* canvas letter-spacing is not universal, so step the glyphs — but the
-             advances are cached per bucket, never re-measured per frame */
+        if(l.track && HAS_LS){
+          /* one call for the whole line. letterSpacing also trails the last glyph,
+             exactly as CSS does, so shift back by half to keep the line centred. */
+          setLS((l.track*bk)+"px");
+          ctx.textAlign="center";
+          ctx.fillText(l.t,-(l.track*bk)/2,0);
+        }else if(l.track){
+          setLS("0px");
           var str=l.t, sp=(l.track||0)*bk, j, ch, adv, tot=0, gw=[];
           for(j=0;j<str.length;j++){
             ch=str[j];
@@ -1520,6 +1554,7 @@ function makeRenderer(cv){
           ctx.textAlign="left";
           for(j=0;j<str.length;j++){ ctx.fillText(str[j],px0,0); px0+=gw[j]+sp; }
         }else{
+          setLS("0px");
           ctx.textAlign="center";
           ctx.fillText(l.t,0,0);
         }
@@ -1581,6 +1616,10 @@ function makeFPS(window_){
       last=ts;
     },
     reset:function(){ n=0; last=0; },
+    raw:function(){ var c=Math.min(n,N), a=[], i;
+      for(i=0;i<c;i++) a.push(+gaps[(n-c+i+N)%N].toFixed(2));
+      return a; },
+    buf:function(){ return {gaps:gaps,n:n,N:N}; },
     stats:function(){
       var c=Math.min(n,N); if(c<2) return null;
       var mn=1e9,mx=0,sum=0,js=0,i,g;
@@ -1596,6 +1635,52 @@ function makeFPS(window_){
         hz:Math.round(1000/med)
       };
     }
+  };
+}
+
+/* A frame-time graph beats a screen recording for this: a recording is capped
+   by its own capture rate and adds its own jank, while this shows every single
+   frame and exactly how late it was. One tall red bar is one visible hitch. */
+function makeFrameGraph(cv,w,h){
+  cv.width=w; cv.height=h; cv.style.width=w+"px"; cv.style.height=h+"px";
+  var g=cv.getContext("2d");
+  return function(gaps,count,N,budget){
+    g.fillStyle="#0A0807"; g.fillRect(0,0,w,h);
+    var top=budget*3;                      /* full height = 3 vsync intervals */
+    /* budget line, and the 1.5x line that marks a dropped flip */
+    g.fillStyle="#2A3A2C"; g.fillRect(0,h-(budget/top)*h,w,1);
+    g.fillStyle="#4A2A22"; g.fillRect(0,h-(budget*1.5/top)*h,w,1);
+    var c=Math.min(count,N), start=Math.max(0,count-w), i, v, x, bh;
+    for(i=0;i<Math.min(w,c);i++){
+      v=gaps[(start+i)%N]; if(!v) continue;
+      bh=Math.max(1,Math.min(h,(v/top)*h));
+      g.fillStyle = v>budget*1.5 ? "#E23B2E" : (v>budget*1.08 ? "#F0B03A" : "#7FC08A");
+      g.fillRect(i,h-bh,1,bh);
+    }
+  };
+}
+
+/* One readout, installed the same way in both modes, so #dev behaves
+   identically on an output and in the control room. */
+function installDevHUD(){
+  if(!DEV) return null;
+  document.body.classList.add("dev");
+  var host=document.getElementById("devfps");
+  var txt=document.createElement("div");
+  var cvs=document.createElement("canvas");
+  host.appendChild(txt); host.appendChild(cvs);
+  var g=makeFrameGraph(cvs,200,30);
+  return function(F,buf,jsMs){
+    if(!F){ txt.textContent="fps  measuring…"; return; }
+    var budget=F.hz>90?8.33:16.67;
+    txt.textContent =
+      "fps  "+String(F.cur).padStart(3," ")+"\n"+
+      "min  "+String(F.min).padStart(3," ")+"   avg "+String(F.avg).padStart(3," ")+
+      "   max "+String(F.max).padStart(3," ")+"\n"+
+      "drop "+F.dropPct+"%   js "+(jsMs===undefined?F.jsMaxMs:jsMs.toFixed(2))+" ms\n"+
+      "hz   ~"+F.hz+"   "+VERSION;
+    txt.style.color = F.dropPct>1 ? "#E23B2E" : (F.min < F.hz*0.9 ? "#F0B03A" : "#7FC08A");
+    if(buf) g(buf.gaps,buf.n,buf.N,budget);
   };
 }
 
@@ -2892,7 +2977,7 @@ function bootTV(){
     SW=vw; SH=vw*9/16;
     if(SH>vh){ SH=vh; SW=vh*16/9; }
     scr.style.width=SW+"px"; scr.style.height=SH+"px";
-    var g=R.resize(SW,SH,r,window.devicePixelRatio||1);
+    var g=R.resize(SW,SH,r, DPR_FORCE!==null?DPR_FORCE:1);
     W=g.W; H=g.H;
     /* == null catches the boot call, where hold is declared but not yet assigned */
     paint(hold==null ? loopPos(ev.d) : cl(hold,0,ev.d+REST));
@@ -3004,6 +3089,7 @@ function bootTV(){
   window.__BB={ LINK:LINK,
                 trace:function(){ return trace.slice(); },
                 smoothness:function(){ return smoothReport(); },
+                frames:function(){ return FPS.raw(); },
                 epoch:function(){ return {EPOCH:EPOCH,REST:REST,SKEW:SKEW,period:period,d:ev.d}; },
                 seek:function(t){ hold=t; return paint(cl(t,0,period)); },
                 play:function(){ hold=null; },
@@ -3030,6 +3116,8 @@ function bootTV(){
      actually did rather than a synthetic loop competing with it. */
   var bench={n:0,sum:0,max:0,drop:0,last:0,ms:0,drawn:0,culled:0,avg:0};
   var FPS=makeFPS(240);
+  var drawGraph=BENCH?makeFrameGraph(document.getElementById("tvgraph"),300,44):null;
+  var devHUD=installDevHUD(), devNext=0;
   var GAPS=new Float32Array(600), JSMS=new Float32Array(600), GN=0;
   function pctOf(buf,count,p){
     if(!count) return 0;
@@ -3091,7 +3179,8 @@ function bootTV(){
     if(bench.last && (t0-bench.last)>25) bench.drop++;     /* missed a 60 Hz slot */
     bench.last=t0;
     if(bench.n>=120){ bench.avg=bench.sum/bench.n; bench.sum=0; bench.n=0; bench.max=0; }
-    if(BENCH){
+    if(devHUD && t0>devNext){ devNext=t0+100; devHUD(FPS.stats(),FPS.buf(),dt); }
+    if(BENCH && !DEV){
       var F=FPS.stats();
       hud.textContent = F ?
         ("fps    "+String(F.cur).padStart(3," ")+"   min "+String(F.min).padStart(3," ")+
@@ -3102,6 +3191,7 @@ function bootTV(){
          "layers "+st.drawn+" drawn / "+st.layers+"   out "+Math.round(SW)+"×"+Math.round(SH)+"\n"+
          "vsync  "+(DESYNC?"DESYNCHRONISED (may tear)":"locked")+"   "+VERSION)
         : "measuring…";
+      if(F&&drawGraph){ var B_=FPS.buf(); drawGraph(B_.gaps,B_.n,B_.N, F.hz>90?8.33:16.67); }
     }
     if(document.body.classList.contains("diag")){
       diag.textContent =
@@ -3263,7 +3353,7 @@ function bootApp(){
       /* the SAME renderer the outputs use — one code path, so the preview
          cannot quietly disagree with the wall */
       var R=makeRenderer(can);
-      R.resize(r.w*W, r.h*H, r, window.devicePixelRatio||1);
+      R.resize(r.w*W, r.h*H, r, DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1));
       var pl=document.createElement("div"); pl.className="plate";
       pl.textContent=(L.labels?L.labels[i]:("TV "+(i+1)));
       d.appendChild(pl);
@@ -3348,6 +3438,8 @@ function bootApp(){
       "<tr><th>from</th><th>to</th><th>phase</th><th>what</th></tr>"+
       rows.map(function(r,i){ return '<tr data-ph="'+i+'"><td>'+r[0]+'</td><td>'+r[1]+
         '</td><td><b>'+r[2]+'</b></td><td>'+r[3]+'</td></tr>'; }).join("");
+    tmRows=[].slice.call(document.querySelectorAll("#tmTable tr[data-ph]"));
+    lastPh=-2;
   }
 
   /* ── urls ── */
@@ -3454,7 +3546,10 @@ function bootApp(){
     live.filter(function(v){ return v>n; }).forEach(function(v){
       h+='<span class="outdot warnx" title="output '+v+
         ' is live but has no cell in this layout">'+v+'</span>'; });
-    document.getElementById("outs").innerHTML=h||'<span class="lb">no outputs</span>';
+    /* innerHTML forces a parse and a layout of this panel. Writing it ten times
+       a second when nothing changed was a real source of multi-ms hitches. */
+    var outsEl=document.getElementById("outs"), hh=h||'<span class="lb">no outputs</span>';
+    if(outsEl.__last!==hh){ outsEl.innerHTML=hh; outsEl.__last=hh; }
     var syncTxt="";
     if(drift.length){
       var maxd=0, maxo=0;
@@ -3469,7 +3564,7 @@ function bootApp(){
                         :'<b style="color:var(--tally)">SPLIT</b>')+'</div>';
     }
     var ms=armedUntil-Date.now();
-    document.getElementById("linkNote").innerHTML =
+    var noteEl=document.getElementById("linkNote"), noteHTML =
       (ms>0 ? '<b style="color:var(--cue)">arming — outputs switch in '+Math.max(0,Math.round(ms))+' ms</b>'
             : (live.length? '<b>'+live.length+'</b> output'+(live.length===1?"":"s")+' listening · seq '+LINK.seq
                           : 'No outputs have checked in yet. Open a TV URL below.'))+
@@ -3477,6 +3572,7 @@ function bootApp(){
       '<div style="margin-top:5px">Public broker — the room code is the only thing keeping strangers off '+
       'your wall. Deploy <code>worker/</code> and paste its https URL as the broker when this stops '+
       'being a prototype.</div>';
+    if(noteEl.__last!==noteHTML){ noteEl.innerHTML=noteHTML; noteEl.__last=noteHTML; }
   }
 
   /* ── transport ── */
@@ -3542,8 +3638,10 @@ function bootApp(){
   });
 
   /* ── the loop ── */
-  var lastBeat=-2, lastPh=-2;
+  var lastBeat=-2, lastPh=-2, tmRows=[];
   var FPS=makeFPS(240), fpsEl=document.getElementById("fps");
+  var drawGraph=makeFrameGraph(document.getElementById("fpsgraph"),240,34);
+  var devHUD=installDevHUD();
   document.getElementById("ver").textContent=VERSION;
   function currentMs(){
     return state.manual!==null ? state.manual
@@ -3580,6 +3678,8 @@ function bootApp(){
            (F.drops?("  ⚠ "+F.dropPct+"% dropped"):"  ✓ no drops"))
         : "fps —";
       fpsEl.style.color = !F ? "" : (F.dropPct>1 ? "var(--tally)" : "var(--good)");
+      if(F){ var B_=FPS.buf(); drawGraph(B_.gaps,B_.n,B_.N, F.hz>90?8.33:16.67);
+             if(devHUD) devHUD(F,B_); }
       renderLink();
     }
     if(f.beat!==undefined && f.beat!==lastBeat){
@@ -3587,8 +3687,9 @@ function bootApp(){
       document.querySelectorAll("#chBeats .bt").forEach(function(b){
         b.classList.toggle("on",+b.dataset.b===f.beat); });
     }
-    /* highlight the live row of the timing table */
-    var rows=document.querySelectorAll("#tmTable tr[data-ph]"), ri=-1, j;
+    /* the row list is cached by renderRight — querying the DOM 60 times a
+       second to highlight one row is pure waste */
+    var rows=tmRows, ri=-1, j;
     if(e.cue==="chant"){
       ri = f.beat===undefined||f.beat<0 ? (ms<1200?0:rows.length-1) : f.beat+1;
     }else{
@@ -3610,6 +3711,15 @@ function bootApp(){
        numbers say nothing about what an Adreno 643 will do. */
     /* Real rAF cadence with real drawing, at a real output size. This is the
        number that says whether the wall looks smooth. Run it on the device. */
+    frames:function(){ return FPS.raw(); },
+    fps:function(){ return FPS.stats(); },
+    env:function(){ return {version:VERSION, dpr:window.devicePixelRatio,
+      dprUsed:(DPR_FORCE!==null?DPR_FORCE:(window.devicePixelRatio||1)),
+      desync:DESYNC, fx:FX, gap:GAP, layout:state.L.id,
+      screen:screen.width+"x"+screen.height,
+      window:window.innerWidth+"x"+window.innerHeight,
+      hardwareConcurrency:navigator.hardwareConcurrency,
+      memoryGB:(navigator.deviceMemory||"?")}; },
     smoothness:function(seconds,w,h,layoutId,typeId,team,fx){
       var L=LAYOUTS[layoutId||state.L.id]||state.L, g=geoOf(L);
       var cv=document.createElement("canvas");
