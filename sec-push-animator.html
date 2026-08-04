@@ -508,7 +508,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0024";
+var VERSION = "v1.0025";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1206,6 +1206,13 @@ var TYPES=[
  name:"AMBIENT RAIL", sub:"TIER ZERO · COSTS NO WINDOW",
  desc:function(c){ return "House cue — the always-on rail"; }, sr:{}},
 
+{id:"saturday", grp:"tv", label:"BarBoards Saturday open", cue:"saturday", d:14000, house:true,
+ amp:92,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0,
+ name:"BARBOARDS SATURDAY", sub:"SHOW OPEN · TYPE-LED",
+ desc:function(c){ return "Show open — the slate, the wordmark, the tag"; },
+ sr:{}},
+
 /* ── broadcast furniture ────────────────────────────────────────────────
    Framed elements rather than full-bleed. Every value comes off the payload. */
 {id:"scorebug", grp:"tv", label:"Score bug", cue:"scorebug", d:9000, house:true,
@@ -1519,7 +1526,7 @@ function makeRenderer(cv){
     var f0=VPS[0]||{W:0,H:0,sw:0,sh:0,cell:c};
     W=f0.W; H=f0.H; SW=f0.sw; SH=f0.sh; cell=f0.cell;
     vx0=f0.vx0; vy0=f0.vy0; vx1=f0.vx1; vy1=f0.vy1;
-    lastKey=""; vigA=-1; scanA=-1; invalidate();
+    lastKey=""; vigA=-1; scanA=-1; lgrads={}; invalidate();
     return {W:W,H:H,SW:SW,SH:SH};
   }
   function geo(){ return {W:W,H:H,SW:SW,SH:SH,DPR:DPR,cell:cell}; }
@@ -1563,6 +1570,18 @@ function makeRenderer(cv){
 
   /* A radial gradient fill costs 3 us; blitting a pre-rendered sprite costs
      0.67 us. Baked once per colour at 256px and scaled on the way out. */
+  /* gradients are cached by colour pair, direction and a coarse size bucket */
+  var lgrads={};
+  function lgradFor(c0,c1,dir,w,h){
+    var wb=Math.max(8,Math.round(w/24)*24), hb=Math.max(8,Math.round(h/24)*24);
+    var k=c0+"|"+c1+"|"+dir+"|"+wb+"x"+hb;
+    var g=lgrads[k];
+    if(g) return g;
+    g = dir==="h" ? ctx.createLinearGradient(0,0,wb,0)
+                  : ctx.createLinearGradient(0,0,0,hb);
+    g.addColorStop(0,c0); g.addColorStop(1,c1);
+    lgrads[k]=g; return g;
+  }
   var glowSprites={};
   function glowFor(col){
     var g=glowSprites[col];
@@ -1739,6 +1758,16 @@ function makeRenderer(cv){
         if(x+r+w<vx0||x-r-w>vx1||y+r+w<vy0||y-r-w>vy1) return false;
         s=splitCol(l.col); ctx.globalAlpha=a*s.a; ctx.strokeStyle=s.c; ctx.lineWidth=w;
         ctx.beginPath(); ctx.arc(x,y,Math.max(0.5,r),0,6.2832); ctx.stroke();
+        return true;
+
+      case "lgrad":
+        x=l.x*W; y=l.y*H; w=l.w*W; h=l.h*H;
+        if(x+w<vx0||x>vx1||y+h<vy0||y>vy1) return false;
+        var LG=lgradFor(l.c0,l.c1,l.dir||"v",w,h);
+        ctx.globalAlpha=a;
+        ctx.save(); ctx.translate(x,y);
+        ctx.fillStyle=LG; ctx.fillRect(0,0,w,h);
+        ctx.restore(); invalidate();
         return true;
 
       case "glow":
@@ -3415,6 +3444,140 @@ G.flyover3d=function(u,C){
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
+   6f · BARBOARDS SATURDAY — the show open
+   ══════════════════════════════════════════════════════════════════════════
+
+   Built in the language of the current Fox NFL package, which is
+   typography-led rather than box-led: they stripped the background chrome so
+   the picture reads through, and lean on branded type and gradient beds
+   instead. Their stated aim was "timeless, evocative of the clarity and drama
+   of classic broadcasts", and the discipline that follows from it is that the
+   type IS the design — everything else is a bed for it to sit on.
+
+   So: no plates behind the wordmark, gradient washes instead of solid boxes,
+   and depth from EXTRUSION rather than from decoration.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Faux-3D type: the same word stamped back along an axis, darkening as it
+   recedes, with the face last. It is how every title sequence did depth
+   before anyone had a GPU, and it still reads better than a drop shadow. */
+function extrude(o,text,x,y,h,face,deep,dx,dy,steps,fit,track,a,sc){
+  var i,n=steps||14;
+  for(i=n;i>=1;i--){
+    o.push({k:"word",t:text,x:x+dx*i,y:y+dy*i,h:h,
+            col:mixHex(deep,face,(1-i/n)*0.35),fit:fit,track:track,
+            a:(a===undefined?1:a),sc:sc});
+  }
+  o.push({k:"word",t:text,x:x,y:y,h:h,col:face,fit:fit,track:track,
+          a:(a===undefined?1:a),sc:sc});
+}
+
+G.saturday=function(u,C){
+  var T=C.T, o=[], i;
+  var ink="#05070C";
+  o.push({k:"fill",col:ink});
+
+  /* the bed: a gradient wash in the school colour, never a box */
+  var bed=eo(cl(u*3,0,1));
+  o.push({k:"lgrad",x:0,y:0,w:1,h:1,c0:hexA(T.p,0.30*bed),c1:hexA("#000000",0),dir:"v"});
+  o.push({k:"lgrad",x:0,y:0.62,w:1,h:0.38,c0:hexA("#000000",0),c1:hexA(T.deep==="#000000"?"#0A0E18":T.deep,0.9),dir:"v"});
+
+  /* a light sweep crossing the whole open, the way a broadcast bed breathes */
+  var sw=(u*1.25)%1;
+  o.push({k:"band",x:sw*1.5-0.28,y:-0.1,w:0.10,h:1.2,
+          col:hexA("#FFFFFF",0.055),skew:-20});
+
+  var ph;
+  /* ── 1 · cold open ── */
+  if(u<0.12){
+    ph="cold";
+    var cv=cl(u/0.12,0,1);
+    for(i=0;i<26;i++){
+      var px=det(i*7), py=det(i*7+1);
+      o.push({k:"dot",x:px,y:py,r:0.0012+det(i+3)*0.0016,
+              col:hexA("#FFF3DF",(0.25+0.6*Math.abs(fsin(u*9+det(i)*6.28)))*cv)});
+    }
+    o.push({k:"word",t:"SATURDAY IN THE SOUTH",x:.5,y:.5,h:.038,
+            col:hexA("#FFFFFF",.55*pulse(cv)),fit:.55,track:.42});
+  }
+  /* ── 2 · the drop ── */
+  else if(u<0.28){
+    ph="the drop";
+    var d=seg(u,0.12,0.28), hit=eb(cl(d*2.2,0,1));
+    o.push({k:"lgrad",x:0,y:0.26,w:1,h:0.48,
+            c0:hexA(T.p,0.55*cl(d*4,0,1)),c1:hexA(T.p,0),dir:"v"});
+    extrude(o,"SATURDAY",.5,.5,.30,"#FFFFFF",ink,0.0022,0.0042,16,.88,.02,1,
+            mix(1.35,1,hit));
+    if(d<0.22) o.push({k:"flash",a:(1-d/0.22)*0.85});
+  }
+  /* ── 3 · the slate ── */
+  else if(u<0.56){
+    ph="the slate";
+    var sv=seg(u,0.28,0.56);
+    var SL=["TEX","OU","ALA","AUB","UGA","FLA","LSU","TAMU","TENN","MISS","MSST","ARK"];
+    var pairs=SL.length/2, k;
+    o.push({k:"word",t:"TODAY ON BARBOARDS",x:.5,y:.135,h:.032,
+            col:hexA("#FFFFFF",.5),fit:.5,track:.34});
+    for(k=0;k<pairs;k++){
+      var kp=seg(sv,k*0.13,k*0.13+0.30);
+      if(kp<=0) continue;
+      var A=TEAMS[SL[k*2]], Bt=TEAMS[SL[k*2+1]];
+      var yy=0.30+k*0.098;
+      var xx=mix(-0.55,0.20,eo(cl(kp*1.7,0,1)));
+      var fade=1-cl((sv-(k*0.13+0.55))/0.2,0,1);
+      if(fade<=0) continue;
+      o.push({k:"band",x:xx,y:yy,w:0.052,h:0.072,col:A.p,a:fade,skew:-13});
+      o.push({k:"band",x:xx+0.050,y:yy,w:0.052,h:0.072,col:Bt.p,a:fade,skew:-13});
+      o.push({k:"word",t:A.ab+"  ·  "+Bt.ab,x:xx+0.26,y:yy+0.036,h:.044,
+              col:hexA("#FFFFFF",fade),fit:.30,track:.05});
+      o.push({k:"band",x:xx+0.115,y:yy+0.068,w:0.30,h:0.0016,
+              col:hexA("#FFFFFF",.22*fade)});
+    }
+  }
+  /* ── 4 · the wordmark ── */
+  else if(u<0.80){
+    ph="the wordmark";
+    var wv=seg(u,0.56,0.80);
+    o.push({k:"lgrad",x:0,y:0.22,w:1,h:0.56,
+            c0:hexA(T.p,0.42),c1:hexA(T.p,0),dir:"v"});
+    var a1=eo(cl(wv*2.4,0,1)), a2=eo(cl((wv-0.22)*2.4,0,1));
+    /* MEASURE, do not guess. Placing the two halves at hand-picked offsets made
+       them overlap — it read BAIBOARDS. The widths depend on the layout's aspect,
+       so they have to be asked for, then the pair is centred as one lockup and
+       scaled down if it would run off the canvas. */
+    var wh=0.26;
+    var w1=C.tw("BAR",wh,.02), w2=C.tw("BOARDS",wh,.02), gp=0.018;
+    var tot=w1+gp+w2;
+    if(tot>0.86){ var k2=0.86/tot; wh*=k2; w1*=k2; w2*=k2; gp*=k2; tot=0.86; }
+    var xBar=0.5-tot/2+w1/2, xBoards=0.5+tot/2-w2/2;
+    extrude(o,"BAR",   mix(xBar-0.55,xBar,a1),      .47,wh,"#FFFFFF",ink,0.0020,0.0038,14,0,.02,a1);
+    if(a2>0)
+      extrude(o,"BOARDS",mix(xBoards+0.60,xBoards,a2),.47,wh,T.p,   ink,0.0020,0.0038,14,0,.02,a2);
+    if(wv>0.62){
+      var lv=seg(wv,0.62,0.86);
+      o.push({k:"band",x:.5-0.30*lv,y:.635,w:0.60*lv,h:0.004,col:hexA("#FFFFFF",.8)});
+      o.push({k:"word",t:"SATURDAY",x:.5,y:.70,h:.055,col:hexA("#FFFFFF",.9*lv),
+              fit:.5,track:.40});
+    }
+  }
+  /* ── 5 · the tag ── */
+  else{
+    ph="the tag";
+    var tv=seg(u,0.80,1);
+    o.push({k:"lgrad",x:0,y:0,w:1,h:1,c0:hexA(T.p,0.34),c1:hexA("#000000",0),dir:"v"});
+    extrude(o,"BARBOARDS",.5,.40,.20,"#FFFFFF",ink,0.0018,0.0034,12,.80,.02,1);
+    o.push({k:"band",x:.5-0.31,y:.545,w:0.62,h:0.004,col:hexA(T.p,.95)});
+    o.push({k:"word",t:"SATURDAY",x:.5,y:.615,h:.052,col:hexA("#FFFFFF",.92),
+            fit:.5,track:.40});
+    if(tv>0.30) o.push({k:"word",t:"EVERY GAME · EVERY SCREEN",x:.5,y:.755,h:.030,
+            col:hexA("#FFFFFF",.62*seg(tv,0.30,0.55)),fit:.62,track:.26});
+    if(tv>0.50) o.push({k:"word",t:T.venue.split(" · ")[0].toUpperCase(),x:.5,y:.845,h:.024,
+            col:hexA("#FFFFFF",.36*seg(tv,0.50,0.72)),fit:.62,track:.22});
+  }
+  return {layers:o,phase:"barboards saturday · "+ph};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
    6e · BROADCAST FURNITURE
    ══════════════════════════════════════════════════════════════════════════
 
@@ -4107,6 +4270,9 @@ var PHASES = {
   spotlight:[[0,.80,"Sweep","two passes"],[.80,1,"Reveal","school takes the wall"]],
   rail:[[0,1,"Ambient","continuous ticker"]],
   colorwars:[[0,1,"Live","driven by taps, not by the clock"]],
+  saturday:[[0,.12,"Cold","a line and some light"],[.12,.28,"The drop","SATURDAY lands"],
+            [.28,.56,"The slate","today's games"],[.56,.80,"Wordmark","BAR · BOARDS"],
+            [.80,1,"Tag","every game, every screen"]],
   scorebug:[[0,.22,"Bar in","plate, chips, numbers"],[.22,.34,"Tab","down & distance"],
             [.34,1,"Held","the bug sits"]],
   lower3:[[0,.22,"Slide in","spine, name plate"],[.22,.30,"Stat","line under it"],
