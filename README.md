@@ -18,12 +18,13 @@ Single file, no build step, no dependencies beyond Google Fonts (Anton + IBM Ple
 ## Two independent axes
 
 A push event has two axes: **what happened**, and **who it happened to**. They are selected
-separately, so all 20 types are available for all 16 schools against any opponent.
+separately, so all 35 cues are available for all 16 schools against any opponent.
 
-**20 event types**
+**35 cues**
 
 | Group | Types |
 |---|---|
+| Custom message | **your own copy, on the touchdown animation** |
 | Scoring | touchdown · two-point conversion · safety |
 | Kicking | field goal 50+ · walk-off field goal |
 | Return touchdowns | pick six · scoop and score · kick return TD · blocked kick returned |
@@ -31,6 +32,32 @@ separately, so all 20 types are available for all 16 schools against any opponen
 | Big plays | explosive play 40+ · fourth-down conversion · fake punt |
 | States & stoppages | red zone · two-minute warning · goal-line stand · review overturned |
 | Ritual | chant / call track |
+| House cues · no push event | the wave · decibel meter · kickoff countdown · rally clap · phones up · spotlight sweep · ambient rail |
+| Patron · interactive | Color Wars |
+| Broadcast furniture | BarBoards Saturday open · score bug · lower third · replay wipe |
+| Benchmark | stadium flyover · stadium flyover 3D |
+
+## Custom message
+
+The **Custom message** cue is the Texas touchdown animation with the words swapped out. It
+keeps the whole spine — the run across the wall, the landing, the 384 ms flash, the school's
+own payoff move, the lockup — and takes three lines from you:
+
+| Line | Default | Where it goes |
+|---|---|---|
+| 1 | `TOUCHDOWN` | runs the length of the wall |
+| 2 | the school (`TEXAS`) | lands, and holds the lockup |
+| 3 | the venue | the small line under the lockup |
+
+That is the point of building it on the touchdown rather than as a new look: the room already
+knows what that animation means, so `LAST CALL / KITCHEN / CLOSES AT ELEVEN` borrows the
+recognition. Leave a line blank and it falls back, so with nothing typed it is a plain
+touchdown.
+
+Copy is measured before it is placed and scaled to fit, so any length works in any of the
+twelve layouts. Line one holds centred instead of scrolling when it is too long to cross the
+wall in one pass. The text travels over the link with the cue, so every output switches to
+the same words on the same tick.
 
 **16 schools**, each supplying its colours, venue, touchdown call, chant beat table and
 payoff move. The opponent defaults to the in-conference rivalry and can be overridden.
@@ -149,6 +176,7 @@ all 156 cells in all 12 layouts.
 | `event` | Event **type**, e.g. `td`, `pick6`, `chant` |
 | `team` | School, e.g. `TEX`. Independent of the type. |
 | `opp` | Opponent. Defaults to the school's rival. |
+| `t1` `t2` `t3` | The three lines of the **Custom message** cue. Blank falls back to `TOUCHDOWN`, the school and the venue. Upper-cased, capped at 22/18/40 characters. |
 | `layout` | Layout id, e.g. `row4` |
 | `gap` | Bezel gap in screen widths. `0` (default) butts panels pixel to pixel. **Must match on every output in a wall** — it is canvas geometry, not decoration. |
 | `t0` | Epoch override in ms. Same value everywhere = same phase. |

@@ -64,6 +64,13 @@ input[type=range]{accent-color:var(--cue);height:16px}
 .opprow{display:flex;align-items:center;gap:6px;padding:6px 9px;border-bottom:1px solid var(--hair);
   background:#0C0A09;flex:none}
 .opprow select{flex:1;min-width:0}
+.copyrow{display:none;flex-direction:column;gap:4px;padding:8px 9px;border-bottom:1px solid var(--hair);
+  background:#0C0A09;flex:none}
+body.copy .copyrow{display:flex}
+.copyrow input{width:100%;box-sizing:border-box;font-family:Anton,sans-serif;font-size:13px;
+  letter-spacing:.055em;text-transform:uppercase;padding:6px 7px}
+.cplab{font-family:"IBM Plex Mono",monospace;font-size:7.5px;letter-spacing:.19em;
+  text-transform:uppercase;color:var(--dimmer);display:flex;justify-content:space-between}
 .grphd{font-family:"IBM Plex Mono",monospace;font-size:7.5px;letter-spacing:.19em;text-transform:uppercase;
   color:var(--dimmer);padding:8px 10px 3px;background:#0C0A09;border-bottom:1px solid #191412;
   position:sticky;top:0;z-index:2}
@@ -305,6 +312,15 @@ body.bench #tvbench{display:block}
       <select id="selOpp"></select>
       <button class="btn" id="bRival" title="Reset to the in-conference rivalry">rival</button>
     </div>
+    <div class="copyrow" id="copyrow">
+      <div class="cplab"><span>Your copy</span><span id="cpfall">falls back to the school</span></div>
+      <input type="text" id="t1" maxlength="22" spellcheck="false" placeholder="TOUCHDOWN"
+             title="Line one — runs across the wall">
+      <input type="text" id="t2" maxlength="18" spellcheck="false" placeholder="(the school)"
+             title="Line two — lands, and holds the lockup">
+      <input type="text" id="t3" maxlength="40" spellcheck="false" placeholder="(the venue)"
+             title="Line three — the small line under the lockup">
+    </div>
     <div class="hd"><h2>Push event</h2><span class="lb" id="evcount">—</span></div>
     <div class="scroll" id="evlist"></div>
   </section>
@@ -488,6 +504,18 @@ var GAP = Q.has("gap") ? Math.max(0, Math.min(2, +Q.get("gap")||0)) : GAP_DEFAUL
    where one screen is decorated and the others are not is a broken wall. */
 /* Stress multiplier for the flyover benchmark. 1 is a real cue; 10 is an
    instrument for finding where the hardware gives out. */
+/* Custom copy for the CUSTOM cue. Three lines because that is the shape the
+   touchdown spine already has: a word that runs the wall, a word that lands,
+   and a line under the lockup. "TOUCHDOWN / TEXAS / DKR" or "LAST CALL /
+   KITCHEN / CLOSES AT ELEVEN" are the same animation. */
+function cleanLine(v,fallback,max){
+  v=(v===undefined||v===null)?"":String(v);
+  v=v.replace(/[\r\n\t]+/g," ").replace(/\s+/g," ").trim().toUpperCase();
+  return v ? v.slice(0,max||28) : fallback;
+}
+var TXT1 = cleanLine(Q.get("t1"),"TOUCHDOWN",22);
+var TXT2 = cleanLine(Q.get("t2"),"",18);          /* empty = use the school */
+var TXT3 = cleanLine(Q.get("t3"),"",40);          /* empty = use the venue  */
 var LOAD = Q.has("load") ? Math.max(1,Math.min(40,+Q.get("load")||1)) : 1;
 var FX = Q.has("fx") ? Math.max(0, Math.min(3, +Q.get("fx")||0)) : 1;
 
@@ -508,7 +536,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0025";
+var VERSION = "v1.0026";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1206,6 +1234,14 @@ var TYPES=[
  name:"AMBIENT RAIL", sub:"TIER ZERO · COSTS NO WINDOW",
  desc:function(c){ return "House cue — the always-on rail"; }, sr:{}},
 
+{id:"custom", grp:"custom", label:"Custom message", cue:"custom", d:8000, house:true,
+ amp:75,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
+ period:4,clock:"0:04",hs:31,as:28,
+ name:function(T){ return TXT1+(TXT2?(" "+TXT2):(" "+T.word)); },
+ sub:function(T){ return TXT3 || T.venue.toUpperCase(); },
+ desc:function(c){ return "Custom message on the touchdown animation"; },
+ sr:{}},
+
 {id:"saturday", grp:"tv", label:"BarBoards Saturday open", cue:"saturday", d:14000, house:true,
  amp:92,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
  period:1,clock:"15:00",hs:0,as:0,
@@ -1273,7 +1309,7 @@ var TYPES=[
 ];
 
 var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
-var TYPE_GROUPS=[["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
+var TYPE_GROUPS=[["custom","Custom message · your copy"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
   ["ritual","Ritual"],["house","House cues · no push event"],
   ["patron","Patron · interactive"],["tv","Broadcast furniture"],["bench","Benchmark"]];
@@ -1291,12 +1327,16 @@ function makeEvent(typeId,teamKey,oppKey){
          p:function(s){ return playerOf(tk,s); },
          q:function(s){ return playerOf(ok,s); }};
   return {
-    id:ty.id+":"+tk+":"+ok, typeId:ty.id, team:tk, opp:ok,
+    id:ty.id+":"+tk+":"+ok+(ty.id==="custom"?(":"+TXT1+"/"+TXT2+"/"+TXT3):""),
+    typeId:ty.id, team:tk, opp:ok,
     grp:ty.grp, label:ty.label, cue:ty.cue, house:!!ty.house,
     d:(typeof ty.d==="function")?ty.d(T):ty.d,
     amp:ty.amp, win:ty.win, tier:ty.tier, reg:ty.reg,
     cat:ty.cat, type:ty.type, play:ty.play, yards:ty.yards, dir:ty.dir,
     period:ty.period, clock:ty.clock, hs:String(ty.hs), as:String(ty.as),
+    /* the custom copy rides on the event so every consumer -- grammar, prewarm
+       key, title -- sees the same strings */
+    t1:TXT1, t2:TXT2, t3:TXT3,
     name:(typeof ty.name==="function")?ty.name(T,O):ty.name,
     sub:(typeof ty.sub==="function")?ty.sub(T,O):ty.sub,
     desc:ty.desc(c),
@@ -2480,6 +2520,61 @@ G.runacross=function(u,C){
             fit:.86,track:.14,a:cl(v3*4,0,1)});
     o.push({k:"word",t:"Q"+C.ev.period+"  "+C.ev.clock,x:.5,y:.82,h:.06,col:hexA("#FFFFFF",.5),
             fit:.4,track:.2,a:cl(v3*4,0,1)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ── custom: the touchdown spine, with your own copy ──────────────────────
+   Deliberately the SAME cue as a touchdown rather than a new look. The whole
+   value is that the room already knows what this animation means, so putting
+   different words through it borrows that recognition. Line two falls back to
+   the school and line three to the venue, so it degrades into a plain
+   touchdown if nobody types anything. */
+G.custom=function(u,C){
+  var T=C.T, o=[], ph="";
+  var L1=C.ev.t1||"TOUCHDOWN", L2=C.ev.t2||T.word, L3=C.ev.t3||T.venue.toUpperCase();
+  o.push({k:"fill",col:T.deep});
+
+  if(u<0.24){
+    ph="run · "+L1;
+    var v=seg(u,0,.24), w=C.tw(L1,.6,.02);
+    if(C.mode==="stack"){
+      o.push({k:"word",t:L1,x:.5,y:mix(-0.25,1.25,eio(v)),h:.16,col:"#fff",fit:.9,track:.02});
+    }else if(C.mode==="single"||C.mode==="grid"){
+      o.push({k:"word",t:L1,x:.5,y:.5,h:C.mode==="single"?.24:.3,col:"#fff",fit:.92,track:.02,
+              sc:mix(1.45,1,eo(v)),a:cl(v*5,0,1)*cl((1-v)*7,0,1)});
+    }else{
+      /* the long-copy case: if it will not fit the wall as one run-across,
+         hold it centred and scale it instead of dragging it off the edge */
+      if(w>1.15) o.push({k:"word",t:L1,x:.5,y:.5,h:.5,col:"#fff",fit:.94,track:.02,
+                         sc:mix(1.25,1,eo(v)),a:cl(v*5,0,1)*cl((1-v)*7,0,1)});
+      else o.push({k:"word",t:L1,x:mix(-w/2,1+w/2,eio(v)),y:.5,h:.6,col:"#fff",track:.02});
+    }
+  }
+  else if(u<0.48){
+    ph="land · "+L2;
+    var v2=seg(u,.24,.48);
+    o.push({k:"word",t:L2,x:.5,y:.5,h:C.mode==="grid"?.42:.62,col:T.p,fit:.9,track:.01,
+            sc:mix(1.55,1,eb(cl(v2*2.6,0,1))),a:cl(v2*7,0,1)});
+    if(v2>.45) o.push({k:"word",t:L3,x:.5,y:.88,h:.07,col:hexA("#FFFFFF",.5),
+                       fit:.82,track:.14,a:seg(v2,.45,.7)});
+  }
+  else if(u<0.528){
+    ph="flash · 384 ms";
+    o.push({k:"word",t:L2,x:.5,y:.5,h:.62,col:T.p,fit:.9,track:.01});
+    o.push({k:"flash",a:1-seg(u,.48,.528)*0.15});
+  }
+  else if(u<0.86){
+    ph="payoff · "+T.finish;
+    (FINISH[T.finish]||FINISH.race)(seg(u,.528,.86),T,C,o);
+  }
+  else{
+    ph="lockup";
+    var v3=seg(u,.86,1);
+    o.push({k:"fill",col:T.p});
+    o.push({k:"word",t:L2,x:.5,y:.42,h:.30,col:"#fff",fit:.86,track:.02,a:cl(v3*6,0,1)});
+    o.push({k:"word",t:L3,x:.5,y:.70,h:.075,col:hexA("#FFFFFF",.78),
+            fit:.88,track:.13,a:cl(v3*4,0,1)});
   }
   return {layers:o,phase:ph};
 };
@@ -4270,6 +4365,9 @@ var PHASES = {
   spotlight:[[0,.80,"Sweep","two passes"],[.80,1,"Reveal","school takes the wall"]],
   rail:[[0,1,"Ambient","continuous ticker"]],
   colorwars:[[0,1,"Live","driven by taps, not by the clock"]],
+  custom:[[0,.24,"Run","line one crosses"],[.24,.48,"Land","line two"],
+          [.48,.528,"Flash","384 ms"],[.528,.86,"Payoff","team finish"],
+          [.86,1,"Lockup","line two + line three"]],
   saturday:[[0,.12,"Cold","a line and some light"],[.12,.28,"The drop","SATURDAY lands"],
             [.28,.56,"The slate","today's games"],[.56,.80,"Wordmark","BAR · BOARDS"],
             [.80,1,"Tag","every game, every screen"]],
@@ -4512,6 +4610,11 @@ function bootTV(){
     var geoChanged = (nextL!==L) || (nextGap!==GAP);
     L=nextL; GAP=nextGap;
     if(s.fx!==undefined) FX=Math.max(0,Math.min(3,+s.fx||0));
+    /* the copy arrives with the cue, so a screen that was dark through the
+       typing still comes up holding the right words */
+    if(s.t1!==undefined) TXT1=cleanLine(s.t1,"TOUCHDOWN",22);
+    if(s.t2!==undefined) TXT2=cleanLine(s.t2,"",18);
+    if(s.t3!==undefined) TXT3=cleanLine(s.t3,"",40);
     if(s.rest!==undefined && +s.rest>=0) REST=+s.rest;
     if(s.epoch!==undefined && +s.epoch>0) EPOCH=+s.epoch;
     var t=s.type||ev.typeId, tm=s.team||ev.team, op=s.opp||ev.opp;
@@ -4868,7 +4971,7 @@ function bootApp(){
     if(state.opp===state.team) state.opp=(state.team==="TEX")?"OU":"TEX";
     state.ev=makeEvent(state.type,state.team,state.opp);
     state.manual=null;
-    renderTeams(); renderList(); renderOpp(); renderBrief(); renderRight(); renderURLs();
+    renderCopy(); renderTeams(); renderList(); renderOpp(); renderBrief(); renderRight(); renderURLs();
     if(stageR){ try{ stageR.prewarm(function(cb){ eachCueFrame(state.ev,state.L,FX,cb); },
                      state.ev.id+"|"+state.L.id+"|"+FX); }catch(e){} }
     render(currentMs());
@@ -4885,7 +4988,8 @@ function bootApp(){
     if(!LINK.on()) return;
     armedUntil=Date.now()+LINK.lead;
     LINK.push({type:state.type,team:state.team,opp:state.opp,
-               layout:state.L.id,gap:GAP,fx:FX,rest:REST,epoch:EPOCH});
+               layout:state.L.id,gap:GAP,fx:FX,rest:REST,epoch:EPOCH,
+               t1:TXT1,t2:TXT2,t3:TXT3});
   }
 
   /* ── layout select ── */
@@ -4929,6 +5033,32 @@ function bootApp(){
     state.oppLocked=false; reselect({opp:RIVAL[state.team]}); state.oppLocked=false;
     document.getElementById("bRival").classList.add("on");
   };
+
+  /* ── custom copy ──────────────────────────────────────────────────────
+     Only shown when the custom cue is up, because on every other cue these
+     three boxes would be three pieces of dead furniture. Debounced, since a
+     keystroke here is a wall-wide cue change and nobody wants the room
+     re-cutting on every letter. */
+  var tIn=["t1","t2","t3"].map(function(id){ return document.getElementById(id); });
+  tIn[0].value=Q.has("t1")?TXT1:""; tIn[1].value=TXT2; tIn[2].value=TXT3;
+  function renderCopy(){
+    document.body.classList.toggle("copy",state.type==="custom");
+    var el=document.getElementById("cpfall");
+    if(el) el.textContent=TXT2?(TXT3?"three lines":"venue under it")
+                              :("falls back to "+TEAMS[state.team].word);
+  }
+  var copyTimer=null;
+  tIn.forEach(function(el){
+    el.oninput=function(){
+      clearTimeout(copyTimer);
+      copyTimer=setTimeout(function(){
+        TXT1=cleanLine(tIn[0].value,"TOUCHDOWN",22);
+        TXT2=cleanLine(tIn[1].value,"",18);
+        TXT3=cleanLine(tIn[2].value,"",40);
+        reselect({type:"custom"});
+      },240);
+    };
+  });
 
   /* ── event-type list · axis two ── */
   var list=document.getElementById("evlist");
@@ -5106,6 +5236,11 @@ function bootApp(){
       if(FX!==1) p.push("fx="+FX);
       if(REST!==2500) p.push("rest="+REST);
       if(EPOCH!==EPOCH_DEFAULT) p.push("t0="+EPOCH);
+      if(state.type==="custom"){
+        p.push("t1="+encodeURIComponent(TXT1));
+        if(TXT2) p.push("t2="+encodeURIComponent(TXT2));
+        if(TXT3) p.push("t3="+encodeURIComponent(TXT3));
+      }
     }
     return base+state.urlStyle+p.join("&");
   }
