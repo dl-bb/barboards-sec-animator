@@ -508,7 +508,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0019";
+var VERSION = "v1.0020";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1213,6 +1213,13 @@ var TYPES=[
  period:1,clock:"15:00",hs:0,as:0,
  name:"STADIUM FLYOVER", sub:"BENCHMARK · SCALE WITH ?load=",
  desc:function(c){ return "Benchmark — a night approach, scaled by ?load= to find the limit"; },
+ sr:{}},
+
+{id:"flyover3d", grp:"bench", label:"Stadium flyover 3D", cue:"flyover3d", d:26000, house:true,
+ amp:100,win:0,tier:3,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0,
+ name:"STADIUM FLYOVER 3D", sub:"PROJECTED · DEPTH SORTED · ?load=",
+ desc:function(c){ return "Benchmark — a real perspective camera over a real bowl, built from flat primitives"; },
  sr:{}},
 
 /* ── patron ────────────────────────────────────────────────────────────
@@ -3167,6 +3174,220 @@ G.flyover=function(u,C){
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
+   6d · THE 3D FLYOVER — a stadium built out of 2D primitives
+   ══════════════════════════════════════════════════════════════════════════
+
+   A real perspective camera flying a real bowl. Every seat, strut, roof panel
+   and firework is a point in 3-space, projected each frame and emitted as one
+   of the same flat primitives everything else in this file uses. No WebGL, no
+   meshes — just arithmetic and rectangles, which is how this was done before
+   GPUs existed.
+
+   Three pieces of machinery make it work:
+
+   · a look-at camera with a proper view basis, so the flight path can be
+     written as "where am I, what am I looking at" rather than as a pile of
+     hand-tuned offsets
+
+   · depth BUCKETING rather than sorting. Painter's algorithm needs far-to-near
+     order; a comparison sort of twenty thousand primitives every frame would
+     cost more than drawing them. Bucketing by depth is O(n) and the ordering
+     within a bucket is invisible at this density.
+
+   · aggressive near/far/frustum rejection before anything is emitted, because
+     the cheapest primitive is the one that never enters the list.
+
+   Scaled by ?load=. At load 1 this is roughly ten times the flat flyover; at
+   load 10 it is an instrument for finding where the hardware stops.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── camera ─────────────────────────────────────────────────────────────── */
+function flyCam(u){
+  /* one continuous descending orbit: high and outside, down to the turf */
+  var t=eio(cl(u,0,1));
+  var ang  = -2.10 + u*2.55;                       /* swing around the bowl   */
+  /* Stop short of the turf. Diving all the way to field level filled 94% of the
+     frame with grass and put the pyro — which lives 300-530 units up — behind
+     the camera. A flyover has to keep its subject in shot. */
+  var dist = mix(1250, 430, eo(cl(u*1.06,0,1)));   /* come in, not all the way*/
+  var hgt  = mix( 690, 165, eio(cl(u*1.02,0,1)));  /* come down, stay above   */
+  var look = mix(  95,  70, t);                    /* aim holds on the bowl   */
+  return { x:Math.cos(ang)*dist, y:hgt, z:Math.sin(ang)*dist,
+           tx:Math.cos(ang+0.30)*90, ty:look, tz:Math.sin(ang+0.30)*90,
+           k:0.62 };
+}
+/* view basis, built once per frame */
+function flyBasis(c){
+  var fx=c.tx-c.x, fy=c.ty-c.y, fz=c.tz-c.z;
+  var fl=Math.sqrt(fx*fx+fy*fy+fz*fz)||1; fx/=fl; fy/=fl; fz/=fl;
+  /* right = forward x worldUp(0,1,0) */
+  var rx=-fz, ry=0, rz=fx;
+  var rl=Math.sqrt(rx*rx+rz*rz)||1; rx/=rl; rz/=rl;
+  /* up = right x forward */
+  var ux=ry*fz-rz*fy, uy=rz*fx-rx*fz, uz=rx*fy-ry*fx;
+  return {c:c, fx:fx,fy:fy,fz:fz, rx:rx,ry:ry,rz:rz, ux:ux,uy:uy,uz:uz};
+}
+
+G.flyover3d=function(u,C){
+  var T=C.T, O=TEAMS[C.ev.opp]||T, L=LOAD;
+  var aspect=C.geo.AW/C.geo.AH;
+  var cam=flyCam(u), B=flyBasis(cam), c=cam;
+
+  /* depth buckets: painter's order without a comparison sort */
+  var NB=48, buckets=new Array(NB), bi;
+  for(bi=0;bi<NB;bi++) buckets[bi]=null;
+  var FAR=2200, NEAR=12;
+
+  function emit(px,py,pz,make){
+    var dx=px-c.x, dy=py-c.y, dz=pz-c.z;
+    var vz=dx*B.fx+dy*B.fy+dz*B.fz;
+    if(vz<NEAR||vz>FAR) return;                    /* near/far reject first   */
+    var vx=dx*B.rx+dy*B.ry+dz*B.rz;
+    var vy=dx*B.ux+dy*B.uy+dz*B.uz;
+    var s=c.k/vz;
+    var sx=0.5+(vx*s)/aspect, sy=0.5-(vy*s);
+    if(sx<-0.15||sx>1.15||sy<-0.25||sy>1.25) return; /* frustum reject        */
+    var l=make(sx,sy,s,vz);
+    if(!l) return;
+    var b=(vz/FAR*NB)|0; if(b<0)b=0; if(b>=NB)b=NB-1;
+    (buckets[b]||(buckets[b]=[])).push(l);
+  }
+  /* atmosphere: distant things wash out */
+  function haze(vz){ return cl(1-(vz-140)/1500,0.10,1); }
+
+  /* ── the bowl: tiered rings of seats ─────────────────────────────────── */
+  var RINGS=Math.round(9+7*L), PER=Math.round(56+30*L);
+  var rr, ss, stunt=seg(u,0.40,0.66), mask=stunt>0?textMask(T.word):null;
+  for(rr=0;rr<RINGS;rr++){
+    var tr=rr/(RINGS-1);
+    var rad=mix(255,470,tr), hh=mix(18,168,tr*tr);
+    for(ss=0;ss<PER;ss++){
+      var a=(ss/PER)*6.2832;
+      var ex=Math.cos(a)*rad*1.34, ez=Math.sin(a)*rad;
+      var seat=det(rr*613+ss);
+      /* the card stunt: seats inside the wordmark flip to school colour */
+      var col="#AEBACD";
+      if(mask){
+        var mx=((Math.cos(a)*0.5+0.5)*mask.w)|0;
+        var my=((1-tr)*mask.h*0.9)|0;
+        if(Math.sin(a)>0 && mask.m[my*mask.w+mx]) col=T.p;
+        else if(stunt>0.55) col="#2C333F";
+      }
+      emit(ex,hh,ez,function(sx,sy,s,vz){
+        var tw=0.45+0.55*Math.abs(fsin(u*9+seat*6.2832));
+        return {k:"dot",x:sx,y:sy,r:Math.max(0.0006,s*0.55),
+                col:col,a:tw*haze(vz)*0.95};
+      });
+    }
+    /* the fascia band at the front of each tier */
+    for(ss=0;ss<PER;ss+=3){
+      var a2=(ss/PER)*6.2832;
+      emit(Math.cos(a2)*rad*1.34,hh-9,Math.sin(a2)*rad,function(sx,sy,s,vz){
+        return {k:"band",x:sx-s*8,y:sy,w:s*16,h:Math.max(0.0008,s*5),
+                col:"#141A26",a:haze(vz)};
+      });
+    }
+  }
+
+  /* ── roof canopy: a ring of panels, alternating so it reads as structure ── */
+  var PAN=Math.round(30+22*L);
+  for(ss=0;ss<PAN;ss++){
+    var a3=(ss/PAN)*6.2832;
+    emit(Math.cos(a3)*640,232,Math.sin(a3)*478,function(sx,sy,s,vz){
+      return {k:"band",x:sx-s*26,y:sy-s*4,w:s*52,h:Math.max(0.001,s*9),
+              col:(ss%2)?"#1B2330":"#232C3C",a:haze(vz)};
+    });
+  }
+
+  /* ── floodlight masts ────────────────────────────────────────────────── */
+  var TOW=8;
+  for(ss=0;ss<TOW;ss++){
+    var a4=(ss/TOW)*6.2832+0.39;
+    var tx=Math.cos(a4)*655, tz=Math.sin(a4)*492;
+    var seg2=Math.round(5+4*L);
+    for(rr=0;rr<seg2;rr++){
+      var yy=232+(rr/seg2)*150;
+      emit(tx,yy,tz,function(sx,sy,s,vz){
+        return {k:"band",x:sx-s*2.5,y:sy,w:s*5,h:Math.max(0.001,s*(150/seg2)),
+                col:"#39445A",a:haze(vz)};
+      });
+    }
+    emit(tx,392,tz,function(sx,sy,s,vz){
+      return {k:"glow",x:sx,y:sy,r:Math.max(0.02,s*95),
+              col:hexA("#DCEBFF",0.42*haze(vz)),a:1};
+    });
+  }
+
+  /* ── the field ───────────────────────────────────────────────────────── */
+  var FW=196, FL=118;
+  emit(0,0,0,function(sx,sy,s,vz){
+    return {k:"band",x:sx-s*FW,y:sy-s*FL,w:s*FW*2,h:s*FL*2,
+            col:"#0E3018",a:haze(vz)};
+  });
+  var lines=Math.round(10+6*L);
+  for(ss=0;ss<=lines;ss++){
+    var lx=-FW+(ss/lines)*FW*2;
+    emit(lx,1,0,function(sx,sy,s,vz){
+      return {k:"band",x:sx-s*0.9,y:sy-s*FL,w:Math.max(0.0006,s*1.8),h:s*FL*2,
+              col:hexA("#FFFFFF",0.34*haze(vz))};
+    });
+  }
+  emit(-FW*0.86,1,0,function(sx,sy,s,vz){
+    return {k:"band",x:sx-s*26,y:sy-s*FL,w:s*52,h:s*FL*2,
+            col:hexA(T.p,0.55*haze(vz))}; });
+  emit( FW*0.86,1,0,function(sx,sy,s,vz){
+    return {k:"band",x:sx-s*26,y:sy-s*FL,w:s*52,h:s*FL*2,
+            col:hexA(O.p,0.55*haze(vz))}; });
+
+  /* ── pyro: 3D shells over the bowl ───────────────────────────────────── */
+  if(u>0.58){
+    var SH=Math.round(4+3*L);
+    for(ss=0;ss<SH;ss++){
+      var born=0.58+det(ss*31)*0.36, age=(u-born)/0.19;
+      if(age<0||age>1) continue;
+      var ox2=(det(ss*31+1)-0.5)*900, oy2=300+det(ss*31+2)*230,
+          oz2=(det(ss*31+3)-0.5)*700;
+      var frag=Math.round(14+12*L), rad2=eo(age)*150;
+      for(rr=0;rr<frag;rr++){
+        var pa=det(ss*997+rr)*6.2832, pb=det(ss*997+rr+1)*3.1416;
+        var fx2=ox2+Math.cos(pa)*Math.sin(pb)*rad2;
+        var fy2=oy2+Math.cos(pb)*rad2-age*age*46;
+        var fz2=oz2+Math.sin(pa)*Math.sin(pb)*rad2;
+        var fc=(rr%3)?"#FFE7A8":T.p;
+        emit(fx2,fy2,fz2,function(sx,sy,s,vz){
+          return {k:"dot",x:sx,y:sy,r:Math.max(0.0007,s*2.4),
+                  col:fc,a:(1-age)*haze(vz)};
+        });
+      }
+    }
+  }
+
+  /* ── assemble far to near ────────────────────────────────────────────── */
+  var o=[{k:"fill",col:"#04060B"}];
+  /* a horizon wash so the bowl does not float in a void */
+  o.push({k:"band",x:0,y:0,w:1,h:0.62,col:"#080C16"});
+  for(bi=NB-1;bi>=0;bi--){
+    var arr=buckets[bi]; if(!arr) continue;
+    for(ss=0;ss<arr.length;ss++) o.push(arr[ss]);
+  }
+
+  if(u>0.86){
+    var lv=seg(u,0.86,0.95);
+    o.push({k:"word",t:T.word,x:.5,y:.40,h:.26,col:"#fff",fit:.8,track:.02,
+            a:lv,sc:mix(1.08,1,eo(lv))});
+    o.push({k:"word",t:T.venue.toUpperCase(),x:.5,y:.58,h:.04,
+            col:hexA("#FFFFFF",.72),fit:.78,track:.16,a:seg(u,.89,.97)});
+  }else if(u<0.09){
+    o.push({k:"word",t:"SATURDAY NIGHT",x:.5,y:.5,h:.065,col:hexA("#FFFFFF",.7),
+            fit:.6,track:.3,a:cl(u*16,0,1)*cl((0.09-u)*16,0,1)});
+  }
+
+  var ph = u<0.20?"approach" : u<0.40?"the bowl" : u<0.66?"card stunt"
+         : u<0.86?"pyro" : "lockup";
+  return {layers:o, phase:"3D flyover · "+ph+" · load "+L+" · "+o.length+" prims"};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
    6b · FX — the gain control
    Not a set of new cues. A layer that READS whatever frame a grammar produced
    and decorates it, so all 20 event types and all 16 schools get it without a
@@ -3593,6 +3814,9 @@ var PHASES = {
   spotlight:[[0,.80,"Sweep","two passes"],[.80,1,"Reveal","school takes the wall"]],
   rail:[[0,1,"Ambient","continuous ticker"]],
   colorwars:[[0,1,"Live","driven by taps, not by the clock"]],
+  flyover3d:[[0,.20,"Approach","the bowl appears"],[.20,.40,"The bowl","tiers and roof"],
+             [.40,.66,"Card stunt","the crowd spells it"],[.66,.86,"Pyro","3D shells"],
+             [.86,1,"Lockup","school + venue"]],
   flyover:[[0,.14,"Approach","starfield"],[.14,.30,"Exterior","floodlights"],
            [.30,.44,"The bowl","tiers"],[.44,.62,"Card stunt","the crowd spells it"],
            [.62,.80,"Pyro","shells"],[.80,1,"Lockup","school + venue"]]
