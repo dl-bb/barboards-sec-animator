@@ -501,11 +501,14 @@ var DESYNC = Q.get("desync")==="1";
 /* A hi-DPI panel reports devicePixelRatio 2, which is FOUR TIMES the pixels for
    no benefit on a television that is 1:1. Outputs pin to 1; the control-room
    preview may use the real value because its screens are small. ?dpr= overrides. */
+/* Render below native and let the compositor upscale. The cheapest large win
+   on a GPU-bound device, straight out of the HTML5 games playbook. 1 is native. */
+var RSCALE = Q.has("scale") ? Math.max(0.4,Math.min(1,+Q.get("scale")||1)) : 1;
 var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : null;
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0016";
+var VERSION = "v1.0017";
 
 function nowMs(){ return Date.now() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
@@ -1472,7 +1475,7 @@ function makeRenderer(cv){
   }
 
   function viewports(list, canvasW, canvasH, dpr){
-    DPR=Math.min(dpr||1,2);
+    DPR=Math.min(dpr||1,2)*RSCALE;
     CW=canvasW; CH=canvasH;
     cv.width=Math.round(CW*DPR); cv.height=Math.round(CH*DPR);
     cv.style.width=CW+"px"; cv.style.height=CH+"px";
@@ -1545,6 +1548,13 @@ function makeRenderer(cv){
   /* One path for a run of same-colour particles instead of one path each:
      110 dots cost 80.8 µs individually and 22.2 µs batched. Alpha is quantised
      to 1/32 so a fading swarm still batches — nobody can see the step. */
+  /* NOTE: batching rectangles into one path was tried and REVERTED. It broke
+     the picture and measured slower -- the flyover knee fell from load 12 to 3,
+     p99 at load 4 went 0.7 to 8.4 ms. fillRect is a fast path in canvas2d;
+     accumulating many rect() subpaths into a single fill is not. The batching
+     advice from the games world is about GPU draw calls and transfers cleanly to
+     arcs, which is why the particle run stayed, but not to rects. */
+
   function drawDotRun(arr,i0,i1,col,a){
     var s=splitCol(col), any=0, k, l, x, y, r;
     ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
@@ -1626,7 +1636,10 @@ function makeRenderer(cv){
     var s,x,y,w,h,r,fs,bk,sc,tw;
 
     switch(l.k){
-      case "fill":
+      /* `fill` shares its body with `flash` below and MUST NOT be separated from
+         it. Inserting `qr` between them once made every fill in the app fall
+         through into the QR branch, call qrSprite(undefined), and bail — which
+         silently blanked the ground colour of every cue. */
       case "qr":
         var Q=qrSprite(l.t);
         if(!Q) return false;
@@ -1646,6 +1659,7 @@ function makeRenderer(cv){
         ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
         return true;
 
+      case "fill":
       case "flash":
         s=splitCol(l.k==="flash"?"#ffffff":l.col);
         ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
@@ -1996,6 +2010,9 @@ function installDevHUD(meter){
     var CAD=(buf&&F.samples>60&&api_cadence)?api_cadence():null;
     txt.textContent =
       head+"\n"+
+      (extra&&extra.calls!==undefined
+        ? ("CALLS   "+String(extra.calls).padStart(4," ")+"   budget 100-200 low-end"+
+           (extra.calls>200?"  OVER":"")+"\n") : "")+
       "PANEL   fps "+p3(F.cur)+"  min "+p3(F.min)+"  avg "+p3(F.avg)+"  hz "+p3(F.hz)+"\n"+
       "        drop "+p5(F.dropPct.toFixed(1))+"%  js "+p5(F.worstJsMs.toFixed(2))+" ms\n"+
       "        browser "+p5(F.worstOtherMs.toFixed(2))+" ms  "+F.blame+"\n"+
@@ -3967,7 +3984,8 @@ function bootTV(){
          "gap    avg "+F.avgGapMs+" ms   worst "+F.worstGapMs+" ms\n"+
          "drops  "+F.drops+" of "+F.samples+"  ("+F.dropPct+"%)   panel ~"+F.hz+" Hz\n"+
          "js     "+dt.toFixed(2)+" ms   peak "+F.jsMaxMs+" ms   budget "+(F.hz>90?"8.33":"16.67")+"\n"+
-         "layers "+st.drawn+" drawn / "+st.layers+"   out "+Math.round(SW)+"×"+Math.round(SH)+"\n"+
+         "calls  "+String(st.drawn).padStart(4," ")+" / "+st.layers+"   budget 100-200 low-end"+(st.drawn>200?"  OVER":"")+"\n"+
+         "out    "+Math.round(SW)+"×"+Math.round(SH)+(RSCALE!==1?("  scale "+RSCALE):"")+"\n"+
          "vsync  "+(DESYNC?"DESYNCHRONISED (may tear)":"locked")+"   "+VERSION)
         : "measuring…";
       if(F&&drawGraph){ var B_=FPS.buf(); drawGraph(B_.gaps,B_.n,B_.N, F.hz>90?8.33:16.67); }
@@ -4621,10 +4639,11 @@ function bootApp(){
     return state.manual!==null ? state.manual
          : Math.min(loopPos(state.ev.d), state.ev.d+REST);
   }
+  var lastCalls=0;
   function render(ms){
     var f=frameAt(state.ev,state.L,ms);
     /* one draw call for the entire wall */
-    if(stageR) stageR.draw(f, f.screens||null);
+    if(stageR){ var st=stageR.draw(f, f.screens||null); lastCalls=st?st.drawn:0; }
     return f;
   }
   function tick(ts){
@@ -4657,7 +4676,7 @@ function bootApp(){
                           "  max "+pad(F.max)+(F.drops?("  "+F.dropPct+"% drop"):"  ok");
         fpsEl.style.color = F.dropPct>1 ? "var(--tally)" : "var(--good)";
         var B_=FPS.buf(); drawGraph(B_.gaps,B_.n,B_.N, F.hz>90?8.33:16.67);
-        if(devHUD) devHUD(F,B_,undefined,{wall:wallMs,panel:panelMs});
+        if(devHUD) devHUD(F,B_,undefined,{wall:wallMs,panel:panelMs,calls:lastCalls});
       }
       renderLink();
     }
@@ -4874,6 +4893,33 @@ function audit(){
   });
   if(MATRIX.length!==TYPES.length*TEAMKEYS.length)
     fails.push("matrix size "+MATRIX.length);
+
+  /* RENDER ASSERTION. Everything above checks the frame SPEC; none of it would
+     have caught a switch-case fallthrough that made every `fill` silently draw
+     nothing and blank the ground colour of all 28 cues. So actually rasterise
+     one and read the pixels back. */
+  (function(){
+    try{
+      var cv=document.createElement("canvas");
+      var R=makeRenderer(cv);
+      R.resize(64,36,{x:0,y:0,w:1,h:1},1);
+      var probes=[
+        {name:"opaque fill", layers:[{k:"fill",col:"#BF5700"}], want:[191,87,0]},
+        {name:"flash",       layers:[{k:"flash"}],              want:[255,255,255]},
+        {name:"full band",   layers:[{k:"band",x:0,y:0,w:1,h:1,col:"#12331B"}], want:[18,51,27]}
+      ];
+      probes.forEach(function(p){
+        var st=R.draw({layers:p.layers,u:0},null);
+        if(!st.drawn) fails.push("render: "+p.name+" drew nothing");
+        var d=R.ctx().getImageData(0,0,64,36).data;
+        var i, dr=0, dg=0, db=0, n=0;
+        for(i=0;i<d.length;i+=4){ dr+=d[i]; dg+=d[i+1]; db+=d[i+2]; n++; }
+        dr=Math.round(dr/n); dg=Math.round(dg/n); db=Math.round(db/n);
+        if(Math.abs(dr-p.want[0])>6||Math.abs(dg-p.want[1])>6||Math.abs(db-p.want[2])>6)
+          fails.push("render: "+p.name+" gave rgb("+dr+","+dg+","+db+") want rgb("+p.want.join(",")+")");
+      });
+    }catch(err){ fails.push("render assertion threw: "+err.message); }
+  })();
   var tag="BarBoards audit — "+TYPES.length+" types × "+TEAMKEYS.length+" schools = "+
           MATRIX.length+" events, "+checked+" frames, "+
           LAYORDER.length+" layouts, "+Object.keys(G).length+" grammars";
