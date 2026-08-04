@@ -389,6 +389,8 @@ body.badge #badge{display:flex}
             title="Flash each screen with its own output number — for mapping physical positions to tv= indices">Ident</button>
           <button class="btn" id="bSync"
             title="Probe every output directly and report how far apart the screens really are">Sync test</button>
+          <button class="btn" id="bDev"
+            title="Ask each screen to profile itself and send back a report — GPU, frame times, thermal and clock drift">Device report</button>
         </div>
         <div class="outs" id="outs" style="margin-top:9px"></div>
         <div class="note warn" style="margin-top:8px" id="linkNote">—</div>
@@ -566,7 +568,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0030";
+var VERSION = "v1.0031";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -805,10 +807,11 @@ var LINK = (function(){
   /* time discipline: who is out there, who is the reference, and the one
      outstanding exchange we are waiting on */
   var myRank=null, peers={}, refRank=null, cid="", pseq=0, pend={}, ptimer=null;
-  var probes={}, seenCmd={};
+  var probes={}, seenCmd={}, diagWait={};
   var reports={};                       /* per-output self-report, keyed by tv index */
   api.reports=function(){ return reports; };
   api.report=null;                      /* an output installs this to describe itself */
+  api.profile=null;                     /* ...and this to profile the hardware it is on */
 
   function isMQTT(u){ return /^(wss?|mqtts?):\/\//i.test(u); }
 
@@ -909,6 +912,19 @@ var LINK = (function(){
      restart and can only be cleared by publishing over it -- from a wall that is
      busy rebooting. The stale-`at` guard is the second belt: a command replayed
      by a broker an hour later is discarded rather than obeyed. */
+  /* Ask one output to profile ITSELF and post the report back. The screens are
+     the only place these numbers mean anything -- a desktop's frame times say
+     nothing about an Orin -- and they are exactly the machines nobody can reach. */
+  api.deviceReport=function(rank,timeoutMs){
+    return new Promise(function(res){
+      if(!cli||!cli.connected||!api.on()){ res(null); return; }
+      var done=false;
+      function finish(v){ if(done) return; done=true; delete diagWait[rank]; res(v); }
+      diagWait[rank]=finish;
+      api.cmd("diag",rank);
+      setTimeout(function(){ finish(null); }, timeoutMs||20000);
+    });
+  };
   api.cmd=function(c,tv,v){
     if(!cli||!cli.connected||!api.on()) return false;
     cli.publish(topic("cmd"), JSON.stringify({
@@ -932,6 +948,8 @@ var LINK = (function(){
     else if(m.c==="ident")
       flashBadge(String(myRank),"TV "+myRank+" · "+VERSION,"#0B57D0","#FFFFFF",
                  Math.max(1000,Math.min(30000,+m.v||6000)));
+    else if(m.c==="diag")
+      flashBadge("PROFILING","TV "+myRank,"#2E6E8E","#FFFFFF",5000);
     else if(m.c==="skew")
       flashBadge(((+m.v||0)>=0?"+":"")+(+m.v||0),"TV "+myRank+" · SKEW MS","#7A4BC4","#FFFFFF",1800);
     var run=function(){
@@ -942,6 +960,22 @@ var LINK = (function(){
         var u=location.href.split("#")[0].replace(/([?&])cb=\d+&?/,"$1");
         u+=(u.indexOf("?")<0?"?":"&")+"cb="+Math.floor(Date.now()/1000);
         location.replace(u+location.hash);
+      }
+      else if(m.c==="diag"){
+        /* profiling takes a few seconds of real frames; publish when it lands */
+        try{ (api.profile?api.profile():Promise.resolve("no profiler installed"))
+          .then(function(txt){
+            cli.publish(topic("diagr"), JSON.stringify({tv:myRank,txt:txt}), false);
+          })
+          .catch(function(e){
+            /* a profiler that throws must still answer, or the panel just waits */
+            cli.publish(topic("diagr"), JSON.stringify(
+              {tv:myRank,txt:"device report failed: "+(e&&e.message||e)}), false);
+          });
+        }catch(e){
+          cli.publish(topic("diagr"), JSON.stringify(
+            {tv:myRank,txt:"device report threw: "+(e&&e.message||e)}), false);
+        }
       }
       else if(m.c==="skew"){
         SKEW=+m.v||0;
@@ -1014,6 +1048,7 @@ var LINK = (function(){
       cli.subscribe(topic("hello"));
       cli.subscribe(topic("t"));
       cli.subscribe(topic("cmd"));
+      cli.subscribe(topic("diagr"));
       startTime();
       /* A push issued before the socket was up would otherwise be dropped in
          silence, leaving an untouched control panel publishing nothing and the
@@ -1025,6 +1060,10 @@ var LINK = (function(){
       if(t===topic("tap")){ if(api.onTap) api.onTap(m); return; }
       if(t===topic("t")){ onTime(m); return; }
       if(t===topic("cmd")){ onCmd(m,role); return; }
+      if(t===topic("diagr")){
+        if(m&&m.tv!==undefined&&diagWait[m.tv]) diagWait[m.tv](m.txt||"");
+        return;
+      }
       if(t===topic("state")) rx(m,"mqtt");
       else if(t===topic("hello")&&m&&m.tv!==undefined){
         var rxAt=Date.now();
@@ -2446,15 +2485,157 @@ function gpuInfo(){
   return out;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   DEVICE REPORT
+
+   Frame-rate advice is worthless without knowing WHICH failure you have, and on
+   a Jetson there are five, with five different fixes and no overlap between
+   them. They are separable from the frame-gap series if you ask the right
+   questions, so this asks them and names the remedy rather than handing over a
+   checklist to guess with.
+
+     software rasterisation   the renderer string says so. Nothing else matters
+                              until it is fixed; a CPU cannot fill 1080p60.
+     compositor / vsync       an EMPTY rAF loop already drops. The app has not
+                              drawn anything yet, so it cannot be the app.
+     GPU over budget          gaps land on exact MULTIPLES of the refresh
+                              interval: flips are being missed whole, not jittered.
+     thermal throttle         the run gets WORSE from start to finish.
+     DVFS ramp                the run gets BETTER: clocks were still climbing.
+                              This is the Jetson default and it looks like jank.
+
+   The last two are why the series is split into thirds. A single average hides
+   both of them, and they are the two most likely to be live on an Orin. */
+function medOf(a){
+  if(!a.length) return 0;
+  var s2=a.slice().sort(function(p,q){ return p-q; });
+  return s2[Math.floor(s2.length/2)];
+}
+function deviceReport(FPS){
+  if(!FPS) return Promise.resolve("device report: no frame meter on this page");
+  var gpu=gpuInfo(), st=FPS.stats(), cad=FPS.cadence(), gaps=FPS.raw();
+  return baselineTest(4).then(function(base){
+    var L=[], n=gaps.length;
+    var third=Math.floor(n/3);
+    var early=third>8?medOf(gaps.slice(0,third)):0;
+    var late =third>8?medOf(gaps.slice(n-third)):0;
+    var drift=(early&&late)?(late/early):1;
+    var budget=(st&&st.hz>90)?8.33:16.67;
+
+    L.push("BarBoards device report   "+VERSION);
+    L.push("");
+    L.push("RENDERER");
+    L.push("  gpu           "+gpu.renderer);
+    L.push("  vendor        "+gpu.vendor);
+    L.push("  accelerated   "+(gpu.accelerated===null?"unknown":(gpu.accelerated?"yes":"NO — SOFTWARE")));
+    L.push("  surface       "+Math.round(window.innerWidth)+"x"+Math.round(window.innerHeight)+
+           "  dpr "+window.devicePixelRatio+"  scale "+RSCALE);
+    L.push("  cores         "+(navigator.hardwareConcurrency||"?"));
+    L.push("");
+    L.push("LIVE RENDER  (this cue, on this panel)");
+    if(st){
+      L.push("  fps           cur "+st.cur+"  min "+st.min+"  avg "+st.avg+"  max "+st.max);
+      L.push("  display       "+st.hz+" Hz   budget "+budget.toFixed(2)+" ms");
+      L.push("  drops         "+st.dropPct+"%");
+      L.push("  worst js      "+(+st.worstJsMs).toFixed(2)+" ms   browser "+
+             (+st.worstOtherMs).toFixed(2)+" ms");
+    } else L.push("  not enough samples yet");
+    if(cad) L.push("  cadence       "+cad.baseHz+" Hz  on "+cad.onCadencePct+"%  x2+ "+
+                   cad.doubledPct+"%  irregular "+cad.irregularPct+"%");
+    if(early&&late)
+      L.push("  drift         first third "+early.toFixed(2)+" ms -> last third "+
+             late.toFixed(2)+" ms  ("+(drift>1?"+":"")+((drift-1)*100).toFixed(0)+"%)");
+    L.push("");
+    L.push("BROWSER FLOOR  (empty loop, nothing drawn)");
+    if(base.unmeasured){
+      L.push("  NOT MEASURED — this screen is hidden or throttled, so no frames were");
+      L.push("  presented and requestAnimationFrame never ran. Everything below that");
+      L.push("  depends on frame timing is unreliable until it is on screen.");
+    } else {
+      L.push("  frames        "+base.frames+"   display "+base.displayHz+" Hz");
+      L.push("  gap p50/p99   "+base.gapMs.p50+" / "+base.gapMs.p99+" ms   max "+base.gapMs.max);
+      L.push("  drops         "+base.dropPct+"%");
+    }
+    L.push("");
+
+    /* the verdict, most-disqualifying first */
+    var v=[];
+    if(base.unmeasured || document.hidden){
+      v.push("NOT ON SCREEN. No frames were presented while profiling, so there is");
+      v.push("nothing to diagnose — a hidden or throttled page renders nothing and");
+      v.push("drops nothing. Bring this output to the foreground and run it again.");
+      v.push("The renderer line above is still valid; the timings are not.");
+    } else if(gpu.accelerated===false){
+      v.push("SOFTWARE RASTERISATION. Nothing else on this list matters until this is");
+      v.push("fixed — a CPU cannot fill 1080p60. Chromium on L4T commonly falls back");
+      v.push("because the GPU is blocklisted or EGL is not wired up. Launch with:");
+      v.push("  --use-gl=egl --ignore-gpu-blocklist --enable-gpu-rasterization");
+      v.push("and confirm chrome://gpu shows Canvas: Hardware accelerated.");
+    } else if(base.dropPct>1){
+      v.push("THE BROWSER DROPS WITH NOTHING DRAWN ("+base.dropPct+"%). This is not the");
+      v.push("animation — an empty loop cannot be optimised. It is the compositor or the");
+      v.push("display path. On Orin: run Chromium fullscreen with --ozone-platform=drm so");
+      v.push("it drives KMS directly, or drop the compositing window manager. Check the");
+      v.push("panel is actually at "+base.displayHz+" Hz and not being mode-set to something else.");
+    } else if(cad && cad.doubledPct>5 && cad.irregularPct<5){
+      v.push("MISSING WHOLE FLIPS ("+cad.doubledPct+"% at 2x+ the refresh interval, and the gaps");
+      v.push("are REGULAR). That is a GPU that cannot finish the frame in budget, not");
+      v.push("jitter. Reduce the fill: ?scale=0.8 renders below native and lets the");
+      v.push("compositor upscale, which is the cheapest large win here. Then ?fx=1.");
+    } else if(drift>1.15){
+      v.push("GETTING WORSE AS IT RUNS (+"+((drift-1)*100).toFixed(0)+"% from first third to last).");
+      v.push("That is the thermal signature. Watch `tegrastats` for the GPU clock falling");
+      v.push("and the thermal zones climbing. A fanless enclosure behind a TV in a warm");
+      v.push("room will throttle an Orin, and no software change will fix it.");
+    } else if(drift<0.87){
+      v.push("GETTING BETTER AS IT RUNS ("+((1-drift)*100).toFixed(0)+"% faster by the last third).");
+      v.push("Clocks were still ramping — this is DVFS, and it is the Jetson DEFAULT.");
+      v.push("It looks exactly like jank at the start of every cue. Fix it once:");
+      v.push("  sudo nvpmodel -m 0     # MAXN, no power cap");
+      v.push("  sudo jetson_clocks     # lock CPU, GPU and EMC to maximum");
+      v.push("EMC matters as much as the GPU clock here: this is a fill-rate load.");
+    } else if(st && st.worstJsMs>budget*0.5){
+      v.push("OUR JAVASCRIPT IS THE COST ("+(+st.worstJsMs).toFixed(2)+" ms against a "+budget.toFixed(2)+" ms budget).");
+      v.push("This one is ours. Send this report back — it is the only case on this list");
+      v.push("that is a bug in the animator rather than the device.");
+    } else {
+      v.push("CLEAN. Live drops "+(st?st.dropPct:"?")+"%, browser floor "+base.dropPct+"%, no thermal or");
+      v.push("clock drift. This device is doing what it should.");
+    }
+    L.push("VERDICT");
+    v.forEach(function(x){ L.push("  "+x); });
+    return L.join("\n");
+  });
+}
+
 function baselineTest(seconds){
   return new Promise(function(res){
     var gaps=[], prev=0, t0=performance.now(), until=t0+(seconds||5)*1000;
+    var settled=false;
+    /* the wall-clock backstop: setTimeout still fires where rAF does not */
+    var bail=setTimeout(function(){
+      if(settled) return;
+      settled=true;
+      res({test:"baseline — NOT MEASURED",frames:gaps.length,displayHz:0,
+           gapMs:{p50:0,p95:0,p99:0,max:0},drops:0,dropPct:0,unmeasured:true,
+           verdict:"no frames were presented — the page is hidden or throttled, so "+
+                   "requestAnimationFrame never ran. Nothing can be concluded about "+
+                   "this device until it is on screen."});
+    }, (seconds||5)*1000+3000);
     function step(ts){
       if(prev) gaps.push(ts-prev);
       prev=ts;
       if(performance.now()<until) requestAnimationFrame(step); else done();
     }
     function done(){
+      if(settled) return;
+      settled=true; clearTimeout(bail);
+      if(!gaps.length){
+        res({test:"baseline — NO FRAMES",frames:0,displayHz:0,
+             gapMs:{p50:0,p95:0,p99:0,max:0},drops:0,dropPct:0,unmeasured:true,
+             verdict:"no frames were presented at all"});
+        return;
+      }
       var s2=gaps.slice().sort(function(a,b){ return a-b; });
       var p=function(q){ return +s2[Math.min(s2.length-1,Math.floor(s2.length*q))].toFixed(2); };
       var best=s2[0], hz=Math.round(1000/best);
@@ -5341,6 +5522,9 @@ function bootTV(){
   /* What this output tells the control panel about itself every few seconds.
      ms/u are recomputed here rather than read from the last painted frame, so a
      throttled tab still reports the truth about where it OUGHT to be. */
+  /* profiling has to run where the frames are, so the output owns it and the
+     link only carries the request and the answer */
+  LINK.profile=function(){ return deviceReport(FPS); };
   LINK.report=function(){
     var F=FPS.stats();
     return {ms:Math.round(loopPos(ev.d)), u:+cl(loopPos(ev.d)/ev.d,0,1).toFixed(4),
@@ -6057,6 +6241,27 @@ function bootApp(){
       console.log(txt);
       try{ navigator.clipboard&&navigator.clipboard.writeText(txt); }catch(e){}
       alert(txt+"\n\n(copied to the clipboard)");
+    });
+  };
+  /* The numbers that matter come from the SCREEN, not from this laptop. */
+  document.getElementById("bDev").onclick=function(){
+    var btn=this, live=LINK.outputs.slice();
+    if(!LINK.on()||!live.length){
+      alert("No outputs have checked in. Open the TV URLs first."); return; }
+    btn.disabled=true; btn.textContent="profiling…";
+    Promise.all(live.map(function(v){ return LINK.deviceReport(v); })).then(function(rs){
+      btn.disabled=false; btn.textContent="Device report";
+      var out=[];
+      rs.forEach(function(txt,i){
+        out.push("═══ OUTPUT "+live[i]+" "+"═".repeat(46));
+        out.push(txt || "  no answer — screen is on a build older than v1.0031, or offline");
+        out.push("");
+      });
+      var txt=out.join("\n");
+      console.log(txt);
+      try{ navigator.clipboard&&navigator.clipboard.writeText(txt); }catch(e){}
+      alert(txt.length>3000 ? (txt.slice(0,3000)+"\n\n…full report on the clipboard and in the console")
+                            : (txt+"\n\n(copied to the clipboard)"));
     });
   };
   document.getElementById("bIdent").onclick=function(){

@@ -264,6 +264,37 @@ screens" is already looking at the screens.
 | **Reload TVs** | Reloads every output on a shared instant. Shift-click for a cache-busting reload that a stale cache cannot answer. |
 | **Ident** | Flashes each screen with its own output number — for mapping physical positions to `tv=` indices. |
 | **Sync test** | Probes every output and reports the real spread. |
+| **Device report** | Asks each screen to profile *itself* and send the report back — GPU, live frame times, browser floor, thermal and clock drift, with a verdict. |
+
+### Making it flawless on a Jetson Orin
+
+Frame-rate advice is worthless without knowing *which* failure you have, and on a Jetson
+there are five, with five different fixes and no overlap between them. **Device report**
+separates them from the frame-gap series and names the remedy, instead of handing you a
+checklist to guess with:
+
+| Signature | What it means | The fix |
+|---|---|---|
+| Renderer says SwiftShader / llvmpipe | Software rasterisation | `--use-gl=egl --ignore-gpu-blocklist --enable-gpu-rasterization`; confirm `chrome://gpu` says Canvas: Hardware accelerated |
+| An **empty** rAF loop already drops | Compositor or display path, not the app | Run Chromium fullscreen with `--ozone-platform=drm` so it drives KMS directly, or drop the compositing WM |
+| Gaps on exact **multiples** of the refresh interval | GPU can't finish in budget — whole flips missed, not jitter | `?scale=0.8` renders below native and lets the compositor upscale; then `?fx=1` |
+| Run gets **worse** end to end | Thermal throttle | `tegrastats` — watch GPU clock fall and thermal zones climb. A fanless box behind a TV will throttle and no software change fixes it |
+| Run gets **better** end to end | DVFS ramp — clocks were still climbing | `sudo nvpmodel -m 0` then `sudo jetson_clocks` |
+
+That last one is the Jetson **default**, it looks exactly like jank at the start of every
+cue, and it is one command to fix — so check it first:
+
+```bash
+sudo nvpmodel -m 0 && sudo jetson_clocks
+```
+
+EMC matters as much as the GPU clock here, because this is a fill-rate load rather than a
+shader load, and `jetson_clocks` locks all three.
+
+The report is deliberately run **on the screen**, not on the panel: a desktop's frame times
+say nothing about an Orin, and the screens are exactly the machines nobody can reach. It also
+refuses to diagnose a screen it could not measure — a hidden or throttled page presents no
+frames and therefore drops none, which would otherwise read as a perfect result.
 
 Every one of these is **visible on a webcam from the observation station**, because a whole
 screen changing colour carries further than any text:
