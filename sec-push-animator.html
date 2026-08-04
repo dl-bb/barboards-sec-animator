@@ -566,7 +566,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0029";
+var VERSION = "v1.0030";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1608,6 +1608,12 @@ var TYPES=[
  sub:function(T){ return TXT3 || T.venue.toUpperCase(); },
  desc:function(c){ return "Custom message on the touchdown animation"; },
  sr:{}},
+
+{id:"bbsports", grp:"tv", label:"BarBoards Sports open", cue:"bbsports", d:12000, house:true,
+ amp:95,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0,
+ name:"BARBOARDS SPORTS", sub:"NETWORK OPEN · CHROME",
+ desc:function(c){ return "Show open — the network package, chromed"; }, sr:{}},
 
 {id:"saturday", grp:"tv", label:"BarBoards Saturday open", cue:"saturday", d:14000, house:true,
  amp:92,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
@@ -2891,6 +2897,207 @@ G.runacross=function(u,C){
             fit:.86,track:.14,a:cl(v3*4,0,1)});
     o.push({k:"word",t:"Q"+C.ev.period+"  "+C.ev.clock,x:.5,y:.82,h:.06,col:hexA("#FFFFFF",.5),
             fit:.4,track:.2,a:cl(v3*4,0,1)});
+  }
+  return {layers:o,phase:ph};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BARBOARDS SPORTS — the network open
+
+   The genre this belongs to is the big-network sports open: a cold field, a
+   searchlight rake, metal parts flying in and locking, and a chromed wordmark
+   that lands on the downbeat. It is an ORIGINAL mark in that idiom -- the point
+   is the language of the form, not anybody else's logo, which is neither ours to
+   redraw nor interesting to copy.
+
+   The technical problem is chrome. There is no gradient-filled text primitive
+   here and no way to clip a gradient to a glyph, so metal is built the way it
+   was built before shaders: a dark body extruded back for mass, a shadow pass
+   dropped low, a bright face, and a highlight pass lifted high. Four passes of
+   flat type read as one bevelled solid, and a specular band raking across the
+   whole frame does the rest -- the eye reads a sheen crossing the letters even
+   though it is crossing everything. */
+var CHROME={deep:"#05070C",iron:"#1B2334",steel:"#77869B",
+            mid:"#8C9BB0",silver:"#E4EBF4",lit:"#FFFFFF"};
+/* One bevelled metal word, in five passes. The offsets are deliberately TINY:
+   a whole glyph shifted far enough to notice is a ghost, not an edge, so each
+   pass moves a few percent of cap height and the eye integrates them into one
+   solid with a lit top edge.
+
+   NO TEAM COLOUR IN HERE. The first cut tinted the face with the school primary
+   at 0.3 alpha and the metal went straight to beige plastic. Chrome is neutral;
+   it takes its colour from what it reflects, which is the job of the ground and
+   the accent rules, not of the letterforms.
+
+   spec is the rake crossing the type, 0..1.
+
+   depth is how much mass to build under it, and it exists because this bevel is
+   lit for a DARK ground. Put the same word on a bright accent plate and the
+   extrude and drop shadow stop reading as depth and start reading as a second,
+   badly registered copy of the word. On a plate the plate IS the contrast, so
+   depth 0 gives a clean chrome knockout instead. */
+function chromeWord(o,t,x,y,h,fit,track,a,spec,depth){
+  if(a===undefined) a=1;
+  if(depth===undefined) depth=1;
+  if(depth>0){
+    extrude(o,t,x,y,h,CHROME.iron,CHROME.deep,0.0014*depth,0.0024*depth,10,fit,track,a);
+    o.push({k:"word",t:t,x:x,y:y+h*0.045*depth,h:h,col:CHROME.deep,fit:fit,track:track,a:a*0.9});
+  }
+  o.push({k:"word",t:t,x:x,y:y,h:h,col:depth>0?CHROME.mid:CHROME.silver,fit:fit,track:track,a:a});
+  o.push({k:"word",t:t,x:x,y:y-h*0.022,h:h,col:CHROME.silver,fit:fit,track:track,a:a*0.95});
+  o.push({k:"word",t:t,x:x,y:y-h*0.038,h:h,col:CHROME.lit,fit:fit,track:track,a:a*0.45});
+  if(spec>0.002)
+    o.push({k:"word",t:t,x:x,y:y-h*0.012,h:h,col:CHROME.lit,fit:fit,track:track,a:a*spec*0.55});
+}
+/* how hard the rake is hitting the middle of the frame right now */
+function specAt(p){ return (p<=0||p>=1) ? 0 : Math.exp(-Math.pow((p-0.5)/0.17,2)); }
+/* The rake. The first cut drew this at 0.22 white across the whole frame and it
+   read as a solid grey bar laid ON the picture rather than as light moving over
+   metal -- because over a dark ground, translucent white IS grey. So the band is
+   narrow and faint, and the actual brightening happens on the letterforms, via
+   specAt(). Light you can see the edges of is a prop, not a highlight. */
+function sheen(o,p,w,al){
+  if(p<=0||p>=1) return;
+  var x=mix(-0.35,1.35,p), ww=w||0.035, aa=(al===undefined?0.075:al);
+  o.push({k:"band",x:x,y:-0.12,w:ww,h:1.24,col:hexA("#CFE0FF",aa),skew:-22});
+  o.push({k:"band",x:x+ww*0.40,y:-0.12,w:ww*0.20,h:1.24,col:hexA("#FFFFFF",aa*1.6),skew:-22});
+}
+/* a volumetric beam standing on the horizon, leaning by `lean` */
+function beam(o,x,lean,wide,al,col){
+  o.push({k:"band",x:x,y:0.06,w:wide,h:0.78,col:hexA(col||"#9FC0FF",al),skew:lean});
+  o.push({k:"band",x:x+wide*0.30,y:0.06,w:wide*0.34,h:0.78,col:hexA("#FFFFFF",al*0.7),skew:lean});
+  o.push({k:"glow",x:x+wide*0.5,y:0.845,r:0.10,col:hexA(col||"#9FC0FF",al*1.5),a:1});
+}
+
+G.bbsports=function(u,C){
+  var T=C.T, o=[], ph="", i, acc=T.p;
+  var wide=(C.mode==="scroll"||C.mode==="grid");
+  o.push({k:"fill",col:CHROME.deep});
+
+  /* A · ignition — one streak tears across a cold field */
+  if(u<0.12){
+    ph="ignition";
+    var v=seg(u,0,.12), e=eo(v);
+    o.push({k:"lgrad",x:0,y:0.30,w:1,h:0.44,c0:CHROME.deep,c1:"#0C1424",dir:"v",a:e});
+    var sx=mix(-0.4,1.4,eio(v));
+    o.push({k:"band",x:sx-0.5,y:0.497,w:0.5,h:0.006,col:hexA("#BFD8FF",0.85*e)});
+    o.push({k:"band",x:sx-0.09,y:0.4955,w:0.09,h:0.009,col:"#FFFFFF",a:e});
+    for(i=-5;i<=5;i++)
+      o.push({k:"glow",x:sx+i*0.05,y:0.5,r:0.05+0.02*(5-Math.abs(i)),
+              col:hexA("#CFE2FF",0.10*(1-Math.abs(i)/6)*e),a:1});
+    o.push({k:"vig",a:0.55});
+  }
+  /* B · the searchlights come up off the horizon */
+  else if(u<0.30){
+    ph="searchlights";
+    var v2=seg(u,.12,.30);
+    o.push({k:"lgrad",x:0,y:0.16,w:1,h:0.70,c0:"#0A1220",c1:CHROME.deep,dir:"v"});
+    o.push({k:"band",x:0,y:0.845,w:1,h:0.0025,col:hexA("#7FA6E8",0.75)});
+    for(i=0;i<5;i++){
+      var ph2=(v2*0.8+det(i+71)*1.0)%1;
+      var lean=mix(-34,34,0.5+0.5*Math.sin((ph2+det(i+81))*Math.PI*2));
+      beam(o, 0.06+i*0.21+Math.sin(v2*3+i)*0.03, lean, 0.05+det(i+91)*0.04,
+           0.16*cl(v2*3,0,1), i===2?acc:"#9FC0FF");
+    }
+    /* motes: the air made visible, which is what sells a beam as volume */
+    for(i=0;i<26;i++){
+      var my=(det(i+101)+v2*0.12)%1;
+      o.push({k:"dot",x:(det(i+111)+v2*0.05)%1,y:0.10+my*0.76,r:0.0018+det(i+121)*0.0022,
+              col:hexA("#DCE9FF",0.10+det(i+131)*0.30)});
+    }
+    o.push({k:"vig",a:0.5});
+  }
+  /* C · assembly — the parts arrive and lock */
+  else if(u<0.50){
+    ph="assembly";
+    var v3=seg(u,.30,.50), e3=eo(v3);
+    o.push({k:"lgrad",x:0,y:0.18,w:1,h:0.66,c0:"#0B1524",c1:CHROME.deep,dir:"v"});
+    for(i=0;i<11;i++){
+      var side=(i%2)?1:-1;
+      var ty=0.20+ (i/10)*0.60;
+      var from=side*mix(1.5,0,eio(cl(v3*1.25-det(i+141)*0.22,0,1)));
+      var lw=0.10+det(i+151)*0.26;
+      o.push({k:"band",x:0.5-lw/2+from,y:ty,w:lw,h:0.017+det(i+161)*0.016,
+              col:mixHex(CHROME.iron,CHROME.steel,det(i+171)),skew:-20});
+      o.push({k:"band",x:0.5-lw/2+from,y:ty,w:lw,h:0.004,
+              col:hexA(CHROME.silver,0.7),skew:-20});
+    }
+    /* the strike: everything seats at once and throws sparks */
+    if(v3>0.72){
+      var st=seg(v3,.72,1);
+      for(i=0;i<18;i++){
+        var ang=det(i+181)*Math.PI*2, rr=st*(0.10+det(i+191)*0.34);
+        o.push({k:"dot",x:0.5+Math.cos(ang)*rr*0.62,y:0.5+Math.sin(ang)*rr,
+                r:0.0022*(1-st),col:hexA(i%3?"#FFE6B0":acc,1-st)});
+      }
+      o.push({k:"glow",x:0.5,y:0.5,r:0.34*st,col:hexA("#FFFFFF",0.22*(1-st)),a:1});
+    }
+    sheen(o,(v3-0.15)/0.85);
+    o.push({k:"vig",a:0.46});
+  }
+  /* D · the mark lands */
+  else if(u<0.70){
+    ph="the mark";
+    var v4=seg(u,.50,.70);
+    o.push({k:"lgrad",x:0,y:0.14,w:1,h:0.72,c0:"#0D1828",c1:CHROME.deep,dir:"v"});
+    if(v4<0.10) o.push({k:"flash",a:1-v4/0.10});
+    /* measured, then centred as one lockup — arbitrary aspect, no overlap */
+    var mh=wide?0.30:0.22, tr=0.015;
+    var mw=C.tw("BARBOARDS",mh,tr);
+    if(mw>0.86){ var k=0.86/mw; mh*=k; mw=0.86; }
+    var rake=seg(v4,.18,.72);
+    /* a soft floor under the mark: chrome needs something to reflect */
+    o.push({k:"lgrad",x:0,y:0.30,w:1,h:0.30,c0:"#16202F",c1:CHROME.deep,dir:"v",a:0.85});
+    chromeWord(o,"BARBOARDS",0.5,0.46,mh,0.88,tr,cl(v4*6,0,1),specAt(rake));
+    sheen(o,rake);
+    if(v4>0.30){
+      var ru=seg(v4,.30,.55);
+      o.push({k:"band",x:0.5-0.40*ru,y:0.615,w:0.80*ru,h:0.0035,col:hexA(CHROME.silver,0.8)});
+      o.push({k:"band",x:0.5-0.40*ru,y:0.615,w:0.80*ru*0.22,h:0.0035,col:acc});
+    }
+    o.push({k:"vig",a:0.42});
+  }
+  /* E · SPORTS seats under it */
+  else if(u<0.86){
+    ph="sports";
+    var v5=seg(u,.70,.86);
+    o.push({k:"lgrad",x:0,y:0.14,w:1,h:0.72,c0:"#0D1828",c1:CHROME.deep,dir:"v"});
+    var mh2=wide?0.28:0.20, tr2=0.015;
+    var mw2=C.tw("BARBOARDS",mh2,tr2);
+    if(mw2>0.86){ var k2=0.86/mw2; mh2*=k2; }
+    o.push({k:"lgrad",x:0,y:0.25,w:1,h:0.30,c0:"#16202F",c1:CHROME.deep,dir:"v",a:0.85});
+    chromeWord(o,"BARBOARDS",0.5,0.40,mh2,0.88,tr2,1,specAt(seg(v5,.05,.55)));
+    o.push({k:"band",x:0.5-0.40,y:0.555,w:0.80,h:0.0035,col:hexA(CHROME.silver,0.8)});
+    o.push({k:"band",x:0.5-0.40,y:0.555,w:0.176,h:0.0035,col:acc});
+    /* SPORTS wipes out of the rule rather than fading — metal does not fade */
+    var wv=eo(cl(v5*1.9,0,1));
+    var sh=wide?0.13:0.10;
+    var sw=Math.min(0.62,C.tw("SPORTS",sh,0.20))+0.075;
+    plate(o,0.5-(sw*wv)/2,0.600,sw*wv,sh*1.34,acc,1,hexA("#FFFFFF",0.34),-14);
+    chromeWord(o,"SPORTS",0.5,0.665,sh,0.62,0.20,wv,specAt(seg(v5,.12,.66)),0);
+    sheen(o,seg(v5,.05,.55));
+    o.push({k:"vig",a:0.40});
+  }
+  /* F · lockup, in the school's colour */
+  else{
+    ph="lockup";
+    var v6=seg(u,.86,1);
+    o.push({k:"lgrad",x:0,y:0,w:1,h:1,c0:mixHex(CHROME.deep,acc,0.20),c1:CHROME.deep,dir:"v"});
+    var mh3=wide?0.26:0.19, tr3=0.015;
+    var mw3=C.tw("BARBOARDS",mh3,tr3);
+    if(mw3>0.84){ var k3=0.84/mw3; mh3*=k3; }
+    chromeWord(o,"BARBOARDS",0.5,0.38,mh3,0.86,tr3,1,0);
+    o.push({k:"band",x:0.10,y:0.525,w:0.80,h:0.0035,col:hexA(CHROME.silver,0.85)});
+    o.push({k:"band",x:0.10,y:0.525,w:0.80*cl(v6*2,0,1)*0.22,h:0.0035,col:acc});
+    var sh3=wide?0.12:0.095;
+    var sw3=Math.min(0.60,C.tw("SPORTS",sh3,0.20))+0.075;
+    plate(o,0.5-sw3/2,0.562,sw3,sh3*1.34,acc,1,hexA("#FFFFFF",0.34),-14);
+    chromeWord(o,"SPORTS",0.5,0.625,sh3,0.60,0.20,1,0,0);
+    o.push({k:"word",t:T.venue.toUpperCase(),x:0.5,y:0.80,h:0.045,
+            col:hexA("#FFFFFF",0.52*cl(v6*3,0,1)),fit:0.72,track:0.16});
+    o.push({k:"word",t:"EVERY GAME · EVERY SCREEN",x:0.5,y:0.885,h:0.036,
+            col:hexA(acc,0.85*cl(v6*2.2,0,1)),fit:0.66,track:0.20});
+    o.push({k:"vig",a:0.38});
   }
   return {layers:o,phase:ph};
 };
@@ -4739,6 +4946,12 @@ var PHASES = {
   custom:[[0,.24,"Run","line one crosses"],[.24,.48,"Land","line two"],
           [.48,.528,"Flash","384 ms"],[.528,.86,"Payoff","team finish"],
           [.86,1,"Lockup","line two + line three"]],
+  bbsports:[[0,.12,"Ignition","one streak, cold field"],
+            [.12,.30,"Searchlights","beams off the horizon"],
+            [.30,.50,"Assembly","the parts fly in and seat"],
+            [.50,.70,"The mark","BARBOARDS lands in chrome"],
+            [.70,.86,"Sports","wipes out of the rule"],
+            [.86,1,"Lockup","school colour + tag"]],
   saturday:[[0,.12,"Cold","a line and some light"],[.12,.28,"The drop","SATURDAY lands"],
             [.28,.56,"The slate","today's games"],[.56,.80,"Wordmark","BAR · BOARDS"],
             [.80,1,"Tag","every game, every screen"]],

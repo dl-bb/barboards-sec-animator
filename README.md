@@ -34,8 +34,39 @@ separately, so all 35 cues are available for all 16 schools against any opponent
 | Ritual | chant / call track |
 | House cues · no push event | the wave · decibel meter · kickoff countdown · rally clap · phones up · spotlight sweep · ambient rail |
 | Patron · interactive | Color Wars |
-| Broadcast furniture | BarBoards Saturday open · score bug · lower third · replay wipe |
+| Broadcast furniture | **BarBoards Sports open** · BarBoards Saturday open · score bug · lower third · replay wipe |
 | Benchmark | stadium flyover · stadium flyover 3D |
+
+## BarBoards Sports — the network open
+
+A 12-second show open in the big-network idiom: cold field, a streak tears across, search
+lights rake off the horizon, metal parts fly in and seat, and a chromed wordmark lands on the
+downbeat with SPORTS wiping out of the rule beneath it. It ends on the school's colour, so
+the same open serves sixteen rooms.
+
+It is an **original mark in that genre**, not a redraw of anyone's logo — the language of the
+form is the interesting part and the only part worth building.
+
+The technical problem is chrome. There is no gradient-filled text primitive here and no way
+to clip a gradient to a glyph, so metal is built the way it was before shaders: a dark body
+extruded back for mass, a shadow dropped low, a bright face, a highlight lifted high. Four
+passes of flat type read as one bevelled solid. Two things that took a rebuild to get right:
+
+- **The offsets have to be tiny.** A glyph shifted far enough to notice is a ghost, not an
+  edge — a few percent of cap height and the eye integrates the passes into one object.
+- **No team colour in the letterforms.** The first cut tinted the face with the school primary
+  and the metal went straight to beige plastic. Chrome is neutral; it takes its colour from
+  what it reflects. The accent lives in the ground and the plates instead.
+
+The specular rake had the same lesson in reverse: drawn as a translucent white band across
+the frame it read as a solid grey bar laid *on* the picture, because over a dark ground
+translucent white **is** grey. So the band is narrow and faint, and the actual brightening
+happens on the letterforms — the word is redrawn in white with a Gaussian peak as the light
+crosses it.
+
+Type on the accent plate takes `depth 0`: the bevel is lit for a dark ground, and against a
+bright plate the extrude stops reading as depth and starts reading as a badly registered
+second copy. On a plate, the plate is the contrast.
 
 ## Custom message
 
