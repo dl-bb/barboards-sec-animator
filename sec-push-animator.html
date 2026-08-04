@@ -1272,11 +1272,22 @@ var SINT=new Float32Array(1024);
 for(var _i=0;_i<1024;_i++) SINT[_i]=Math.sin(_i/1024*Math.PI*2);
 function fsin(t){ return SINT[((t*1024/(Math.PI*2))|0)&1023]; }
 
+/* Per-glyph advances, keyed by size bucket. measureText costs 0.47 µs for a whole
+   string but 13.25 µs called per character — a 28× penalty paid every frame by any
+   tracked-out line. Measured once, reused forever. */
+var GADV={};
+
 function makeRenderer(cv){
   var ctx=cv.getContext("2d",{alpha:false, desynchronized:true});
   var W=0,H=0,SW=0,SH=0,DPR=1,cell={x:0,y:0,w:1,h:1};
-  var vx0=0,vy0=0,vx1=0,vy1=0;
+  var vx0=0,vy0=0,vx1=0,vy1=0,ox=0,oy=0;
   var grads={}, overlay=null, overlayKey="";
+  /* Assigning ctx.font reparses the font shorthand and drops the glyph cache:
+     0.63 µs when unchanged, 13.4 µs when it churns. Memoised, and every
+     save/restore invalidates it because restore() rolls the font back too. */
+  var curFont="";
+  function setFont(f){ if(f!==curFont){ ctx.font=f; curFont=f; } }
+  function invalidate(){ curFont=""; }
 
   function resize(screenW, screenH, c, dpr){
     cell=c; DPR=Math.min(dpr||1,2);
@@ -1321,22 +1332,46 @@ function makeRenderer(cv){
     grads[k]={g:g,r:rb,a:s.a}; return grads[k];
   }
 
+  /* One path for a run of same-colour particles instead of one path each:
+     110 dots cost 80.8 µs individually and 22.2 µs batched. Alpha is quantised
+     to 1/32 so a fading swarm still batches — nobody can see the step. */
+  function drawDotRun(arr,i0,i1,col,a){
+    var s=splitCol(col), any=0, k, l, x, y, r;
+    ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
+    ctx.beginPath();
+    for(k=i0;k<=i1;k++){
+      l=arr[k]; r=l.r*W; x=l.x*W; y=l.y*H;
+      if(x+r<vx0||x-r>vx1||y+r<vy0||y-r>vy1) continue;
+      if(r<1.4) ctx.rect(x-r,y-r,r*2,r*2);
+      else { ctx.moveTo(x+r,y); ctx.arc(x,y,r,0,6.2832); }
+      any++;
+    }
+    if(any) ctx.fill();
+    return any;
+  }
+
   function draw(f, screenSpec){
-    var layers=f.layers||[], sh=f.shake, i, l, n=0, drawn=0;
+    var layers=f.layers||[], sh=f.shake, i, l, n=layers.length, drawn=0;
     ctx.setTransform(DPR,0,0,DPR,0,0);
     ctx.globalAlpha=1;
     ctx.fillStyle="#000";
     ctx.fillRect(0,0,SW,SH);
 
     /* wall space: everything below is in wall CSS px, offset to this window */
-    var ox=-vx0+(sh?sh.x*W:0), oy=-vy0+(sh?sh.y*H:0);
+    ox=-vx0+(sh?sh.x*W:0); oy=-vy0+(sh?sh.y*H:0);
     ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
 
     var vig=0, scan=0;
     for(i=0;i<layers.length;i++){
-      l=layers[i]; n++;
+      l=layers[i];
       if(l.k==="vig"){ vig=Math.max(vig,l.a===undefined?1:l.a); continue; }
       if(l.k==="scan"){ scan=Math.max(scan,l.a===undefined?1:l.a); continue; }
+      if(l.k==="dot"){
+        var ab=Math.round((l.a===undefined?1:l.a)*32), j=i, m;
+        while(j+1<layers.length && (m=layers[j+1]).k==="dot" && m.col===l.col &&
+              Math.round((m.a===undefined?1:m.a)*32)===ab) j++;
+        if(j>i){ drawn+=drawDotRun(layers,i,j,l.col,ab/32); i=j; continue; }
+      }
       if(drawLayer(l)) drawn++;
     }
 
@@ -1383,7 +1418,7 @@ function makeRenderer(cv){
           if(l.rot) ctx.rotate(l.rot*Math.PI/180);
           if(l.skew) ctx.transform(1,0,Math.tan(l.skew*Math.PI/180),1,0,0);
           if(l.sc!==undefined&&l.sc!==1){ ctx.translate(w/2,h/2); ctx.scale(l.sc,l.sc); ctx.translate(-w/2,-h/2); }
-          ctx.fillRect(0,0,w,h); ctx.restore();
+          ctx.fillRect(0,0,w,h); ctx.restore(); invalidate();
           return true;
         }
         if(l.sc!==undefined&&l.sc!==1){
@@ -1418,7 +1453,7 @@ function makeRenderer(cv){
         ctx.save(); ctx.translate(x,y); ctx.scale(r/G.r,r/G.r);
         ctx.globalAlpha=a*G.a; ctx.fillStyle=G.g;
         ctx.beginPath(); ctx.arc(0,0,G.r,0,6.2832); ctx.fill();
-        ctx.restore();
+        ctx.restore(); invalidate();
         return true;
 
       case "tri":
@@ -1443,26 +1478,32 @@ function makeRenderer(cv){
         /* bucket the px size so the glyph atlas is reused, then take up the
            remainder with a transform — the classic mip trick */
         bk=bucketFor(fs);
-        var k=fs/bk;
-        ctx.save();
-        ctx.translate(x,y);
-        ctx.scale(k*sc,k*sc);
-        ctx.font="400 "+bk+"px Anton, 'Arial Narrow', sans-serif";
-        ctx.textAlign="center"; ctx.textBaseline="middle";
+        var k=fs/bk, s2=k*sc, fnt="400 "+bk+"px Anton,'Arial Narrow',sans-serif";
+        /* setTransform rather than save/translate/scale/restore: restore() would
+           roll back ctx.font too and defeat the memo, which is the expensive part */
+        ctx.setTransform(DPR*s2,0,0,DPR*s2,(ox+x)*DPR,(oy+y)*DPR);
         if(l.rot) ctx.rotate(l.rot*Math.PI/180);
+        setFont(fnt);
+        ctx.textBaseline="middle";
         if(l.track){
-          /* canvas has no letter-spacing everywhere yet, so pre-measure and
-             step the glyphs; only used by the tracked-out small caps */
-          var str=l.t, gw=[], tot=0, sp=(l.track||0)*bk, j;
-          for(j=0;j<str.length;j++){ gw[j]=ctx.measureText(str[j]).width; tot+=gw[j]+sp; }
+          /* canvas letter-spacing is not universal, so step the glyphs — but the
+             advances are cached per bucket, never re-measured per frame */
+          var str=l.t, sp=(l.track||0)*bk, j, ch, adv, tot=0, gw=[];
+          for(j=0;j<str.length;j++){
+            ch=str[j];
+            adv=GADV[bk+"|"+ch];
+            if(adv===undefined){ adv=ctx.measureText(ch).width; GADV[bk+"|"+ch]=adv; }
+            gw[j]=adv; tot+=adv+sp;
+          }
           tot-=sp;
           var px0=-tot/2;
           ctx.textAlign="left";
           for(j=0;j<str.length;j++){ ctx.fillText(str[j],px0,0); px0+=gw[j]+sp; }
         }else{
+          ctx.textAlign="center";
           ctx.fillText(l.t,0,0);
         }
-        ctx.restore();
+        ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
         return true;
     }
     return false;
@@ -1488,7 +1529,7 @@ function makeRenderer(cv){
       ctx.save(); ctx.translate(SW/2,SH/2); ctx.scale(k,k);
       ctx.font="400 "+bk+"px Anton, 'Arial Narrow', sans-serif";
       ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText(sp.txt,0,0); ctx.restore();
+      ctx.fillText(sp.txt,0,0); ctx.restore(); invalidate();
     }
     if(sp.flash){ ctx.globalAlpha=sp.flash; ctx.fillStyle=sp.flashCol||"#fff";
                   ctx.fillRect(0,0,SW,SH); }
@@ -1497,6 +1538,57 @@ function makeRenderer(cv){
 
   return {resize:resize, draw:draw, geo:geo, ctx:function(){ return ctx; }};
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   4b · SMOOTHNESS HARNESS
+   Average frame rate is the wrong number. A wall that renders at 110 fps and
+   stalls for 30 ms once a second looks broken; one that renders every frame in
+   9 ms looks perfect. Console-era smoothness is about VARIANCE, so this reports
+   the distribution and the dropped-frame count, not a mean.
+
+   It measures the real requestAnimationFrame cadence with real drawing going on,
+   because that is the only thing that captures GPU and compositor cost. It ships
+   inside the page so the same numbers can be taken on the target device — a
+   desktop's figures say nothing about an Adreno 643.
+   ══════════════════════════════════════════════════════════════════════════ */
+function smoothnessTest(drawOne, seconds, label){
+  return new Promise(function(res){
+    var gaps=[], js=[], t0=performance.now(), prev=0, frames=0;
+    var until=t0+(seconds||4)*1000;
+    function step(ts){
+      var a=performance.now();
+      try{ drawOne(); }catch(e){}
+      js.push(performance.now()-a);
+      if(prev) gaps.push(ts-prev);
+      prev=ts; frames++;
+      if(performance.now()<until) requestAnimationFrame(step);
+      else res(report());
+    }
+    function pct(arr,p){ if(!arr.length) return 0;
+      var s=arr.slice().sort(function(x,y){ return x-y; });
+      return +s[Math.min(s.length-1,Math.floor(s.length*p))].toFixed(2); }
+    function report(){
+      var med=pct(gaps,0.5), hz=med>0?Math.round(1000/med):0;
+      /* a drop is a gap of 1.5 refreshes or more — one missed flip */
+      var thresh=med*1.5, drops=gaps.filter(function(g){ return g>thresh; }).length;
+      return {
+        label:label||"", seconds:+((performance.now()-t0)/1000).toFixed(1), frames:frames,
+        displayHz:hz,
+        gap:{p50:med,p95:pct(gaps,0.95),p99:pct(gaps,0.99),max:pct(gaps,1)},
+        jsMs:{p50:pct(js,0.5),p95:pct(js,0.95),p99:pct(js,0.99),max:pct(js,1)},
+        drops:drops, dropPct:+(100*drops/Math.max(1,gaps.length)).toFixed(2),
+        jitterMs:+(pct(gaps,0.99)-med).toFixed(2),
+        /* smooth means every frame lands, not that the average is high */
+        verdict: drops===0 ? "perfect — every flip landed"
+               : (100*drops/gaps.length < 1 ? "good — under 1% dropped"
+               : "JUDDER — "+(100*drops/gaps.length).toFixed(1)+"% of flips missed"),
+        headroom60:+(16.67-pct(js,0.99)).toFixed(2),
+        headroom120:+(8.33-pct(js,0.99)).toFixed(2)
+      };
+    }
+    requestAnimationFrame(step);
+  });
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    5 · EASING + SMALL HELPERS
    ══════════════════════════════════════════════════════════════════════════ */
@@ -2862,6 +2954,7 @@ function bootTV(){
 
   window.__BB={ LINK:LINK,
                 trace:function(){ return trace.slice(); },
+                smoothness:function(){ return smoothReport(); },
                 epoch:function(){ return {EPOCH:EPOCH,REST:REST,SKEW:SKEW,period:period,d:ev.d}; },
                 seek:function(t){ hold=t; return paint(cl(t,0,period)); },
                 play:function(){ hold=null; },
@@ -2884,7 +2977,31 @@ function bootTV(){
   }
   /* rolling frame cost, measured on the device that is actually rendering —
      a desktop's numbers say nothing about what a QCS6490 will do */
-  var bench={n:0,sum:0,max:0,drop:0,last:0,ms:0,drawn:0,culled:0};
+  /* Ring buffers over the LIVE loop, so the report describes what this output
+     actually did rather than a synthetic loop competing with it. */
+  var bench={n:0,sum:0,max:0,drop:0,last:0,ms:0,drawn:0,culled:0,avg:0};
+  var GAPS=new Float32Array(600), JSMS=new Float32Array(600), GN=0;
+  function pctOf(buf,count,p){
+    if(!count) return 0;
+    var a=Array.prototype.slice.call(buf,0,Math.min(count,buf.length));
+    a.sort(function(x,y){ return x-y; });
+    return +a[Math.min(a.length-1,Math.floor(a.length*p))].toFixed(2);
+  }
+  function smoothReport(){
+    var c=Math.min(GN,600), med=pctOf(GAPS,c,0.5);
+    var thresh=med*1.5, i, drops=0;
+    for(i=0;i<c;i++) if(GAPS[i]>thresh) drops++;
+    return {output:rawIdx+1, layout:L.id, cue:ev.id, fx:FX, samples:c,
+      displayHz:med>0?Math.round(1000/med):0,
+      gap:{p50:med,p95:pctOf(GAPS,c,0.95),p99:pctOf(GAPS,c,0.99),max:pctOf(GAPS,c,1)},
+      jsMs:{p50:pctOf(JSMS,c,0.5),p95:pctOf(JSMS,c,0.95),p99:pctOf(JSMS,c,0.99)},
+      drops:drops, dropPct:+(100*drops/Math.max(1,c)).toFixed(2),
+      jitterMs:+(pctOf(GAPS,c,0.99)-med).toFixed(2),
+      headroom120:+(8.33-pctOf(JSMS,c,0.99)).toFixed(2),
+      verdict: drops===0?"perfect":(100*drops/c<1?"good":"JUDDER "+(100*drops/c).toFixed(1)+"%"),
+      surface:Math.round(SW)+"x"+Math.round(SH)+" dpr"+R.geo().DPR,
+      hidden:document.hidden};
+  }
   (function tick(){
     var t0=performance.now();
     /* the armed switch lands here, inside the frame loop, so it takes effect
@@ -2914,6 +3031,10 @@ function bootTV(){
     if(trace.length>TRACE_MAX) trace.shift();
 
     var dt=performance.now()-t0;
+    var gi=GN%600;
+    JSMS[gi]=dt;
+    GAPS[gi]=bench.last?(t0-bench.last):16.7;
+    GN++;
     bench.n++; bench.sum+=dt; bench.ms=dt; bench.drawn=st.drawn; bench.culled=st.layers-st.drawn;
     if(dt>bench.max) bench.max=dt;
     if(bench.last && (t0-bench.last)>25) bench.drop++;     /* missed a 60 Hz slot */
@@ -3415,6 +3536,22 @@ function bootApp(){
     teamKeys:TEAMKEYS, makeEvent:makeEvent, makeRenderer:makeRenderer, geoOf:geoOf,
     /* Benchmark a real output surface. Run this ON the device — a desktop's
        numbers say nothing about what an Adreno 643 will do. */
+    /* Real rAF cadence with real drawing, at a real output size. This is the
+       number that says whether the wall looks smooth. Run it on the device. */
+    smoothness:function(seconds,w,h,layoutId,typeId,team,fx){
+      var L=LAYOUTS[layoutId||state.L.id]||state.L, g=geoOf(L);
+      var cv=document.createElement("canvas");
+      cv.style.cssText="position:fixed;left:0;top:0;z-index:99999;pointer-events:none";
+      document.body.appendChild(cv);
+      var R=makeRenderer(cv);
+      R.resize(w||1920,h||1080,g.rect(L.cells[0]),1);
+      var e=makeEvent(typeId||state.type,team||state.team,state.opp);
+      var i=0;
+      return smoothnessTest(function(){
+        R.draw(frameAt(e,L,loopPos(e.d),fx===undefined?FX:fx),null); i++;
+      }, seconds||5, (typeId||state.type)+"@"+L.id+" "+(w||1920)+"x"+(h||1080)+" fx"+(fx===undefined?FX:fx))
+      .then(function(r){ cv.remove(); return r; });
+    },
     bench:function(layoutId,typeId,team,w,h,fx,N){
       var L=LAYOUTS[layoutId]||LAYOUTS.row4, g=geoOf(L);
       var cv=document.createElement("canvas"), R=makeRenderer(cv);
