@@ -168,6 +168,116 @@ Each output letterboxes itself to 16:9 and renders its own window into the share
 so panels of different sizes still frame identically — verified to within 1.1e-16 across
 all 156 cells in all 12 layouts.
 
+### The one thing that can desync it: the clock
+
+`u` is a pure function of `Date.now()`, which is the device's **own OS clock**. That is the
+whole design and it is sound — right up until two devices disagree about what time it is.
+NTP drift of 50–200 ms is ordinary on edge hardware, and it presents exactly as *one screen
+running slightly ahead of another*, with no other symptom.
+
+So the room agrees a clock rather than trusting each device's. One participant is the
+reference; every other measures its offset with the NTP exchange over the same MQTT link
+that already carries cues:
+
+```
+t1  sent           offset = t2 − (t1 + t3)/2
+t2  at reference   rtt    = t3 − t1
+t3  received
+```
+
+That form **cancels** transit rather than including it. Three details make it exact:
+
+- **Keep the lowest-RTT sample** of a sliding window. A round trip slower than the floor was
+  slower in one direction more than the other, and that asymmetry *is* the error — so the
+  fastest exchange observed is also the most trustworthy. Averaging would mix the good
+  samples back in with the bad.
+- **Age samples out, and detect steps.** A lucky low-RTT sample would otherwise pin the
+  estimate forever, so a device whose clock was later corrected would never converge. One
+  wild reading is noise; two that agree with each other are the clock moving, and the window
+  is cleared.
+- **Corrections slew, they never jump.** A step would be a visible skip. The applied offset
+  moves at 2% of real time — invisible — and converges in seconds. Only a first fix or a
+  gross break (>350 ms) snaps.
+
+**The outputs outrank the control room.** Rank is `tv1 < tv2 < … < control`, and the lowest
+rank heard from in 12 s is the reference. This is deliberate and looks backwards: the panel
+is a laptop that gets minimised, and a minimised tab has its timers throttled until the
+broker drops it. The screens run fullscreen for twelve hours, so **the screens keep the time
+and the panel follows the wall.**
+
+Scheduled cue switches (`at`) use the agreed clock too, so skew no longer makes transitions
+ragged either.
+
+Measured on a **public** broker with a 268 ms round trip: outputs agree to **±1 ms**, and a
+screen acquires in **~340 ms** after a reload. `?sync=0` disables it.
+
+### Testing it on real devices
+
+Press **Sync test** in the control room. It probes every output directly over the wire with
+the same NTP exchange and prints a table — per-output offset, RTT, sample count, and the
+spread across the wall. This is a *measurement*, not each screen reporting that it feels
+fine.
+
+Rough reading of the spread: under 10 ms is in step, under 40 ms is below what people
+notice, above that is visible and worth chasing.
+
+### Running the screens remotely
+
+The outputs are on poles and in ceilings, so both of these are driven from the panel:
+
+| Control | What it does |
+|---|---|
+| **Reload TVs** | Reloads every output on a shared instant. Shift-click for a cache-busting reload that a stale cache cannot answer. |
+| **Ident** | Flashes each screen with its own output number — for mapping physical positions to `tv=` indices. |
+| **Sync test** | Probes every output and reports the real spread. |
+
+Every one of these is **visible on a webcam from the observation station**, because a whole
+screen changing colour carries further than any text:
+
+| Colour | Meaning |
+|---|---|
+| **Red** — RELOADING | the order landed on this screen |
+| **Green** — READY + build number | it came back, and on which build |
+| **Blue** — the output number | identifying itself |
+| **Purple** — ±ms | its display-lag trim changed |
+
+Reload commands are **never retained**, because a retained reload is a boot loop that
+survives every restart and can only be cleared by publishing over it — from a wall that is
+busy rebooting. A stale-`at` guard discards any command replayed more than 60 s late.
+
+### Clock sync vs. display lag — two different faults
+
+Once the clocks agree, anything still visibly off is **not** a clock problem: it is the
+display pipeline. Mixed hardware makes this likely — an Orin and a QCS6490 do not composite
+in the same number of milliseconds, and a television with motion processing enabled can add
+40–100 ms on its own.
+
+That is what `skew` is for, and the two-step diagnosis is:
+
+1. Run **Sync test**. If the spread is small, the clocks are fine.
+2. Whatever difference remains by eye is pipeline latency. Trim it per device with `skew`
+   (positive runs that screen ahead). The value **persists on the device** and survives a
+   reload, so it only has to be dialled in once per panel.
+
+### Getting to sub-millisecond
+
+The browser layer above needs no infrastructure and self-corrects, which is why it is the
+default. But its accuracy floor is the round trip — a 268 ms public-broker hop is doing well
+to reach ±1 ms, and it will not do better. On dedicated hardware you can remove that floor:
+
+- **Run a broker on the same LAN** (Mosquitto is the obvious choice) instead of the public
+  HiveMQ default. Round trip drops from ~270 ms to ~1–3 ms, the estimate tightens with it,
+  and the wall stops depending on the internet. Point every device at it with `?link=`.
+- **Run `chrony` on the devices themselves**, with one host on the LAN as the server. This
+  fixes the underlying OS clocks rather than compensating for them, and gets well under a
+  millisecond on wired Ethernet. The browser layer then converges to ~0 and simply confirms
+  it.
+- **PTP (IEEE 1588)** if the switches support it. Orin's Ethernet MAC does hardware
+  timestamping; this is the sub-microsecond answer if you ever need it.
+
+Do the broker first — it is one URL and it improves the measurement, the latency and the
+privacy at once.
+
 ### Parameters
 
 | Param | Meaning |
@@ -181,7 +291,8 @@ all 156 cells in all 12 layouts.
 | `gap` | Bezel gap in screen widths. `0` (default) butts panels pixel to pixel. **Must match on every output in a wall** — it is canvas geometry, not decoration. |
 | `t0` | Epoch override in ms. Same value everywhere = same phase. |
 | `rest` | Ms of lockup between loops. Default 2500. |
-| `skew` | Per-device offset in ms; positive runs ahead. |
+| `skew` | Per-device **display-lag** trim in ms; positive runs that screen ahead. Not a clock fix — see above. Settable from the panel and persisted on the device. |
+| `sync` | `0` disables clock discipline and falls back to the raw OS clock. |
 | `bezel` | `0` to drop the letterbox guides. |
 | `diag` | `1` for the clock overlay (or press `i` on any output). |
 

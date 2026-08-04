@@ -269,6 +269,16 @@ body.bench #tvgraph{display:block}
   line-height:1.55;color:#7FC08A;background:rgba(0,0,0,.78);border:1px solid #2A3A2C;padding:8px 11px;
   border-radius:3px;display:none;z-index:10;white-space:pre;letter-spacing:.03em}
 body.bench #tvbench{display:block}
+/* Read from across a room, on a webcam, by someone who is not looking closely.
+   A whole screen changing colour carries further than any text, so the colour
+   IS the message and the words are the confirmation: red going down, green back
+   up, blue identifying itself. */
+#badge{position:fixed;left:0;top:0;right:0;bottom:0;display:none;align-items:center;
+  justify-content:center;flex-direction:column;z-index:99;font-family:Anton,sans-serif;
+  text-transform:uppercase;letter-spacing:.02em;text-align:center;padding:2vh 3vw}
+body.badge #badge{display:flex}
+#badge b{font-size:15vw;line-height:.9;display:block}
+#badge i{font-size:4.4vw;font-style:normal;opacity:.9;margin-top:2vh;letter-spacing:.14em}
 #tvhint{position:fixed;right:12px;bottom:10px;font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.14em;
   color:#3A2D25;z-index:9;text-transform:uppercase}
 </style>
@@ -298,6 +308,9 @@ body.bench #tvbench{display:block}
   <span class="lb" id="clk">wall clock —</span>
   <button class="btn" id="bDiag" title="Run the full frame diagnostic and copy the report">Diagnose</button>
   <button class="btn" id="bJoinQR" title="Full-size QR for patrons to scan">Join QR</button>
+  <button class="btn" id="bSync" title="Measure every output against this panel directly">Sync test</button>
+  <button class="btn" id="bIdent" title="Flash each screen with its output number — for mapping the room">Ident</button>
+  <button class="btn" id="bReload" title="Reload every output together. Shift-click for a cache-busting reload.">Reload TVs</button>
   <button class="btn" id="bOpen">Open all TVs</button>
 </header>
 
@@ -536,9 +549,127 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0026";
+var VERSION = "v1.0027";
 
-function nowMs(){ return Date.now() + SKEW; }
+/* ══════════════════════════════════════════════════════════════════════════
+   0a · THE ROOM'S CLOCK
+
+   Everything in this file derives u from Date.now(), which is the device's own
+   OS clock. That is the whole sync design and it is sound -- but it inherits
+   whatever NTP left behind, and consumer TV boxes are not well disciplined. Two
+   players 120 ms apart render the same cue 120 ms apart. It is the ONE fault
+   this architecture cannot absorb, and it presents exactly as the user reported:
+   one screen slightly ahead of another, no obvious cause.
+
+   So the room agrees a clock instead of trusting sixteen of them. One
+   participant is the reference and every other measures its offset against it
+   with the NTP exchange -- t1 sent, t2 at the reference, t3 received:
+
+       offset = t2 - (t1 + t3) / 2          rtt = t3 - t1
+
+   That form CANCELS the transit delay instead of including it, which is the
+   whole difference between this and the one-way heartbeat that came before:
+   the heartbeat could only ever bound the error, never remove it.
+
+   Two things make it exact rather than merely close:
+
+   · KEEP THE LOWEST-RTT SAMPLE in a sliding window. The estimator assumes the
+     two directions took equally long. A sample slower than the floor was slowed
+     in one direction more than the other, and that asymmetry is the entire error
+     term -- so the fastest round trip observed is also the most trustworthy one.
+     This is what NTP does, and why it beats averaging: averaging mixes the good
+     samples back in with the bad.
+
+     That rule has a trap, and fault injection walked straight into it: a lucky
+     low-rtt sample will pin the estimate FOREVER, so a device whose clock is
+     later stepped -- by its own NTP daemon, by a resume from suspend -- keeps
+     serving the offset it measured before the step and never converges. So
+     samples age out, and two consecutive readings that agree with each other
+     while disagreeing with the window are treated as a step rather than as
+     noise: the window is cleared and the new truth is adopted at once.
+
+   · CORRECTIONS SLEW, THEY DO NOT JUMP. Stepping the clock would step the
+     animation, and a skip is more visible than the error being corrected. So the
+     applied offset moves toward the measured one at a bounded rate -- 2% of real
+     time, a speed error nobody can see -- and converges in seconds. Only a first
+     acquisition or a gross break (>350 ms, a screen that is unusable anyway)
+     snaps.
+
+   Sync survives the reference leaving: rank 0 is the control room, rank N is
+   output N, and the lowest-ranked participant heard from recently is the
+   reference. Lose it and the next one takes over, carrying its own applied
+   offset forward so the wall shifts with it rather than around it.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* A factory, not a singleton, purely so the audit can run the estimator against
+   known inputs without disturbing the clock this page is actually keeping. The
+   slew is driven by tick(dt) rather than owning a timer for the same reason. */
+function makeClock(){
+  var applied=0, target=null, samples=[], acquired=false, stepCand=null;
+  var WINDOW=10;      /* samples kept; the best of these wins            */
+  var MAXAGE=90000;   /* a sample older than this is history, not data   */
+  var STEP=120;       /* ms of disagreement that reads as a moved clock  */
+  var JUMP=350;       /* ms of error past which slewing is pointless     */
+  var RATE=0.02;      /* ms of correction per ms of real time -- 2% fast */
+  var api={rtt:0,n:0,ref:null,rank:null,src:"free",
+           on:Q.get("sync")!=="0"};
+  /* the shared clock: raw OS time plus whatever the room has agreed. SKEW is
+     deliberately NOT in here -- that is per-device panel-lag compensation, a
+     presentation offset, and folding it in would export one screen's display
+     lag to every other screen. */
+  api.wall=function(){ return Date.now()+applied; };
+  api.offset=function(){ return applied; };
+  api.target=function(){ return target; };
+  api.locked=function(){ return acquired; };
+  api.err=function(){ return target===null?0:target-applied; };
+  api.sample=function(t1,t2,t3){
+    if(!api.on) return;
+    var rtt=t3-t1;
+    /* a negative or absurd round trip is a clock that moved under us, or a
+       broker that sat on the message; either way it carries no information */
+    if(!(rtt>=0)||rtt>5000) return;
+    var off=t2-(t1+t3)/2, now=t3;
+    /* Step detection. One reading far from the window is noise and is allowed to
+       compete on rtt like any other. TWO in a row that agree with each other are
+       not noise -- the clock under us moved -- and every older sample is now a
+       measurement of a machine that no longer exists. */
+    if(target!==null && Math.abs(off-target)>STEP){
+      if(stepCand!==null && Math.abs(off-stepCand)<STEP){ samples=[]; stepCand=null; }
+      else stepCand=off;
+    }else stepCand=null;
+    samples.push({rtt:rtt,off:off,at:now});
+    /* age out, or one lucky round trip pins the estimate for good */
+    samples=samples.filter(function(x){ return now-x.at<MAXAGE; });
+    if(samples.length>WINDOW) samples.shift();
+    var b=samples[0], i;
+    for(i=1;i<samples.length;i++) if(samples[i].rtt<b.rtt) b=samples[i];
+    target=b.off; api.rtt=Math.round(b.rtt); api.n=samples.length;
+    /* first fix on a screen nobody is watching yet: take it whole */
+    if(!acquired){ applied=target; acquired=true; }
+  };
+  /* the reference changed, so every sample was measured against a clock that is
+     no longer the one we are following */
+  api.reset=function(){ samples=[]; target=null; api.n=0; api.rtt=0; stepCand=null; };
+  api.tick=function(dt){
+    if(target===null||!api.on) return;
+    var err=target-applied;
+    if(Math.abs(err)>JUMP){ applied=target; return; }
+    var step=dt*RATE;
+    applied=(Math.abs(err)<=step) ? target : applied+(err>0?step:-step);
+  };
+  return api;
+}
+var CLOCK=makeClock();
+/* Slewed on a timer rather than in the render loop: an output whose browser has
+   backgrounded it still has to converge, and rAF does not run there. */
+(function(){
+  var last=0;
+  setInterval(function(){
+    var now=Date.now(), dt=last?Math.min(400,now-last):0; last=now;
+    CLOCK.tick(dt);
+  },40);
+})();
+
+function nowMs(){ return CLOCK.wall() + SKEW; }
 function loopPos(dur){                       /* → ms into (cue + rest) */
   var period = dur + REST;
   var p = (nowMs() - EPOCH) % period;
@@ -642,11 +773,180 @@ var LINK = (function(){
     on:function(){ return !!this.url && !!this.room; }
   };
   var cli=null, ws=null, timer=null, onState=null, hello=null, retry=0, seen={}, queued=null;
+  /* time discipline: who is out there, who is the reference, and the one
+     outstanding exchange we are waiting on */
+  var myRank=null, peers={}, refRank=null, cid="", pseq=0, pend={}, ptimer=null;
+  var probes={}, seenCmd={};
   var reports={};                       /* per-output self-report, keyed by tv index */
   api.reports=function(){ return reports; };
   api.report=null;                      /* an output installs this to describe itself */
 
   function isMQTT(u){ return /^(wss?|mqtts?):\/\//i.test(u); }
+
+  /* ── reference election ───────────────────────────────────────────────
+     Rank 0 is the control room, rank N is output N, and the reference is the
+     lowest rank heard from in the last 12 s. Deterministic, so every device
+     reaches the same answer without negotiating; and self-healing, because a
+     reference that goes away simply stops being the lowest live rank.
+
+     THE OUTPUTS OUTRANK THE CONTROL ROOM (rank 900), which is the opposite of
+     what seems natural and is the point. The panel is a laptop that gets
+     minimised, and a minimised tab has its timers throttled until the broker
+     drops it -- so making it the reference means the whole wall re-elects and
+     re-acquires every time an operator switches windows. The screens are the
+     things that run fullscreen for twelve hours, so the screens keep the time
+     and the panel follows the wall. Only a panel with no outputs is its own
+     reference, which is the case where it does not matter. */
+  function rankOf(tv){ return (+tv===0) ? 900 : +tv; }
+  function electRef(){
+    var now=Date.now(), best=myRank, k;
+    for(k in peers) if(peers[k]!==undefined && now-peers[k]<12000 && +k<best) best=+k;
+    if(best!==refRank){
+      refRank=best;
+      CLOCK.ref=(refRank>=900?"control":("tv"+refRank));
+      CLOCK.src=(refRank===myRank)?"reference":"follower";
+      /* every sample we hold was measured against the old reference */
+      CLOCK.reset(); pend={};
+    }
+  }
+  function timeTick(){
+    if(!cli||!cli.connected||!CLOCK.on) return;
+    peers[myRank]=Date.now(); electRef();
+    if(refRank===myRank) return;            /* the reference answers, it does not ask */
+    var sq=++pseq, t1=Date.now();
+    pend[sq]={t1:t1,key:null};
+    /* one outstanding exchange; anything older than a round of retries is lost */
+    Object.keys(pend).forEach(function(k){ if(t1-pend[k].t1>8000) delete pend[k]; });
+    cli.publish(topic("t"), JSON.stringify({q:cid,s:sq,a:t1}), false);
+  }
+  function onTime(m){
+    if(!CLOCK.on) return;
+    /* a query, and I am the one who answers it. b is MY clock, which is the
+       definition of the room's clock while I hold the reference -- including my
+       own applied offset, so that inheriting the role shifts nobody. */
+    if(m.q!==undefined){
+      /* a directed probe is answered by its target whether or not that device
+         holds the reference — that is what lets the panel measure each screen
+         individually instead of inferring it from the reports */
+      var mine=(m.to!==undefined) ? (+m.to===myRank) : (refRank===myRank);
+      if(mine && m.q!==cid)
+        cli.publish(topic("t"), JSON.stringify({r:m.q,s:m.s,a:m.a,b:CLOCK.wall()}), false);
+      return;
+    }
+    if(m.r!==cid) return;                   /* an answer, but not to my question */
+    var p=pend[m.s]; if(!p) return;
+    delete pend[m.s];
+    var t3=Date.now();
+    if(p.key){ var pr=probes[p.key]; if(pr) pr.push(m.b-(p.t1+t3)/2, t3-p.t1); }
+    else CLOCK.sample(p.t1, m.b, t3);
+  }
+  /* Measure a named output directly. Same NTP arithmetic, same lowest-rtt rule,
+     but aimed at one screen and answered by that screen -- so what comes back is
+     a MEASUREMENT of how far apart two devices are, not an inference from what
+     each of them reported about itself. This is the number to trust when asking
+     whether a wall is really in step. */
+  api.probe=function(rank,count){
+    return new Promise(function(res){
+      if(!cli||!cli.connected||!api.on()){ res(null); return; }
+      var n=count||6, got=[], done=false, sent=0;
+      var key="k"+(++pseq);
+      function finish(){
+        if(done) return; done=true;
+        clearInterval(iv); delete probes[key];
+        if(!got.length){ res({rank:rank,offset:null,rtt:null,n:0}); return; }
+        var b=got[0], i;
+        for(i=1;i<got.length;i++) if(got[i].rtt<b.rtt) b=got[i];
+        res({rank:rank,offset:b.off,rtt:b.rtt,n:got.length});
+      }
+      probes[key]={push:function(off,rtt){
+        got.push({off:off,rtt:rtt}); if(got.length>=n) finish(); }};
+      var iv=setInterval(function(){
+        if(done||sent>=n) return;
+        sent++;
+        var sq=++pseq, t1=Date.now();
+        pend[sq]={t1:t1,key:key};
+        cli.publish(topic("t"), JSON.stringify({q:cid,s:sq,a:t1,to:rank}), false);
+      },220);
+      setTimeout(finish, 220*n+3000);
+    });
+  };
+
+  /* ── remote control ───────────────────────────────────────────────────
+     These screens are on poles and in ceilings. Nobody is going to touch one to
+     pick up a new build or trim its display lag, so both have to be reachable
+     from the panel.
+
+     NEVER RETAINED. A retained reload is a boot loop that survives every device
+     restart and can only be cleared by publishing over it -- from a wall that is
+     busy rebooting. The stale-`at` guard is the second belt: a command replayed
+     by a broker an hour later is discarded rather than obeyed. */
+  api.cmd=function(c,tv,v){
+    if(!cli||!cli.connected||!api.on()) return false;
+    cli.publish(topic("cmd"), JSON.stringify({
+      c:c, tv:tv||0, v:v, at:nowMs()+api.lead,
+      id:"x"+Date.now().toString(36)+Math.floor(Math.random()*1e9).toString(36)
+    }), false);
+    return true;
+  };
+  function onCmd(m,role){
+    if(!m||!m.c||role!=="tv") return;
+    if(m.tv && +m.tv!==myRank) return;              /* 0 or absent = the whole wall */
+    if(m.id){ if(seenCmd[m.id]) return; seenCmd[m.id]=1; }
+    if(m.at && Math.abs(nowMs()-m.at)>60000) return;  /* a replay, not an order */
+    /* the badge goes up on RECEIPT, not on execution: the point is to see the
+       order land, and by the time it executes the page is already gone */
+    if(m.c==="reload"||m.c==="hard"){
+      flashBadge("RELOADING","TV "+myRank+" · "+VERSION,"#E23B2E","#FFFFFF",0);
+      /* so the screen can announce itself when it comes back up */
+      store("bb.reloaded."+myRank, String(Date.now()));
+    }
+    else if(m.c==="ident")
+      flashBadge(String(myRank),"TV "+myRank+" · "+VERSION,"#0B57D0","#FFFFFF",
+                 Math.max(1000,Math.min(30000,+m.v||6000)));
+    else if(m.c==="skew")
+      flashBadge(((+m.v||0)>=0?"+":"")+(+m.v||0),"TV "+myRank+" · SKEW MS","#7A4BC4","#FFFFFF",1800);
+    var run=function(){
+      if(m.c==="reload") location.reload();
+      else if(m.c==="hard"){
+        /* a plain reload will happily serve the build the device already has;
+           this one changes the URL so the cache cannot answer it */
+        var u=location.href.split("#")[0].replace(/([?&])cb=\d+&?/,"$1");
+        u+=(u.indexOf("?")<0?"?":"&")+"cb="+Math.floor(Date.now()/1000);
+        location.replace(u+location.hash);
+      }
+      else if(m.c==="skew"){
+        SKEW=+m.v||0;
+        /* persisted, or the trim is lost the next time the device is reloaded */
+        store("bb.skew."+myRank, String(SKEW));
+      }
+    };
+    var dt=(m.at||0)-nowMs();
+    /* the whole wall reloads on the same instant rather than in a ragged cascade */
+    if(dt>20 && dt<60000) setTimeout(run,dt); else run();
+  }
+
+  function startTime(){
+    clearInterval(ptimer);
+    /* Fast while acquiring, slow once converged. A wall of sixteen screens
+       settles in a few seconds and then costs the broker about a message a
+       second, which is the right trade for a free public broker. */
+    var tick=0, burst=0;
+    /* four exchanges in the first two seconds: a reloaded screen is in step
+       before anybody at the observation station has finished looking at it */
+    var biv=setInterval(function(){
+      if(++burst>4 || CLOCK.n>=4){ clearInterval(biv); return; }
+      timeTick();
+    },500);
+    ptimer=setInterval(function(){
+      /* 2.5 s while acquiring, 10 s once the window is full. Sixteen screens
+         settle in a few seconds and then cost the broker about a message a
+         second, which is the right trade for a free public broker. */
+      tick++;
+      if(CLOCK.n>=6 && (tick%4)!==0) return;
+      timeTick();
+    }, 2500);
+    timeTick();
+  }
   function topic(sub){ return "barboards/"+api.room+"/"+sub; }
   function rx(s,from){
     if(!s||typeof s!=="object") return;
@@ -678,7 +978,12 @@ var LINK = (function(){
       api.status="live"; retry=0;
       cli.subscribe(topic("state"));
       cli.subscribe(topic("tap"));
-      if(role==="control") cli.subscribe(topic("hello"));
+      /* every participant hears every heartbeat now, not just the control room:
+         electing a reference means knowing who is in the room */
+      cli.subscribe(topic("hello"));
+      cli.subscribe(topic("t"));
+      cli.subscribe(topic("cmd"));
+      startTime();
       /* A push issued before the socket was up would otherwise be dropped in
          silence, leaving an untouched control panel publishing nothing and the
          wall with no retained message to pick up. */
@@ -687,14 +992,28 @@ var LINK = (function(){
     cli.onmessage=function(t,payload){
       var m; try{ m=JSON.parse(payload); }catch(e){ return; }
       if(t===topic("tap")){ if(api.onTap) api.onTap(m); return; }
+      if(t===topic("t")){ onTime(m); return; }
+      if(t===topic("cmd")){ onCmd(m,role); return; }
       if(t===topic("state")) rx(m,"mqtt");
       else if(t===topic("hello")&&m&&m.tv!==undefined){
         var rxAt=Date.now();
+        /* the control room announces as tv 0 and ranks 900: present in the
+           election, last in it, and never listed as an output */
+        peers[rankOf(m.tv)]=rxAt; electRef();
+        if(+m.tv===0) return;
+        /* outputs hear these only to elect a reference; the bookkeeping below
+           is the control room's job and would otherwise leak on every screen */
+        if(role!=="control") return;
         seen[m.tv]=rxAt;
         /* offset is (their clock - mine) and INCLUDES one-way transit, so it is
            an upper bound on skew, not a measurement of it. Good enough to catch
            a device whose clock is minutes out; not a substitute for NTP. */
-        reports[m.tv]={t:m.t,offset:m.t?m.t-rxAt:null,ms:m.ms,u:m.u,ev:m.ev,
+        var lag=m.t?(nowMs()-m.t):null;
+        var prev=reports[m.tv];
+        var floor=(prev&&prev.minLag!==null&&prev.minLag!==undefined&&lag!==null)
+                    ? Math.min(prev.minLag,lag) : lag;
+        reports[m.tv]={t:m.t,offset:lag,minLag:floor,ms:m.ms,u:m.u,ev:m.ev,
+                       off:m.off,rtt:m.rtt,cn:m.cn,ce:m.ce,cs:m.cs,cr:m.cr,
                        period:m.period,rxAt:rxAt};
         pruneSeen();
       }
@@ -708,6 +1027,9 @@ var LINK = (function(){
     cli.connect();
     clearInterval(timer);
     timer=setInterval(function(){
+      /* the control room announces itself as rank 0 so outputs can elect it */
+      if(role==="control"&&cli&&cli.connected)
+        cli.publish(topic("hello"), JSON.stringify({tv:0,t:nowMs()}), false);
       if(role==="tv"&&cli&&cli.connected)
         /* an output reports its own clock and its own position in the loop, so
            the control panel can verify the wall is actually in step instead of
@@ -715,7 +1037,13 @@ var LINK = (function(){
            is the ONE fault that genuinely desyncs this system — nothing else
            can — so it has to be visible from the panel. */
         cli.publish(topic("hello"), JSON.stringify(
-          Object.assign({tv:hello,t:Date.now()}, api.report?api.report():{})), false);
+          Object.assign({tv:hello,t:nowMs(),
+            /* the output's own view of the room clock, so the panel shows what
+               was measured on the device rather than what the panel inferred */
+            off:Math.round(CLOCK.offset()),rtt:CLOCK.rtt,cn:CLOCK.n,
+            ce:Math.round(CLOCK.err()),
+            cs:CLOCK.src,cr:CLOCK.ref},
+          api.report?api.report():{})), false);
       if(role==="control") pruneSeen();
     }, 3000);
   }
@@ -756,12 +1084,17 @@ var LINK = (function(){
   api.start=function(role,idx,cb){
     onState=cb; hello=(role==="tv")?idx:null;
     api.stop();
+    myRank=(role==="control")?900:(idx===undefined||idx===null?899:idx);
+    CLOCK.rank=myRank; peers={}; peers[myRank]=Date.now();
+    refRank=null; electRef();
+    cid="c"+myRank+"_"+Math.floor(Math.random()*1e9).toString(36);
     if(!api.on()){ api.status="off"; api.mode="off"; return; }
     api.status="connecting";
     if(isMQTT(api.url)) startMQTT(role); else startHTTP(role);
   };
   api.stop=function(){
     clearInterval(timer); timer=null;
+    clearInterval(ptimer); ptimer=null; pend={}; peers={}; probes={};
     if(cli){ cli.onclose=null; cli.close(); cli=null; }
     if(ws){ ws.onclose=null; try{ ws.close(); }catch(e){} ws=null; }
     seen={}; api.outputs=[]; api.seq=-1; api.lastRx=0; retry=0;
@@ -769,9 +1102,9 @@ var LINK = (function(){
   api.push=function(o){
     if(!api.on()) return Promise.resolve(null);
     var body=Object.assign({},o);
-    if(body.at===undefined) body.at=Date.now()+api.lead;
+    if(body.at===undefined) body.at=nowMs()+api.lead;
     body.seq=(api.seq<0?0:api.seq)+1;
-    body.t=Date.now();
+    body.t=nowMs();
     if(api.mode==="mqtt"){
       if(!cli||!cli.connected){ queued=o; return Promise.resolve(null); }
       /* retained, so a television powered on later gets this without asking */
@@ -2160,6 +2493,10 @@ function installDevHUD(meter){
       "        browser "+p5(F.worstOtherMs.toFixed(2))+" ms  "+F.blame+"\n"+
       (CAD?("CADENCE "+CAD.baseHz+" Hz  on "+CAD.onCadencePct+"%  x2+ "+CAD.doubledPct+
             "%  irr "+CAD.irregularPct+"%\n"):"")+
+      (typeof CLOCK!=="undefined"
+        ? ("CLOCK   "+(CLOCK.on?(CLOCK.locked()?"locked":"acquiring"):"off")+
+           "  "+(CLOCK.offset()>=0?"+":"")+CLOCK.offset().toFixed(1)+" ms"+
+           "  rtt "+CLOCK.rtt+"  n "+CLOCK.n+"  ref "+(CLOCK.ref||"—")+"\n") : "")+
       VERSION;
     txt.style.color = F.dropPct>1 ? "#E23B2E" : (F.min < F.hz*0.9 ? "#F0B03A" : "#7FC08A");
     if(buf) g(buf.gaps,buf.n,buf.N,budget);
@@ -4542,6 +4879,27 @@ function frameAt(ev,L,ms,fx){
    Letterboxed to 16:9 so every device renders an identical window into the
    canvas, whatever its panel is.
    ══════════════════════════════════════════════════════════════════════════ */
+/* A screen on a pole cannot be watched over somebody's shoulder. This is how an
+   operator at the observation station sees that a command actually landed, and
+   on which panels -- the wall answers on camera instead of in a log. */
+function flashBadge(main,sub,bg,fg,ms){
+  var el=document.getElementById("badge");
+  if(!el){
+    el=document.createElement("div"); el.id="badge";
+    el.appendChild(document.createElement("b"));
+    el.appendChild(document.createElement("i"));
+    document.body.appendChild(el);
+  }
+  el.style.background=bg||"#E23B2E"; el.style.color=fg||"#FFFFFF";
+  el.firstChild.textContent=main||"";
+  el.lastChild.textContent=sub||"";
+  document.body.classList.add("badge");
+  clearTimeout(el.__t);
+  /* ms 0 means hold it until the page goes away, which is the reload case */
+  if(ms>0) el.__t=setTimeout(function(){ document.body.classList.remove("badge"); },ms);
+  return el;
+}
+
 function bootTV(){
   /* rawIdx is what this screen was told it is and never changes. tvIdx is the
      cell it currently occupies, which CAN go out of range when the control panel
@@ -4550,6 +4908,22 @@ function bootTV(){
      silently duplicate output 3. */
   var rawIdx = Math.max(1, +Q.get("tv"))-1;
   var tvIdx = rawIdx;
+  /* Display lag is a property of THIS panel and this SoC, not of the room, so it
+     lives on the device and survives a reload. An explicit ?skew= still wins. */
+  if(!Q.has("skew")){
+    var sv=store("bb.skew."+(rawIdx+1));
+    if(sv!==null && isFinite(+sv)) SKEW=+sv;
+  }
+  /* green on the way back, so the observation station sees the whole cycle:
+     the panel goes red, goes dark, and returns green with its build number --
+     which also confirms the new build actually landed rather than the cache */
+  (function(){
+    var rl=store("bb.reloaded."+(rawIdx+1));
+    if(rl && Date.now()-(+rl)<45000){
+      store("bb.reloaded."+(rawIdx+1), null);
+      flashBadge("READY","TV "+(rawIdx+1)+" · "+VERSION,"#1F7A3A","#FFFFFF",2600);
+    }
+  })();
   var L = LAYOUTS[Q.get("layout")||"row4"]||LAYOUTS.row4;
   var sel = resolveSelection(Q);
   var ev = makeEvent(sel.type, sel.team, sel.opp);
@@ -4603,7 +4977,7 @@ function bootTV(){
   function applyState(s){
     /* recorded so an operator can prove the wall switched together: every output
        aims at the same `at`, and applyErr is how far this one actually missed it */
-    appliedAt=Date.now(); scheduledAt=+s.at||0;
+    appliedAt=nowMs(); scheduledAt=+s.at||0;
     applyErr=scheduledAt?appliedAt-scheduledAt:0;
     var nextL = (s.layout && LAYOUTS[s.layout]) ? LAYOUTS[s.layout] : L;
     var nextGap = (s.gap===undefined||s.gap===null) ? GAP : Math.max(0,Math.min(2,+s.gap||0));
@@ -4635,7 +5009,7 @@ function bootTV(){
      as a backstop for the case where it was throttled past `at`. */
   var pendingTimer=null;
   function arm(s){
-    var at=+s.at||0, dt=at-Date.now();
+    var at=+s.at||0, dt=at-nowMs();
     clearTimeout(pendingTimer); pendingTimer=null; pending=null;
     if(dt>20){
       pending={s:s,at:at};
@@ -4705,7 +5079,7 @@ function bootTV(){
     }
   });
 
-  window.__BB={ LINK:LINK,
+  window.__BB={ LINK:LINK, clock:CLOCK,
                 trace:function(){
                   var c=Math.min(traceN,TRACE_MAX), a=[], i;
                   for(i=0;i<c;i++) a.push(trace[(traceN-c+i)%TRACE_MAX]);
@@ -4838,6 +5212,9 @@ function bootTV(){
         "link    "+LINK.status+" · "+LINK.mode+" · room "+(LINK.room||"—")+" · seq "+LINK.seq+"\n"+
         (pending?("armed   "+ (pending.at-Date.now()) +" ms → "+pending.s.type+"/"+pending.s.team+"\n"):"")+
         "epoch   "+EPOCH+(SKEW?("   skew "+(SKEW>0?"+":"")+SKEW+" ms"):"")+"\n"+
+        "clock   "+(CLOCK.on?(CLOCK.locked()?"locked to "+(CLOCK.ref||"—"):"acquiring"):"off")+
+        "   correction "+(CLOCK.offset()>=0?"+":"")+CLOCK.offset().toFixed(1)+" ms"+
+        "   rtt "+CLOCK.rtt+" ms   n "+CLOCK.n+"\n"+
         "now     "+nowMs()+"\n"+
         "period  "+period+" ms   ("+ev.d+" cue + "+REST+" rest)\n"+
         "loop    "+String(Math.floor(p)).padStart(6," ")+" ms   u "+f.u.toFixed(4)+"\n"+
@@ -5323,6 +5700,56 @@ function bootApp(){
     });
   };
 
+  /* ── the measurement an operator can actually act on ──────────────────
+     Not "the screens reported they were fine" -- this probes each one over the
+     wire and reports how far apart they really are. */
+  document.getElementById("bSync").onclick=function(){
+    var btn=this, live=LINK.outputs.slice();
+    if(!LINK.on()||!live.length){
+      alert("No outputs have checked in. Open the TV URLs first."); return; }
+    btn.disabled=true; btn.textContent="probing…";
+    Promise.all(live.map(function(v){ return LINK.probe(v,6); })).then(function(rs){
+      btn.disabled=false; btn.textContent="Sync test";
+      var ok=rs.filter(function(r){ return r&&r.offset!==null; });
+      var L=["BarBoards cross-device sync   "+VERSION,"",
+        "Each output probed directly from this panel: offset = t2-(t1+t3)/2,",
+        "keeping the lowest-rtt sample of six.","",
+        "offset  how far that screen's agreed clock is from this panel's --",
+        "        the number you are seeing as one screen running ahead.","",
+        "  TV       offset        rtt   samples"];
+      ok.forEach(function(r){
+        L.push("  "+String(r.rank).padStart(2," ")+"   "+
+          ((r.offset>=0?"+":"")+r.offset.toFixed(1)+" ms").padStart(10," ")+"   "+
+          (Math.round(r.rtt)+" ms").padStart(7," ")+"   "+String(r.n).padStart(5," "));
+      });
+      rs.filter(function(r){ return !r||r.offset===null; }).forEach(function(r,i){
+        L.push("  "+String(r?r.rank:live[i]).padStart(2," ")+"   no answer"); });
+      var offs=ok.map(function(r){ return r.offset; });
+      var spread=offs.length>1?(Math.max.apply(null,offs)-Math.min.apply(null,offs)):0;
+      var worstRtt=ok.reduce(function(a,r){ return Math.max(a,r.rtt); },0);
+      L.push("","spread across the wall   "+spread.toFixed(1)+" ms",
+        "worst round trip        "+Math.round(worstRtt)+" ms",
+        "",
+        spread<10 ? "IN STEP — nothing to do."
+        : spread<40 ? "CLOSE — under the threshold most people can see."
+        : "VISIBLY OUT. A round trip this slow bounds how well the estimate can",
+        spread<40 ? "" : "do; move to a broker on the same LAN before chasing anything else.");
+      var txt=L.filter(function(x){ return x!==""||true; }).join("\n");
+      console.log(txt);
+      try{ navigator.clipboard&&navigator.clipboard.writeText(txt); }catch(e){}
+      alert(txt+"\n\n(copied to the clipboard)");
+    });
+  };
+  document.getElementById("bIdent").onclick=function(){
+    if(!LINK.cmd("ident",0,6000)) alert("Link is not up.");
+  };
+  document.getElementById("bReload").onclick=function(e){
+    var hard=e.shiftKey;
+    if(!confirm(hard ? "Cache-busting reload of every output?"
+                     : "Reload every output? They will go red, then green when back.")) return;
+    if(!LINK.cmd(hard?"hard":"reload",0)) alert("Link is not up.");
+  };
+
   document.getElementById("bJoinQR").onclick=function(){
     var url=patronURL(state.ev.house?state.ev:makeEvent("colorwars",state.team,state.opp));
     if(!url){ alert("Connect the wall link first — the room code is part of the URL."); return; }
@@ -5401,16 +5828,23 @@ function bootApp(){
        outputs IS the sync error, measured rather than asserted. */
     var drift=[], evs={};
     live.forEach(function(v){
-      var R=rep[v]; if(!R||!R.period||R.ms===undefined) return;
-      evs[R.ev]=1;
-      var expect=((R.t-EPOCH)%R.period+R.period)%R.period;
-      var d=R.ms-expect; if(d>R.period/2) d-=R.period; if(d<-R.period/2) d+=R.period;
-      drift.push({tv:v,d:d,off:R.offset});
+      var R=rep[v]; if(!R) return;
+      if(R.ev) evs[R.ev]=1;
+      drift.push({tv:v,lag:R.minLag,off:R.off,rtt:R.rtt,cn:R.cn,ce:R.ce,cs:R.cs});
     });
     for(i=1;i<=n;i++){
       var on=live.indexOf(i)>=0, R=rep[i];
       var t="output "+i+(on?" · live":" · not seen");
-      if(R) t+="\nloop "+R.ms+" ms\nclock offset "+(R.offset>=0?"+":"")+R.offset+" ms (incl. transit)";
+      if(R){
+        t+="\nloop "+R.ms+" ms";
+        if(R.off!==undefined)
+          t+="\nclock correction "+(R.off>=0?"+":"")+R.off+" ms"+
+             (R.ce?("  (still slewing "+R.ce+" ms)"):"  (settled)")+
+             "\nround trip "+R.rtt+" ms over "+R.cn+" samples"+
+             "\nfollowing "+(R.cr||"—")+" as "+(R.cs||"—");
+        if(R.minLag!==null&&R.minLag!==undefined)
+          t+="\nfloor lag "+Math.round(R.minLag)+" ms (transit + skew)";
+      }
       h+='<span class="outdot'+(on?" on":"")+'" title="'+t+'">'+i+'</span>';
     }
     live.filter(function(v){ return v>n; }).forEach(function(v){
@@ -5422,16 +5856,30 @@ function bootApp(){
     if(outsEl.__last!==hh){ outsEl.innerHTML=hh; outsEl.__last=hh; }
     var syncTxt="";
     if(drift.length){
-      var maxd=0, maxo=0;
-      drift.forEach(function(x){ maxd=Math.max(maxd,Math.abs(x.d));
-                                 maxo=Math.max(maxo,Math.abs(x.off||0)); });
+      /* relative skew: spread of the per-output floor lag. The transit floor is
+         common to the route and cancels in the spread; what is left is how far
+         the screens are from each other, which is the thing being asked about. */
+      var lags=drift.map(function(x){ return x.lag; })
+                    .filter(function(v){ return v!==null&&v!==undefined; });
+      var spread=lags.length>1?(Math.max.apply(null,lags)-Math.min.apply(null,lags)):0;
+      var maxRtt=0, maxCorr=0, settling=0, unlocked=0;
+      drift.forEach(function(x){
+        maxRtt=Math.max(maxRtt,x.rtt||0);
+        maxCorr=Math.max(maxCorr,Math.abs(x.off||0));
+        if(Math.abs(x.ce||0)>2) settling++;
+        if(!x.cn) unlocked++;
+      });
       var agree=Object.keys(evs).length<=1;
-      syncTxt='<div style="margin-top:5px">frame spread <b style="color:'+
-        (maxd<50?"var(--good)":"var(--tally)")+'">±'+Math.round(maxd)+' ms</b>'+
-        ' · clock offset <b style="color:'+(maxo<400?"var(--good)":"var(--tally)")+'">±'+
-        Math.round(maxo)+' ms</b>'+
+      var good=function(ok){ return ok?"var(--good)":"var(--tally)"; };
+      syncTxt='<div style="margin-top:5px">screens agree within <b style="color:'+
+        good(spread<25)+'">±'+Math.round(spread)+' ms</b>'+
+        ' · corrected <b>±'+Math.round(maxCorr)+' ms</b> off their own clocks'+
+        ' · rtt '+Math.round(maxRtt)+' ms'+
         ' · cue '+(agree?'<b style="color:var(--good)">agreed</b>'
-                        :'<b style="color:var(--tally)">SPLIT</b>')+'</div>';
+                        :'<b style="color:var(--tally)">SPLIT</b>')+
+        (settling?(' · <b style="color:var(--cue)">'+settling+' still settling</b>'):"")+
+        (unlocked?(' · <b style="color:var(--tally)">'+unlocked+' not locked</b>'):"")+
+        '</div>';
     }
     var ms=armedUntil-Date.now();
     var noteEl=document.getElementById("linkNote"), noteHTML =
@@ -5585,6 +6033,7 @@ function bootApp(){
   /* ── scripting hook. Same shape as the other BarBoards prototypes (§13.1), and
         the only supported way to drive a frame without waiting for the clock. ── */
   window.__BB={
+    clock:CLOCK,
     TEAMS:TEAMS, TYPES:TYPES, LAYOUTS:LAYOUTS, GRAMMARS:G, RIVAL:RIVAL, LINK:LINK, QR:QR, WAR:WAR,
     teamKeys:TEAMKEYS, makeEvent:makeEvent, makeRenderer:makeRenderer, geoOf:geoOf,
     /* Benchmark a real output surface. Run this ON the device — a desktop's
@@ -5776,6 +6225,70 @@ function audit(){
   });
   if(MATRIX.length!==TYPES.length*TEAMKEYS.length)
     fails.push("matrix size "+MATRIX.length);
+
+  /* CLOCK ASSERTION. The estimator decides whether sixteen screens agree, so it
+     is checked against known inputs on every load rather than trusted. Each of
+     these three is a fault that actually reached a running wall or would have. */
+  (function(){
+    try{
+      var K=makeClock();
+      /* an exchange with a chosen round trip and a chosen true offset */
+      var feed=function(t,rtt,off){ K.sample(t, t+rtt/2+off, t+rtt); };
+      var T=1000000, i, plan=[[300,137],[240,137],[40,137],[180,137],[260,137]];
+      for(i=0;i<plan.length;i++) feed(T+i*3000, plan[i][0], plan[i][1]);
+      /* a slow exchange whose return leg dragged: biased low by half the
+         asymmetry, and it must lose to the fast one rather than average with it */
+      feed(T+15000, 600, 137-250);
+      if(Math.abs(K.target()-137)>0.001)
+        fails.push("clock: min-rtt gave "+K.target()+", want 137");
+      if(K.rtt!==40) fails.push("clock: kept rtt "+K.rtt+", want the 40 ms sample");
+
+      /* THE BUG FAULT INJECTION FOUND: a lucky low-rtt sample pinned the estimate
+         forever, so a device whose clock was later stepped never converged. */
+      var T2=T+200000;
+      for(i=0;i<3;i++) feed(T2+i*3000, 150+i*5, 137);
+      if(K.rtt===40) fails.push("clock: the stale 40 ms sample never aged out");
+      if(K.n!==3) fails.push("clock: aged window holds "+K.n+", want 3");
+
+      /* one wild reading is noise and must not move the estimate; two that agree
+         are the clock itself moving, and must be adopted at once */
+      var T3=T2+20000;
+      feed(T3, 150, 637);
+      if(Math.abs(K.target()-137)>0.001)
+        fails.push("clock: a single outlier moved the estimate to "+K.target());
+      feed(T3+3000, 150, 637);
+      if(Math.abs(K.target()-637)>0.001)
+        fails.push("clock: a confirmed step was not adopted, target "+K.target());
+
+      /* the slew is bounded: a correction must never arrive as a visible skip */
+      var S=makeClock(); S.sample(0,100,100); S.sample(0,300,100);
+      var a0=S.offset(); S.tick(100);
+      if(Math.abs(S.offset()-a0)>100*0.05)
+        fails.push("clock: slew rate is not bounded");
+    }catch(err){ fails.push("clock assertion threw: "+err.message); }
+  })();
+
+  (function(){
+    try{
+      var TRUE=137;            /* how far the reference is ahead of us */
+      /* a symmetric 40 ms round trip recovers the offset exactly */
+      var t1=1000, t3=t1+40, t2=t1+20+TRUE;
+      var got=t2-(t1+t3)/2;
+      if(Math.abs(got-TRUE)>0.001) fails.push("clock: symmetric exchange gave "+got);
+      /* a round trip whose return leg is slow reports the offset LOW by exactly
+         half the asymmetry — the error term the min-rtt filter exists to dodge */
+      var s1=1000, s3=s1+240, s2=s1+20+TRUE;
+      var slow=s2-(s1+s3)/2;
+      if(Math.abs((slow-TRUE)+100)>0.001)
+        fails.push("clock: asymmetry model wrong, gave "+(slow-TRUE));
+      if(Math.abs(slow-TRUE)<=Math.abs(got-TRUE)-0.001)
+        fails.push("clock: the slower round trip was not the worse estimate");
+      /* nowMs must be the agreed clock plus this device's presentation skew,
+         and nothing else — a regression here silently desyncs the whole wall */
+      if(Math.abs(nowMs()-(CLOCK.wall()+SKEW))>1) fails.push("clock: nowMs is not wall+skew");
+      if(!CLOCK.on&&Q.get("sync")!=="0") fails.push("clock: disabled without ?sync=0");
+    }catch(err){ fails.push("clock assertion threw: "+err.message); }
+  })();
 
   /* RENDER ASSERTION. Everything above checks the frame SPEC; none of it would
      have caught a switch-case fallthrough that made every `fill` silently draw
