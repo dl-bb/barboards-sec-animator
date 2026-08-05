@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0053";
+var VERSION = "v1.0054";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -7276,7 +7276,10 @@ function bootTV(){
        loads.forEach(function(ld){
          LOAD=ld; SWEEPMODE=m;                     /* the grammar reads these */
          var r=null;
-         try{ r=frameProfile({cue:"probe",layout:lid,w:w,h:h,frames:N,
+         /* frameProfile takes a TYPE ID, not a cue name. Passing "probe"
+            resolved to nothing and every rung silently rendered the same
+            24-layer fallback, which is why the first sweep was flat. */
+         try{ r=frameProfile({cue:"lad-"+m,layout:lid,w:w,h:h,frames:N,
                               team:o.team||"TEX"}); }catch(e){ r={err:e.message}; }
          if(r&&!r.err){
            rows.push({axis:m,load:ld,layers:r.layersMidCue,
