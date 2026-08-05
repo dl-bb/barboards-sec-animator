@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0048";
+var VERSION = "v1.0049";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -940,7 +940,9 @@ var LINK = (function(){
       var done=false;
       function finish(v){ if(done) return; done=true; delete diagWait[rank]; res(v); }
       diagWait[rank]=finish;
-      api.cmd("measure",rank,null);
+      /* NO api.cmd() here. It sent a measure command with no name, which fell
+         through to frameProfile and answered first -- so every soak request
+         raced its own decoy and the decoy won. One message, named. */
       cli.publish(topic("cmd"), JSON.stringify({
         c:"measure", tv:rank, m:which, o:o||{}, at:nowMs()+api.lead,
         id:"m"+Date.now().toString(36)+Math.floor(Math.random()*1e9).toString(36)
