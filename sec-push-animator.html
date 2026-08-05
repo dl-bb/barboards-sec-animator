@@ -376,6 +376,8 @@ body.badge #badge{display:flex}
           <button class="btn" id="bLinkSave">Connect</button>
           <button class="btn" id="bNewRoom">New room code</button>
           <button class="btn" id="bRefire" title="Re-send the current cue so every screen restarts it together">Re-fire</button>
+          <button class="btn" id="bZero"
+            title="Restart the cue at 0:00 across the whole wall. For the song-synced cue: press this as the first note sounds.">Start at 0:00</button>
         </div>
         <!-- Wall operations live WITH the wall, not in the global header. An
              operator reaching for "reload the screens" is already looking at
@@ -548,6 +550,13 @@ function cleanLine(v,fallback,max){
 var TXT1 = cleanLine(Q.get("t1"),"TOUCHDOWN",22);
 var TXT2 = cleanLine(Q.get("t2"),"",18);          /* empty = use the school */
 var TXT3 = cleanLine(Q.get("t3"),"",40);          /* empty = use the venue  */
+/* Welcome to the Jungle runs at about 123 BPM and its first hard downbeat is
+   the riff entry around 0:11 — the guitar intro before it is loose enough that
+   a grid laid over it would be a lie. Both are URL parameters because they are
+   the two things you cannot get right from a description: put the cue up next to
+   the record and nudge them until the flashes land on the snare. */
+var JBPM    = Q.has("bpm")    ? Math.max(40,Math.min(240,+Q.get("bpm")||123)) : 123;
+var JANCHOR = Q.has("anchor") ? (+Q.get("anchor")||0) : 11000;
 var LOAD = Q.has("load") ? Math.max(1,Math.min(40,+Q.get("load")||1)) : 1;
 var FX = Q.has("fx") ? Math.max(0, Math.min(3, +Q.get("fx")||0)) : 1;
 
@@ -568,7 +577,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0034";
+var VERSION = "v1.0035";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1648,6 +1657,14 @@ var TYPES=[
  desc:function(c){ return "Custom message on the touchdown animation"; },
  sr:{}},
 
+{id:"jungle", grp:"house", label:"Welcome to the Jungle · 4:31", cue:"jungle", d:271000, house:true,
+ amp:100,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0,
+ name:function(T){ return "WELCOME TO THE JUNGLE"; },
+ sub:function(T){ return (JUNGLE[T.ab]?JUNGLE[T.ab][0]:"THE JUNGLE")+" · 4:31"; },
+ desc:function(c){ return "House cue — cut to the record, 4:31. Start it on the first note"; },
+ sr:{}},
+
 {id:"train", grp:"house", label:"The team train", cue:"train", d:11000, house:true,
  amp:78,win:0,tier:2,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
  period:2,clock:"8:20",hs:14,as:7,
@@ -1726,6 +1743,28 @@ var TYPES=[
  desc:function(c){ return c.T.name+" crowd answers the score — "+c.T.chant; },
  sr:{"details.category":"extra point","extra_point.attempt":1,"extra_point.made":1,points:1}}
 ];
+
+/* Sixteen rooms, sixteen jungles. The first line is what the place calls itself,
+   the second is what it means for whoever came to visit. Both get sung over the
+   riff, so they are short by design. */
+var JUNGLE={
+  TEX: ["THE FORTY ACRES",          "HORNS UP, HEADS DOWN"],
+  ALA: ["THE TIDE DOESN'T ASK",     "ROLL OR BE ROLLED"],
+  ARK: ["THE BOAR'S NEST",          "CALL THE HOGS OR RUN"],
+  AUB: ["THE PLAINS",               "THE EAGLE IS ALREADY CIRCLING"],
+  FLA: ["THE SWAMP",                "ONLY GATORS GET OUT ALIVE"],
+  UGA: ["BETWEEN THE HEDGES",       "THE HEDGES DO NOT LET GO"],
+  UK:  ["THE BLUEGRASS",            "CATS HUNT AFTER DARK"],
+  LSU: ["DEATH VALLEY",             "SATURDAY NIGHT, AND IT IS LOUD"],
+  MSST:["COWBELL COUNTRY",          "RING IT UNTIL SOMETHING BREAKS"],
+  MIZ: ["THE ZOU",                  "EVERYBODY COMES TO THE ZOU"],
+  OU:  ["THE PALACE ON THE PRAIRIE","THE SCHOONER RUNS ANYWAY"],
+  MISS:["THE GROVE",                "HOTTY TODDY, NOBODY LEAVES"],
+  SCAR:["THE SANDSTORM",            "2001, AND THE FLOOR MOVES"],
+  TENN:["THE CHECKERBOARD",         "A HUNDRED THOUSAND IN ORANGE"],
+  TAMU:["HOME OF THE TWELFTH MAN",  "KYLE FIELD NEVER SITS DOWN"],
+  VAN: ["THE STAR OF NASHVILLE",    "ANCHOR DOWN"]
+};
 
 var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
 var TYPE_GROUPS=[["custom","Custom message · your copy"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
@@ -3197,6 +3236,248 @@ G.runacross=function(u,C){
             fit:.4,track:.2,a:cl(v3*4,0,1)});
   }
   return {layers:o,phase:ph};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   WELCOME TO THE JUNGLE — four and a half minutes, cut to the record
+
+   Every other cue in this file is a loop a few seconds long. This one is a
+   4:31 TIMELINE that happens to be expressed as u, because it is cut against a
+   specific piece of music and a song does not loop — it has an intro that is
+   nothing, a riff that arrives, a breakdown that takes everything away, and a
+   last chorus that spends it all.
+
+   TWO CLOCKS, and keeping them apart is the whole trick:
+
+     · SECTIONS run on absolute seconds, because that is how the record is laid
+       out and the arrangement does not care what tempo you think it is.
+     · THE PULSE runs on a beat grid anchored at the riff entry, because the
+       guitar intro before it is rubato and any grid laid over it will drift
+       visibly by the time the band arrives.
+
+   The pulse is shaped, not switched: hit = (1-frac)^2.2 gives a hard snap on
+   the beat and a decay into the next, which is what a room reads as "on time".
+   Flashing a hard on/off at 123 BPM reads as a fault instead.
+
+   Nothing here plays audio or talks to Spotify. Press "Start at 0:00" on the
+   panel as the first note sounds; the epoch is absolute, so a screen that gets
+   the message late jumps to the correct point in the song rather than starting
+   its own copy late. That is the wall clock doing the job it was built for. */
+var JSEC={ intro:0, riff:11, band:23, v1:34, c1:56, v2:72, c2:94,
+           bridge:110, solo:120, brk:150, build:185, last:200, outro:245, end:271 };
+
+G.jungle=function(u,C){
+  var T=C.T, o=[], i, ph="";
+  var d=C.ev.d, ms=u*d, t=ms/1000;
+  var bms=60000/JBPM;
+  var b=(ms-JANCHOR)/bms;               /* fractional beats since the riff       */
+  var bi=Math.floor(b), fr=b-bi;
+  var live=(ms>=JANCHOR);
+  var hit=live?Math.pow(1-fr,2.2):0;    /* snap on the beat, decay into the next */
+  var inbar=((bi%4)+4)%4, bar=Math.floor(bi/4);
+  var down=(inbar===0)?hit:0;           /* the one that lands on the bar         */
+  var back=(inbar===1||inbar===3)?hit:0;/* backbeat: where the snare is          */
+  var J=JUNGLE[C.ev.team]||["THE JUNGLE","NOBODY LEAVES"];
+  var seg2=function(a,z){ return cl((t-a)/(z-a),0,1); };
+
+  /* THE DYNAMIC ARC — 0 is a dead room, 1 is everything on. This is the shape
+     of the record rather than of the beat: the beat says WHEN, this says HOW
+     MUCH, and a music cue that only has the first one is a metronome. */
+  var heat=0;
+  if(t<JSEC.riff)       heat=seg2(JSEC.intro,JSEC.riff)*0.18;
+  else if(t<JSEC.band)  heat=0.18+seg2(JSEC.riff,JSEC.band)*0.22;
+  else if(t<JSEC.brk)   heat=0.45+seg2(JSEC.band,JSEC.solo)*0.35;
+  else if(t<JSEC.build) heat=0.80-seg2(JSEC.brk,JSEC.build)*0.62;
+  else if(t<JSEC.last)  heat=0.18+seg2(JSEC.build,JSEC.last)*0.72;
+  else if(t<JSEC.outro) heat=0.95;
+  else                  heat=0.95-seg2(JSEC.outro,JSEC.end)*0.85;
+
+  /* ── the room ──────────────────────────────────────────────────────────
+     Rebuilt in the language of the rally clap, which is the cue in this file
+     that actually works across a bar: the WHOLE FRAME floods with the school
+     colour on the hit and decays, one enormous word carries the message, a ring
+     is thrown from the centre, and almost nothing else is on screen.
+
+     The first cut of this was atmospheric — fog, canopy shafts, eighteen leaf
+     silhouettes, eyes blinking in the dark, three sizes of text. It read as
+     texture from six feet away and as mud from thirty, which is the distance
+     that matters. Detail loses to contrast in a room this size, every time.
+
+     So the layers here are: ground, flood, ring, one word, one tag, four pips.
+     The arrangement changes WHAT the word says and HOW HARD the room floods,
+     not how much furniture is on screen. */
+  var fl=1;                              /* per-section flood depth            */
+  var ringOn=true, pips=true;
+
+  o.push({k:"fill",col:T.deep});
+
+  /* the flood is the beat. Everything else is decoration on top of it. */
+  function room(){
+    var a=heat*fl*(0.34*hit+0.46*down);
+    if(a>0.004) o.push({k:"fill",col:T.p,a:Math.min(0.88,a)});
+    /* a second, tighter flood on the backbeat keeps the bar from feeling square */
+    if(back>0.02) o.push({k:"band",x:0,y:0.30,w:1,h:0.40,
+                          col:hexA("#FFFFFF",0.05*heat*fl*back)});
+  }
+  /* the ring, thrown on the downbeat and outrunning the frame */
+  function ring(scale){
+    if(!ringOn||down<0.02) return;
+    var e=down;
+    o.push({k:"ring",x:0.5,y:0.46,r:(0.08+(1-e)*0.52)*(scale||1),col:"#FFFFFF",
+            w:Math.max(1,9*e),a:e*0.55*heat});
+  }
+  /* which beat of the bar the room is on — the clap's counter, and the reason
+     a crowd can join in rather than just watch */
+  function count(){
+    if(!pips) return;
+    for(i=0;i<4;i++){
+      var on=(i===inbar);
+      o.push({k:"band",x:0.5-0.098+i*0.056,y:0.905,w:0.034,h:0.028,
+              col:on?"#FFFFFF":hexA("#FFFFFF",0.15),
+              a:on?(0.45+0.55*hit):1});
+    }
+  }
+  /* one word, as big as it is allowed to be, breathing on the beat */
+  function hero(txt,y,h,col){
+    o.push({k:"word",t:txt,x:0.5,y:y===undefined?0.46:y,h:h||0.30,
+            col:col||"#FFFFFF",fit:0.90,track:0.02,sc:1+0.075*hit});
+  }
+  /* A line that has to survive the ground flooding the SAME COLOUR it is. The
+     taunt was drawn in the school primary over a room flooding school primary
+     on every beat, and on LSU it simply vanished. Dark plate, white type, and
+     the colour goes to the rule above it where it has something to sit on. */
+  function tag(txt,y,h,a,track){
+    var tk=(track===undefined)?0.20:track;
+    var w=Math.min(0.92,C.tw(txt,h,tk))+0.05;
+    o.push({k:"band",x:0.5-w/2,y:y-h*0.95,w:w,h:h*1.95,col:hexA("#000000",0.46*a)});
+    o.push({k:"band",x:0.5-w/2,y:y-h*0.95,w:w,h:h*0.13,col:hexA(T.p,0.90*a)});
+    o.push({k:"word",t:txt,x:0.5,y:y,h:h,col:hexA("#FFFFFF",0.94*a),fit:0.86,track:tk});
+  }
+
+  /* ── the arrangement ─────────────────────────────────────────────────── */
+  var VL=[J[0], T.venue.toUpperCase(), J[1], T.city.toUpperCase()];
+
+  if(t<JSEC.riff){
+    ph="intro · the room before anything";
+    fl=0; ringOn=false; pips=false;
+    var iv=seg2(JSEC.intro,JSEC.riff);
+    room();
+    o.push({k:"ring",x:0.5,y:0.46,r:0.10+0.30*iv,col:hexA(T.p,0.28*iv),w:2});
+    o.push({k:"word",t:J[0],x:0.5,y:0.46,h:0.062,
+            col:hexA("#FFFFFF",0.10+iv*0.45),fit:0.80,track:0.34});
+  }
+  else if(t<JSEC.band){
+    ph="riff · bar "+bar;
+    fl=0.42;
+    room(); ring(0.8);
+    hero("JUNGLE",0.46,0.30);
+    o.push({k:"word",t:"WELCOME TO THE",x:0.5,y:0.25,h:0.070,
+            col:hexA("#FFFFFF",0.40+0.45*down),fit:0.80,track:0.26});
+    count();
+  }
+  else if(t<JSEC.v1){
+    ph="band in · everything at once";
+    fl=1.15;
+    room(); ring();
+    hero(T.word,0.44,0.34);
+    tag(J[1],0.74,0.052,0.80+0.20*back,0.22);
+    count();
+  }
+  else if(t<JSEC.c1 || (t>=JSEC.v2 && t<JSEC.c2)){
+    ph=(t<JSEC.c1?"verse 1":"verse 2");
+    fl=0.80;
+    room(); ring(0.9);
+    /* one taunt a phrase, not a wall of them */
+    hero(VL[Math.floor(bar/2)%4],0.44,0.20);
+    o.push({k:"word",t:"WELCOME TO THE JUNGLE",x:0.5,y:0.72,h:0.058,
+            col:hexA("#FFFFFF",0.45+0.40*down),fit:0.82,track:0.18});
+    count();
+  }
+  else if(t<JSEC.v2 || (t>=JSEC.c2 && t<JSEC.bridge)){
+    ph=(t<JSEC.v2?"chorus 1":"chorus 2");
+    fl=1.05;
+    room(); ring();
+    o.push({k:"word",t:"WELCOME",x:0.5,y:0.26,h:0.13,col:hexA("#FFFFFF",0.92),
+            fit:0.86,track:0.06});
+    hero("JUNGLE",0.56,0.34);
+    count();
+  }
+  else if(t<JSEC.solo){
+    ph="bridge";
+    fl=0.85;
+    room(); ring(0.9);
+    hero(T.word,0.44,0.30);
+    tag(J[1],0.72,0.050,0.75+0.25*back,0.20);
+    count();
+  }
+  else if(t<JSEC.brk){
+    ph="solo";
+    fl=1.0;
+    room();
+    /* the solo is the one place something moves faster than the beat: rings
+       thrown on every beat rather than every bar, and they overlap */
+    for(i=0;i<3;i++){
+      var re=cl(1-((b-i*0.34)%1),0,1);
+      o.push({k:"ring",x:0.5,y:0.46,r:0.06+(1-re)*0.62,col:"#FFFFFF",
+              w:Math.max(1,7*re),a:re*0.34});
+    }
+    hero(T.word,0.44,0.32);
+    tag(T.call.toUpperCase(),0.74,0.050,0.70+0.30*back,0.20);
+    count();
+  }
+  else if(t<JSEC.build){
+    ph="breakdown · you know where you are";
+    /* everything goes. Half time — the room breathes on the BAR, not the beat,
+       and the flood is a whisper of what it was. */
+    fl=0.10; ringOn=false; pips=false;
+    var kv=seg2(JSEC.brk,JSEC.build);
+    o.push({k:"fill",col:mixHex(T.deep,"#000000",0.55)});
+    o.push({k:"fill",col:T.p,a:0.10*down});
+    o.push({k:"ring",x:0.5,y:0.46,r:0.14+0.34*(1-down),col:hexA(T.p,0.30*down),w:3});
+    o.push({k:"word",t:"YOU KNOW WHERE YOU ARE?",x:0.5,y:0.34,h:0.058,
+            col:hexA("#FFFFFF",0.28+0.42*down),fit:0.80,track:0.18});
+    if(kv>0.30)
+      o.push({k:"word",t:J[0],x:0.5,y:0.54,h:0.15,
+              col:hexA("#FFFFFF",cl((kv-0.30)*3,0,1)*(0.55+0.45*down)),fit:0.84,track:0.05});
+    if(kv>0.70) tag("AND YOU ARE NOT LEAVING",0.76,0.044,cl((kv-0.70)*3,0,1)*0.8,0.20);
+  }
+  else if(t<JSEC.last){
+    ph="build";
+    var uv=seg2(JSEC.build,JSEC.last);
+    fl=0.35+0.95*uv;
+    /* the pulse tightens: one flood a beat, then two, then four */
+    var mult=1+Math.floor(uv*3);
+    var fast=Math.pow(1-((b*mult)%1),2.2);
+    o.push({k:"fill",col:T.p,a:heat*(0.10+0.34*uv)*fast});
+    o.push({k:"ring",x:0.5,y:0.46,r:0.08+(1-fast)*0.5,col:"#FFFFFF",
+            w:Math.max(1,7*fast),a:fast*0.4*uv});
+    hero(T.word,0.44,0.24+0.10*uv);
+    o.push({k:"word",t:"YOU ARE IN THE JUNGLE",x:0.5,y:0.72,h:0.062,
+            col:hexA("#FFFFFF",0.40+0.55*fast),fit:0.82,track:0.16});
+    count();
+  }
+  else if(t<JSEC.outro){
+    ph="last chorus · everything";
+    fl=1.35;
+    room(); ring();
+    hero(T.word,0.42,0.38);
+    o.push({k:"word",t:"WELCOME TO THE JUNGLE",x:0.5,y:0.70,h:0.066,
+            col:hexA("#FFFFFF",0.55+0.45*back),fit:0.86,track:0.16});
+    tag(J[1],0.84,0.044,0.88,0.22);
+    count();
+  }
+  else{
+    ph="outro · the room empties";
+    var ov=seg2(JSEC.outro,JSEC.end);
+    fl=1.35*(1-ov); ringOn=(ov<0.6); pips=false;
+    room(); ring();
+    hero(T.word,0.44,0.32,hexA("#FFFFFF",(1-ov)*0.95));
+    o.push({k:"word",t:T.venue.toUpperCase(),x:0.5,y:0.70,h:0.046,
+            col:hexA("#FFFFFF",(1-ov)*0.55),fit:0.80,track:0.20});
+  }
+
+  o.push({k:"vig",a:0.30+0.16*(1-heat)});
+  return {layers:o,phase:ph+"  ·  "+Math.floor(t/60)+":"+String(Math.floor(t%60)).padStart(2,"0")};
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -5474,6 +5755,12 @@ var PHASES = {
   custom:[[0,.24,"Run","line one crosses"],[.24,.48,"Land","line two"],
           [.48,.528,"Flash","384 ms"],[.528,.86,"Payoff","team finish"],
           [.86,1,"Lockup","line two + line three"]],
+  jungle:[[0,.041,"Intro","guitar alone"],[.041,.085,"Riff","the grid locks"],
+          [.085,.125,"Band in","everything at once"],[.125,.207,"Verse 1","driving"],
+          [.207,.266,"Chorus","full frame"],[.266,.443,"Verse 2 · chorus 2 · bridge","held"],
+          [.443,.554,"Solo","lights outrun the beat"],[.554,.683,"Breakdown","half time, near black"],
+          [.683,.738,"Build","the pulse tightens"],[.738,.904,"Last chorus","everything"],
+          [.904,1,"Outro","the room empties"]],
   train:[[0,.10,"Approach","headlight, then the engine"],
          [.10,.90,"The crossing","the consist runs the canvas"],
          [.90,1,"Lockup","the call, once it has passed"]],
@@ -6594,6 +6881,27 @@ function bootApp(){
     });
   };
   /* The numbers that matter come from the SCREEN, not from this laptop. */
+  /* Every cue in this file is phase-locked to a fixed epoch, which is exactly
+     what makes sixteen screens agree without talking. It is also what makes a
+     cue impossible to START on cue — and a four-and-a-half minute piece cut to a
+     record has to begin when the record does.
+
+     Moving the epoch to NOW does it. The epoch is absolute wall-clock, so this
+     is not "everybody start" -- it is "here is where zero is", and a screen that
+     receives it 300 ms late jumps to 0.3 s INTO the song rather than starting
+     its own copy 300 ms behind. Late, never ragged, and never drifting. */
+  document.getElementById("bZero").onclick=function(){
+    EPOCH=nowMs();
+    state.manual=null; state.playing=true;
+    var bp=document.getElementById("bPlay");
+    if(bp){ bp.textContent="Pause"; bp.classList.add("on"); }
+    render(currentMs());
+    pushLink();
+    var btn=this, was=btn.textContent;
+    btn.textContent="0:00 ▸"; btn.classList.add("on");
+    setTimeout(function(){ btn.textContent=was; btn.classList.remove("on"); },1400);
+  };
+
   document.getElementById("bDev").onclick=function(){
     var btn=this, live=LINK.outputs.slice();
     if(!LINK.on()||!live.length){

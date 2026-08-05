@@ -32,10 +32,80 @@ separately, so all 35 cues are available for all 16 schools against any opponent
 | Big plays | explosive play 40+ · fourth-down conversion · fake punt |
 | States & stoppages | red zone · two-minute warning · goal-line stand · review overturned |
 | Ritual | chant / call track |
-| House cues · no push event | **the team train** · the wave · decibel meter · kickoff countdown · rally clap · phones up · spotlight sweep · ambient rail |
+| House cues · no push event | **Welcome to the Jungle** · **the team train** · the wave · decibel meter · kickoff countdown · rally clap · phones up · spotlight sweep · ambient rail |
 | Patron · interactive | Color Wars |
 | Broadcast furniture | **BarBoards Sports open** · BarBoards Saturday open · score bug · lower third · replay wipe |
 | Benchmark | stadium flyover · stadium flyover 3D |
+
+## Welcome to the Jungle — 4:31, cut to the record
+
+Every other cue here is a loop a few seconds long. This one is a **timeline**, because it is
+cut against a specific piece of music and a song does not loop — it has an intro that is
+nothing, a riff that arrives, a breakdown that takes everything away, and a last chorus that
+spends it all.
+
+Play the song on Spotify and press **Start at 0:00** as the first note sounds.
+
+### Two clocks, deliberately separate
+
+- **Sections run on absolute seconds**, because that is how the record is laid out and the
+  arrangement does not care what tempo you think it is.
+- **The pulse runs on a beat grid anchored at the riff entry** (~0:11), because the guitar
+  intro before it is rubato and any grid laid over it drifts visibly by the time the band
+  arrives.
+
+The pulse is *shaped*, not switched: `hit = (1-frac)^2.2` snaps on the beat and decays into
+the next, which is what a room reads as "on time". A hard on/off at 123 BPM reads as a fault.
+
+| Param | Meaning |
+|---|---|
+| `bpm` | Beat grid, default **123** |
+| `anchor` | Where beat 1 lives, default **11000** ms |
+
+Both are URL parameters because they are the two things that cannot be got right from a
+description. Put the cue next to the record and nudge until the flashes land on the snare.
+The section boundaries are the `JSEC` block in the source — read them off the waveform and
+edit; they are seconds.
+
+Use `&rest=0` so it does not insert the usual lockup gap between plays.
+
+### It is built like the rally clap
+
+The first cut was atmospheric — fog, canopy shafts, eighteen leaf silhouettes, eyes blinking
+in the dark, three sizes of type. It read as texture from six feet and as **mud from thirty**,
+which is the distance that matters. Detail loses to contrast in a room this size, every time.
+
+So it borrows the rally clap's language, which is the cue in this file that genuinely works
+across a bar: **the whole frame floods with the school colour on the hit and decays, one
+enormous word carries the message, a ring is thrown from the centre, four pips count the bar,
+and almost nothing else is on screen.** The arrangement changes *what the word says* and *how
+hard the room floods* — not how much furniture is on screen. 10–16 layers a frame.
+
+Measured on-beat vs off-beat brightness: **1.40× when the band arrives**, 1.28–1.29× through
+the choruses and solo, and **1.01× in the breakdown** — which is correct, because the
+breakdown is half-time and pulses on the bar, not the beat. Absolute brightness follows the
+arc: 18 in the breakdown, 70 in the choruses, 87 in the last chorus.
+
+The build tightens to roughly four flashes a beat (~8 Hz) and is deliberately kept
+**low-amplitude** — that rate is inside the band that matters for photosensitivity, so the
+2 Hz sections carry the depth instead.
+
+### Sixteen jungles
+
+Each school gets two lines: what the place calls itself, and what it means for whoever came
+to visit. `THE SWAMP` / `ONLY GATORS GET OUT ALIVE`. `BETWEEN THE HEDGES` / `THE HEDGES DO NOT
+LET GO`. `DEATH VALLEY` / `SATURDAY NIGHT, AND IT IS LOUD`.
+
+The taunt sits on a dark plate with white type, because it has to survive a ground that is
+flooding the same colour it is — drawn in the school primary it vanished completely on LSU.
+
+### Start at 0:00
+
+Phase-locking to a fixed epoch is what lets sixteen screens agree without talking. It is also
+what makes a cue impossible to *start* on cue. **Start at 0:00** moves the epoch to now, and
+because the epoch is absolute wall-clock this is not "everybody start" — it is "here is where
+zero is". A screen that gets the message 300 ms late jumps to 0.3 s *into* the song rather
+than starting its own copy 300 ms behind. Late, never ragged, never drifting.
 
 ## The team train
 
