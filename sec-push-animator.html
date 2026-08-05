@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0041";
+var VERSION = "v1.0042";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -2797,6 +2797,59 @@ function medOf(a){
   var s2=a.slice().sort(function(p,q){ return p-q; });
   return s2[Math.floor(s2.length/2)];
 }
+/* The two-backend comparison, at module scope so an OUTPUT can run it. The
+   control room can type into a console; a kiosk cannot, and the kiosk is the
+   only machine whose numbers mean anything. */
+function glCompare(opts){
+  opts=opts||{};
+  var cue=opts.cue||"flyover3d", team=opts.team||"TEX";
+  var lid=opts.layout||"row4", L=LAYOUTS[lid]||LAYOUTS.row4;
+  var w=opts.w||1920, h=opts.h||1080, frames=opts.frames||60;
+  var ev=makeEvent(cue,team,RIVAL[team]||"OU");
+  var g=geoOf(L), r=g.rect(L.cells[0]), specs=[], i;
+  for(i=0;i<frames;i++){
+    var fr=frameAt(ev,L,ev.d*i/frames,opts.fx===undefined?1:opts.fx);
+    fr.layers=fr.layers.filter(function(l){
+      return l.k!=="word"&&l.k!=="qr"&&l.k!=="scan"; });
+    specs.push(fr);
+  }
+  var prims=Math.round(specs.reduce(function(a,x){ return a+x.layers.length; },0)/frames);
+  function run(mk,label){
+    var cv=document.createElement("canvas");
+    cv.style.cssText="position:fixed;left:-99999px;top:0";
+    document.body.appendChild(cv);
+    var R2=null;
+    try{ R2=mk(cv); }catch(e){}
+    if(!R2){ document.body.removeChild(cv); return {backend:label,unavailable:true}; }
+    try{
+      R2.resize(w,h,r,1);
+      var k,t0,ts=[];
+      for(k=0;k<8;k++) R2.draw(specs[k%frames],null);
+      for(k=0;k<frames;k++){ t0=performance.now(); R2.draw(specs[k],null); ts.push(performance.now()-t0); }
+      ts.sort(function(a,b){ return a-b; });
+      var p=function(q){ return +ts[Math.min(ts.length-1,Math.floor(ts.length*q))].toFixed(3); };
+      var o={backend:label,p50:p(0.5),p95:p(0.95),p99:p(0.99),max:p(1)};
+      if(R2.stats) o.drawCalls=R2.stats().calls;
+      return o;
+    }catch(e){ return {backend:label,error:e.message}; }
+    finally{ try{ document.body.removeChild(cv); }catch(e){} }
+  }
+  var c2=run(makeRenderer,"canvas2d"), gl=run(makeGLRenderer,"webgl");
+  var G2=gpuInfo();
+  var out={cue:cue,layout:lid,surface:w+"x"+h,frames:frames,primsPerFrame:prims,
+           note:"geometry only — text excluded from BOTH backends",
+           renderer:G2.renderer,webglAccelerated:G2.accelerated,
+           canvas2d:c2,webgl:gl};
+  if(!gl.unavailable&&!gl.error&&c2.p50>0)
+    out.verdict=(c2.p50/gl.p50>=1.5)
+      ? ("WebGL is "+(c2.p50/gl.p50).toFixed(2)+"x faster on geometry — a port is worth costing")
+      : ((gl.p50/c2.p50>=1.2)
+         ? ("canvas2d is "+(gl.p50/c2.p50).toFixed(2)+"x faster — do not port, PROVIDED "+
+            "chrome://gpu reports Canvas: Hardware accelerated")
+         : "within noise — canvas2d wins on simplicity, do not port");
+  return out;
+}
+
 function deviceReport(FPS){
   if(!FPS) return Promise.resolve("device report: no frame meter on this page");
   var gpu=gpuInfo(), st=FPS.stats(), cad=FPS.cadence(), gaps=FPS.raw();
@@ -2887,6 +2940,20 @@ function deviceReport(FPS){
     } else {
       v.push("CLEAN. Live drops "+(st?st.dropPct:"?")+"%, browser floor "+base.dropPct+"%, no thermal or");
       v.push("clock drift. This device is doing what it should.");
+    }
+    /* the GL question, answered on the machine that has to answer it */
+    var GC=null;
+    try{ GC=glCompare({frames:40,w:1920,h:1080}); }catch(e){}
+    if(GC){
+      L.push("CANVAS2D vs WEBGL  (geometry only, "+GC.primsPerFrame+" prims/frame)");
+      L.push("  canvas2d      p50 "+(GC.canvas2d.p50!==undefined?GC.canvas2d.p50:"-")+
+             " ms   p95 "+(GC.canvas2d.p95!==undefined?GC.canvas2d.p95:"-")+" ms");
+      if(GC.webgl.unavailable) L.push("  webgl         unavailable on this device");
+      else if(GC.webgl.error)  L.push("  webgl         failed: "+GC.webgl.error);
+      else L.push("  webgl         p50 "+GC.webgl.p50+" ms   p95 "+GC.webgl.p95+
+                  " ms   drawCalls "+GC.webgl.drawCalls);
+      if(GC.verdict) L.push("  -> "+GC.verdict);
+      L.push("");
     }
     L.push("VERDICT");
     v.forEach(function(x){ L.push("  "+x); });
@@ -7967,7 +8034,8 @@ function bootApp(){
 
        Run it ON THE DEVICE. A desktop answer is worthless here, which is the
        same reason the device report exists. */
-    glbench:function(opts){
+    glbench:function(opts){ return glCompare(opts); },
+    glbenchOld:function(opts){
       opts=opts||{};
       var cue=opts.cue||"flyover3d", team=opts.team||state.team;
       var lid=opts.layout||"row4", L=LAYOUTS[lid]||LAYOUTS.row4;
