@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0044";
+var VERSION = "v1.0045";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -932,6 +932,21 @@ var LINK = (function(){
   /* Ask one output to profile ITSELF and post the report back. The screens are
      the only place these numbers mean anything -- a desktop's frame times say
      nothing about an Orin -- and they are exactly the machines nobody can reach. */
+  /* ask one output for a named measurement and get the JSON back */
+  api.measure=function(rank,which,o,timeoutMs){
+    return new Promise(function(res){
+      if(!cli||!cli.connected||!api.on()){ res(null); return; }
+      var done=false;
+      function finish(v){ if(done) return; done=true; delete diagWait[rank]; res(v); }
+      diagWait[rank]=finish;
+      api.cmd("measure",rank,null);
+      cli.publish(topic("cmd"), JSON.stringify({
+        c:"measure", tv:rank, m:which, o:o||{}, at:nowMs()+api.lead,
+        id:"m"+Date.now().toString(36)+Math.floor(Math.random()*1e9).toString(36)
+      }), false);
+      setTimeout(function(){ finish(null); }, timeoutMs||30000);
+    });
+  };
   api.deviceReport=function(rank,timeoutMs){
     return new Promise(function(res){
       if(!cli||!cli.connected||!api.on()){ res(null); return; }
@@ -977,6 +992,21 @@ var LINK = (function(){
         var u=location.href.split("#")[0].replace(/([?&])cb=\d+&?/,"$1");
         u+=(u.indexOf("?")<0?"?":"&")+"cb="+Math.floor(Date.now()/1000);
         location.replace(u+location.hash);
+      }
+      else if(m.c==="measure"){
+        /* a NAMED measurement with parameters -- never arbitrary code. This
+           travels over a PUBLIC broker where the room code is the only secret,
+           so a remote eval would be a hole in every wall running it. */
+        try{
+          var mr;
+          if(m.m==="gl") mr=glCompare(m.o||{});
+          else mr=frameProfile(m.o||{});
+          cli.publish(topic("diagr"), JSON.stringify(
+            {tv:myRank,txt:JSON.stringify(mr,null,1)}), false);
+        }catch(e){
+          cli.publish(topic("diagr"), JSON.stringify(
+            {tv:myRank,txt:"measure failed: "+(e&&e.message||e)}), false);
+        }
       }
       else if(m.c==="diag"){
         /* profiling takes a few seconds of real frames; publish when it lands */
@@ -2886,6 +2916,54 @@ function medOf(a){
 /* The two-backend comparison, at module scope so an OUTPUT can run it. The
    control room can type into a console; a kiosk cannot, and the kiosk is the
    only machine whose numbers mean anything. */
+/* Grammar build and render, timed SEPARATELY, at a real output surface.
+
+   The train reads p50 0.6 ms and p99 14.6 ms against a 16.67 ms budget -- a
+   tail problem, not an average one -- and the loop that found it rebuilt the
+   frame each iteration, so build and draw were attributed together. They have
+   completely different fixes, so they get measured apart before anything else
+   is touched.
+
+   Returns percentiles for each, plus a gap histogram, so a tail that CLUSTERS
+   (GC, thermal) can be told from one that is spread evenly (steady overrun). */
+function frameProfile(opts){
+  opts=opts||{};
+  var cue=opts.cue||"train", team=opts.team||"TEX";
+  var lid=opts.layout||"row4", L=LAYOUTS[lid]||LAYOUTS.row4;
+  var w=opts.w||1920, h=opts.h||1080, N=opts.frames||120, idx=opts.tv||1;
+  var ev=makeEvent(cue,team,RIVAL[team]||"OU");
+  var g=geoOf(L), cell=L.cells[Math.min(idx-1,L.cells.length-1)];
+  var cv=document.createElement("canvas");
+  cv.style.cssText="position:fixed;left:-99999px;top:0";
+  document.body.appendChild(cv);
+  var R2=makeRenderer(cv);
+  R2.resize(w,h,g.rect(cell),1);
+  var build=[], draw=[], i, t0, fr;
+  for(i=0;i<10;i++) R2.draw(frameAt(ev,L,ev.d*i/N,FX),null);      /* warm */
+  for(i=0;i<N;i++){
+    t0=performance.now(); fr=frameAt(ev,L,ev.d*i/N,FX); build.push(performance.now()-t0);
+    t0=performance.now(); R2.draw(fr,null);              draw.push(performance.now()-t0);
+  }
+  try{ document.body.removeChild(cv); }catch(e){}
+  function pct(a){
+    var s2=a.slice().sort(function(x,y){ return x-y; });
+    var q=function(p){ return +s2[Math.min(s2.length-1,Math.floor(s2.length*p))].toFixed(3); };
+    var sum=0; for(var k=0;k<a.length;k++) sum+=a[k];
+    return {mean:+(sum/a.length).toFixed(3),p50:q(0.5),p95:q(0.95),p99:q(0.99),max:q(1)};
+  }
+  /* where in the run the slow frames landed — clustered or spread */
+  var tot=[], hot=[];
+  for(i=0;i<N;i++){ tot.push(build[i]+draw[i]); }
+  var lim=pct(tot).p95;
+  for(i=0;i<N;i++) if(tot[i]>=lim) hot.push(i);
+  var layers=frameAt(ev,L,ev.d*0.5,FX).layers.length;
+  return { cue:cue, layout:lid, tv:idx, surface:w+"x"+h, frames:N,
+           layersMidCue:layers, fx:FX,
+           build:pct(build), draw:pct(draw), total:pct(tot),
+           slowFrameIndices:hot.slice(0,20),
+           note:"build = grammar, draw = renderer. Budget 16.67 ms at 60 Hz." };
+}
+
 function glCompare(opts){
   opts=opts||{};
   var cue=opts.cue||"flyover3d", team=opts.team||"TEX";
