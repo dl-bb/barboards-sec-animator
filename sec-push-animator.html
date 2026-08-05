@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0038";
+var VERSION = "v1.0039";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1665,7 +1665,14 @@ var TYPES=[
  desc:function(c){ return "Custom message on the touchdown animation"; },
  sr:{}},
 
-{id:"crawl", grp:"house", label:"The origin crawl", cue:"crawl", d:120000, house:true,
+{id:"gameday", grp:"show", label:"BarBoards College GameDay", cue:"gameday", d:22000, house:true,
+ amp:88,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0,
+ name:"COLLEGE GAMEDAY", sub:function(T){ return "LIVE FROM "+T.city.toUpperCase(); },
+ desc:function(c){ return "Show open — the crew drove here, and the room has signs"; },
+ sr:{}},
+
+{id:"crawl", grp:"show", label:"The origin crawl", cue:"crawl", d:120000, house:true,
  amp:40,win:0,tier:1,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
  period:1,clock:"15:00",hs:0,as:0,
  name:"THE ORIGIN CRAWL", sub:function(T){ return "CHAPTER IV · "+T.ab; },
@@ -1687,13 +1694,13 @@ var TYPES=[
  sub:function(T){ return "SIDE-SCROLLER · "+T.word; },
  desc:function(c){ return "House cue — the team train, lettered and rolling"; }, sr:{}},
 
-{id:"bbsports", grp:"tv", label:"BarBoards Sports open", cue:"bbsports", d:12000, house:true,
+{id:"bbsports", grp:"show", label:"BarBoards Sports open", cue:"bbsports", d:12000, house:true,
  amp:95,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
  period:1,clock:"15:00",hs:0,as:0,
  name:"BARBOARDS SPORTS", sub:"NETWORK OPEN · CHROME",
  desc:function(c){ return "Show open — the network package, chromed"; }, sr:{}},
 
-{id:"saturday", grp:"tv", label:"BarBoards Saturday open", cue:"saturday", d:14000, house:true,
+{id:"saturday", grp:"show", label:"BarBoards Saturday open", cue:"saturday", d:14000, house:true,
  amp:92,win:0,tier:3,reg:"celebratory", cat:"broadcast",type:null,play:null,yards:0,
  period:1,clock:"15:00",hs:0,as:0,
  name:"BARBOARDS SATURDAY", sub:"SHOW OPEN · TYPE-LED",
@@ -1889,7 +1896,8 @@ var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
    name rather than by event -- type your own words, play the record -- go first;
    the feed-driven ones follow in the order a game produces them. */
 var TYPE_GROUPS=[["custom","Custom message · your copy"],
-  ["music","Music · play it with the record"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
+  ["music","Music · play it with the record"],
+  ["show","Shows · pick these by name"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
   ["ritual","Ritual"],["house","House cues · no push event"],
   ["patron","Patron · interactive"],["tv","Broadcast furniture"],["bench","Benchmark"]];
@@ -3357,6 +3365,167 @@ G.runacross=function(u,C){
     o.push({k:"word",t:"Q"+C.ev.period+"  "+C.ev.clock,x:.5,y:.82,h:.06,col:hexA("#FFFFFF",.5),
             fit:.4,track:.2,a:cl(v3*4,0,1)});
   }
+  return {layers:o,phase:ph};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BARBOARDS COLLEGE GAMEDAY
+
+   The Saturday-morning campus show, which has a completely different identity
+   from the network opens already in this file. BarBoards Sports is chrome and
+   searchlights — a NETWORK announcing itself. This is the opposite: it is a
+   crew that drove somewhere, and everything about the look says so.
+
+   Four things carry that, and none of them are the logo:
+
+     · THE ROAD. It opens travelling, at dawn, with the city arriving. The show
+       is defined by having gone to the place rather than by having a studio.
+     · THE SIGNS. A jostling wall of hand-made cardboard behind the set is the
+       single most recognisable image in college football television. Rotated
+       rectangles, uneven, over-lapping, no two at the same angle.
+     · THE DESK. Three seats, outdoors, with the crowd behind it.
+     · THE PICK. The whole show builds to one man putting on a costume head.
+       No mascot is drawable generically, so the pick lands as the headgear
+       PLATE slamming onto one side of the matchup, which is the same beat.
+
+   Warm and daylit rather than black and chromed, because it is nine in the
+   morning and that is the entire point of the franchise. */
+function signText(T,O,i){
+  var L=[T.ab, "GO "+T.word, T.ab+" BY 40", "TABLE NINE PICKS "+T.ab,
+         "MY DAD BUYS ROUNDS", O.ab+" BUYS BREAKFAST", "WE HAVE THE HIGH GROUND",
+         "SEND IT", T.word+" OR NOTHING", "ASK ME ABOUT MY WINGS"];
+  return L[i%L.length];
+}
+G.gameday=function(u,C){
+  var T=C.T, O=TEAMS[C.ev.opp]||T, o=[], i, ph="";
+  var wide=(C.mode==="scroll"||C.mode==="grid");
+  var DAWN="#2A1B3D", SKY="#4A6FA5", SUN="#FFD9A0";
+
+  /* the sky, warming through the whole show */
+  var warm=cl(u*1.5,0,1);
+  o.push({k:"fill",col:mixHex(DAWN,SKY,warm)});
+  o.push({k:"lgrad",x:0,y:0,w:1,h:0.72,c0:mixHex(DAWN,SUN,0.22*warm),
+          c1:mixHex(DAWN,SKY,warm),dir:"v"});
+  o.push({k:"glow",x:0.22+0.10*u,y:0.60-0.16*warm,r:0.34,
+          col:hexA(SUN,0.16+0.14*warm),a:1});
+
+  /* A · the road */
+  if(u<0.18){
+    ph="the road";
+    var av=seg(u,0,.18);
+    for(i=0;i<24;i++){
+      var rx=((i*0.09)-av*1.6)%1.2-0.1;
+      o.push({k:"band",x:rx,y:0.845,w:0.038,h:0.006,col:hexA("#FFFFFF",0.30)});
+    }
+    o.push({k:"band",x:0,y:0.80,w:1,h:0.22,col:mixHex(DAWN,"#000000",0.45)});
+    /* the rig, arriving */
+    var bx=mix(-0.34,0.30,eo(av));
+    o.push({k:"band",x:bx,y:0.60,w:0.30,h:0.20,col:T.p});
+    o.push({k:"band",x:bx,y:0.60,w:0.30,h:0.035,col:mixHex(T.p,"#FFFFFF",0.35)});
+    o.push({k:"band",x:bx+0.02,y:0.635,w:0.10,h:0.06,col:hexA("#0A0D14",0.85)});
+    o.push({k:"word",t:T.ab,x:bx+0.21,y:0.71,h:0.055,col:"#FFFFFF",fit:0.10,track:0.04});
+    o.push({k:"dot",x:bx+0.06,y:0.815,r:0.022,col:"#15181E"});
+    o.push({k:"dot",x:bx+0.24,y:0.815,r:0.022,col:"#15181E"});
+    o.push({k:"glow",x:bx+0.31,y:0.68,r:0.10,col:hexA(SUN,0.5*av),a:1});
+    if(av>0.30)
+      o.push({k:"word",t:"GAMEDAY IS COMING TO",x:0.5,y:0.26,h:0.048,
+              col:hexA("#FFFFFF",0.75*seg(av,.30,.55)),fit:0.62,track:0.22});
+    if(av>0.48)
+      o.push({k:"word",t:T.city.toUpperCase(),x:0.5,y:0.40,h:0.13,
+              col:"#FFFFFF",fit:0.80,track:0.05,sc:mix(1.18,1,eo(seg(av,.48,.80)))});
+  }
+  /* B · the campus */
+  else if(u<0.36){
+    ph="the campus";
+    var bv=seg(u,.18,.36);
+    for(i=0;i<20;i++){
+      var bh=0.10+det(i+721)*0.20, bw=0.030+det(i+731)*0.035;
+      o.push({k:"band",x:0.02+i*0.050,y:0.80-bh,w:bw,h:bh,
+              col:hexA(mixHex(DAWN,"#000000",0.35),0.9)});
+    }
+    o.push({k:"band",x:0,y:0.80,w:1,h:0.22,col:mixHex(DAWN,"#000000",0.5)});
+    o.push({k:"word",t:T.venue.toUpperCase(),x:0.5,y:0.34,h:0.075,
+            col:"#FFFFFF",fit:0.86,track:0.06,a:cl(bv*4,0,1)});
+    o.push({k:"word",t:T.word+"  vs  "+O.word,x:0.5,y:0.50,h:0.10,
+            col:hexA(T.p,cl(bv*3,0,1)),fit:0.82,track:0.04});
+  }
+  /* C · the signs */
+  else if(u<0.58){
+    ph="the signs";
+    var cv=seg(u,.36,.58);
+    o.push({k:"band",x:0,y:0.78,w:1,h:0.24,col:mixHex(DAWN,"#000000",0.5)});
+    /* cardboard: uneven, overlapping, no two at the same angle — which is the
+       whole reason the image reads as a crowd and not as a graphic */
+    for(i=0;i<14;i++){
+      var up=cl(cv*2.2-det(i+741)*0.9,0,1);
+      if(up<=0) continue;
+      var sx=0.03+i*0.070+det(i+751)*0.02;
+      var sy=0.72-0.42*up-det(i+761)*0.10;
+      var sw=0.085+det(i+771)*0.045, sh=0.085+det(i+781)*0.035;
+      var rot=-16+det(i+791)*32;
+      o.push({k:"band",x:sx,y:sy,w:sw,h:sh,col:"#E8DFC8",rot:rot});
+      o.push({k:"band",x:sx,y:sy,w:sw,h:sh*0.16,col:hexA("#0A0D14",0.18),rot:rot});
+      o.push({k:"word",t:signText(T,O,i),x:sx+sw*0.5,y:sy+sh*0.58,h:0.026,
+              col:"#22262E",fit:sw*0.92,track:0.02});
+    }
+    o.push({k:"word",t:"THE ROOM HAS OPINIONS",x:0.5,y:0.90,h:0.05,
+            col:hexA("#FFFFFF",0.8*cl(cv*3,0,1)),fit:0.60,track:0.20});
+  }
+  /* D · the desk */
+  else if(u<0.76){
+    ph="the desk";
+    var dv=seg(u,.58,.76);
+    for(i=0;i<26;i++)
+      o.push({k:"dot",x:0.02+i*0.0385,y:0.60+det(i+801)*0.03,r:0.020,
+              col:hexA(mixHex(DAWN,"#000000",0.4),0.95)});
+    plate(o,0.10,0.66,0.80,0.20,mixHex(T.deep,T.p,0.30),1,hexA("#FFFFFF",0.28),-8);
+    for(i=0;i<3;i++)
+      o.push({k:"dot",x:0.28+i*0.22,y:0.62,r:0.045,col:mixHex(DAWN,"#000000",0.2)});
+    o.push({k:"word",t:"BARBOARDS COLLEGE GAMEDAY",x:0.5,y:0.30,h:0.070,
+            col:"#FFFFFF",fit:0.88,track:0.10,a:cl(dv*4,0,1)});
+    o.push({k:"word",t:T.venue.toUpperCase(),x:0.5,y:0.44,h:0.042,
+            col:hexA("#FFFFFF",0.66*cl(dv*3,0,1)),fit:0.70,track:0.18});
+    o.push({k:"word",t:"LIVE FROM "+T.city.toUpperCase(),x:0.5,y:0.765,h:0.045,
+            col:"#FFFFFF",fit:0.60,track:0.16,a:cl(dv*2.5,0,1)});
+  }
+  /* E · the pick */
+  else if(u<0.93){
+    ph="the pick";
+    var ev2=seg(u,.76,.93);
+    var drop=eb(cl(ev2*2.2,0,1));
+    o.push({k:"word",t:"AND THE PICK IS",x:0.5,y:0.20,h:0.050,
+            col:hexA("#FFFFFF",0.85),fit:0.60,track:0.22});
+    /* two sides; the headgear lands on one of them */
+    plate(o,0.06,0.42,0.40,0.26,mixHex(O.p,"#000000",0.35),0.55,null,-10);
+    o.push({k:"word",t:O.ab,x:0.26,y:0.55,h:0.11,col:hexA("#FFFFFF",0.45),fit:0.30});
+    plate(o,0.54,0.42,0.40,0.26,T.p,1,hexA("#FFFFFF",0.35),-10);
+    o.push({k:"word",t:T.ab,x:0.74,y:0.55,h:0.11,col:"#FFFFFF",fit:0.30});
+    /* the headgear, dropping onto the home side */
+    var hy=mix(-0.30,0.34,drop);
+    o.push({k:"band",x:0.60,y:hy,w:0.28,h:0.16,col:mixHex(T.p,"#FFFFFF",0.18),rot:-6});
+    o.push({k:"band",x:0.60,y:hy,w:0.28,h:0.035,col:"#FFFFFF",rot:-6});
+    o.push({k:"word",t:T.nick.toUpperCase(),x:0.74,y:hy+0.10,h:0.045,
+            col:mixHex(T.deep,"#FFFFFF",0.9),fit:0.26,track:0.04});
+    if(ev2>0.44){
+      var fl=seg(ev2,.44,.56);
+      o.push({k:"flash",a:(1-fl)*0.7});
+      o.push({k:"word",t:T.call.toUpperCase(),x:0.5,y:0.84,h:0.055,
+              col:hexA("#FFFFFF",cl((ev2-0.44)*4,0,1)),fit:0.72,track:0.14});
+    }
+  }
+  /* F · lockup */
+  else{
+    ph="lockup";
+    var fv=seg(u,.93,1);
+    o.push({k:"word",t:"BARBOARDS",x:0.5,y:0.36,h:0.16,col:"#FFFFFF",
+            fit:0.86,track:0.03,a:cl(fv*5,0,1)});
+    o.push({k:"word",t:"COLLEGE GAMEDAY",x:0.5,y:0.53,h:0.085,col:hexA(T.p,0.95),
+            fit:0.84,track:0.10,a:cl(fv*4,0,1)});
+    o.push({k:"band",x:0.14,y:0.63,w:0.72,h:0.004,col:hexA("#FFFFFF",0.5*cl(fv*3,0,1))});
+    o.push({k:"word",t:T.venue.toUpperCase(),x:0.5,y:0.73,h:0.042,
+            col:hexA("#FFFFFF",0.6*cl(fv*3,0,1)),fit:0.70,track:0.18});
+  }
+  o.push({k:"vig",a:0.26});
   return {layers:o,phase:ph};
 };
 
@@ -6083,6 +6252,9 @@ var PHASES = {
   custom:[[0,.24,"Run","line one crosses"],[.24,.48,"Land","line two"],
           [.48,.528,"Flash","384 ms"],[.528,.86,"Payoff","team finish"],
           [.86,1,"Lockup","line two + line three"]],
+  gameday:[[0,.18,"The road","the crew arrives"],[.18,.36,"The campus","where we are"],
+           [.36,.58,"The signs","the room has opinions"],[.58,.76,"The desk","live from"],
+           [.76,.93,"The pick","the headgear lands"],[.93,1,"Lockup","College GameDay"]],
   crawl:[[0,.08,"The card","in a galaxy far, far away"],[.08,.17,"The mark","falls away"],
          [.17,.95,"The crawl","the whole sorry history"],[.95,1,"Lockup","where you are"]],
   jungle:[[0,.041,"Intro","guitar alone"],[.041,.085,"Riff","the grid locks"],
