@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0049";
+var VERSION = "v1.0050";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1776,6 +1776,30 @@ var TYPES=[
 
 /* ── benchmark ─────────────────────────────────────────────────────────
    Deliberately heavy. Not for a wall on a Saturday; for finding the knee. */
+{id:"lad-calls", grp:"bench", label:"Ladder · draw calls", cue:"probe", d:12000, house:true,
+ amp:1,win:0,tier:0,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0, probe:"calls",
+ name:"LADDER · CALLS", sub:"SCALE WITH ?load=",
+ desc:function(c){ return "Benchmark — isolates calls cost"; }, sr:{}},
+
+{id:"lad-fill", grp:"bench", label:"Ladder · fill area", cue:"probe", d:12000, house:true,
+ amp:1,win:0,tier:0,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0, probe:"fill",
+ name:"LADDER · FILL", sub:"SCALE WITH ?load=",
+ desc:function(c){ return "Benchmark — isolates fill cost"; }, sr:{}},
+
+{id:"lad-state", grp:"bench", label:"Ladder · state changes", cue:"probe", d:12000, house:true,
+ amp:1,win:0,tier:0,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0, probe:"state",
+ name:"LADDER · STATE", sub:"SCALE WITH ?load=",
+ desc:function(c){ return "Benchmark — isolates state cost"; }, sr:{}},
+
+{id:"lad-text", grp:"bench", label:"Ladder · text", cue:"probe", d:12000, house:true,
+ amp:1,win:0,tier:0,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0, probe:"text",
+ name:"LADDER · TEXT", sub:"SCALE WITH ?load=",
+ desc:function(c){ return "Benchmark — isolates text cost"; }, sr:{}},
+
 {id:"flyover", grp:"bench", label:"Stadium flyover", cue:"flyover", d:24000, house:true,
  amp:99,win:0,tier:3,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
  period:1,clock:"15:00",hs:0,as:0,
@@ -1961,7 +1985,7 @@ function makeEvent(typeId,teamKey,oppKey){
   return {
     id:ty.id+":"+tk+":"+ok+(ty.id==="custom"?(":"+TXT1+"/"+TXT2+"/"+TXT3):""),
     typeId:ty.id, team:tk, opp:ok,
-    grp:ty.grp, label:ty.label, cue:ty.cue, house:!!ty.house,
+    grp:ty.grp, label:ty.label, cue:ty.cue, house:!!ty.house, probe:ty.probe,
     d:(typeof ty.d==="function")?ty.d(T):ty.d,
     amp:ty.amp, win:ty.win, tier:ty.tier, reg:ty.reg,
     cat:ty.cat, type:ty.type, play:ty.play, yards:ty.yards, dir:ty.dir,
@@ -3848,6 +3872,68 @@ G.runacross=function(u,C){
             fit:.4,track:.2,a:cl(v3*4,0,1)});
   }
   return {layers:o,phase:ph};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE LADDER — synthetic cues that isolate ONE cost at a time
+
+   Comparing rail against the train tells you the train is dearer. It does not
+   tell you WHY, because they differ in every dimension at once: call count,
+   fill area, state changes, text. You cannot optimise against that.
+
+   These four vary exactly one axis and hold the rest flat, so a soak on each
+   says which dimension the 6490 actually charges for:
+
+     calls   thousands of TINY opaque rects   -- many draw calls, almost no fill
+     fill    a handful of HUGE translucent    -- almost no calls, enormous fill
+             rects stacked                       and heavy overdraw
+     state   bands that change colour and     -- forces a fillStyle write and a
+             rotation on every primitive         matrix write per primitive
+     text    many short words                 -- glyph raster and atlas pressure
+
+   ?load= scales each from 1 to 40, so the same cue walks from trivial to
+   hopeless and the knee is measurable rather than guessed at. */
+G.probe=function(u,C){
+  var T=C.T, o=[], i, mode=C.ev.probe||"calls";
+  var N=LOAD;                              /* ?load= is the rung on the ladder */
+  o.push({k:"fill",col:T.deep});
+
+  if(mode==="calls"){
+    /* many tiny opaque rects: maximum draw calls, minimal pixels touched */
+    var n=60*N, cols=Math.ceil(Math.sqrt(n*3)), rows=Math.ceil(n/cols);
+    for(i=0;i<n;i++){
+      var cx=(i%cols)/cols, cy=Math.floor(i/cols)/Math.max(1,rows);
+      o.push({k:"band",x:cx*0.98+0.01,y:cy*0.9+0.05,w:0.004,h:0.012,
+              col:(i%2)?T.p:T.s});
+    }
+  }
+  else if(mode==="fill"){
+    /* few calls, enormous translucent area — this is the overdraw axis */
+    for(i=0;i<3*N;i++){
+      var ph=(u*0.5+i*0.017)%1;
+      o.push({k:"band",x:-0.05+ph*0.1,y:-0.05,w:1.1,h:1.1,
+              col:hexA((i%2)?T.p:T.s,0.05)});
+    }
+  }
+  else if(mode==="state"){
+    /* every primitive forces a new fillStyle AND a new matrix */
+    for(i=0;i<40*N;i++){
+      var g=(i*37)%256;
+      o.push({k:"band",x:(i%50)/50*0.96+0.02,y:Math.floor(i/50)%18/18*0.9+0.05,
+              w:0.03,h:0.006,rot:(i*11+u*360)%360,
+              col:"rgb("+g+","+((g*3)%256)+","+((g*7)%256)+")"});
+    }
+  }
+  else{ /* text */
+    for(i=0;i<12*N;i++){
+      o.push({k:"word",t:T.ab+(i%97),x:(i%8)/8*0.9+0.06,
+              y:(Math.floor(i/8)%14)/14*0.86+0.08,h:0.035,
+              col:(i%2)?"#FFFFFF":T.p,fit:0.11,track:0.02});
+    }
+  }
+  o.push({k:"word",t:mode.toUpperCase()+" x"+N,x:0.5,y:0.96,h:0.03,
+          col:hexA("#FFFFFF",0.5),fit:0.30,track:0.16});
+  return {layers:o,phase:"ladder · "+mode+" · load "+N+" · "+o.length+" layers"};
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -6766,6 +6852,7 @@ var PHASES = {
   flyover3d:[[0,.20,"Approach","the bowl appears"],[.20,.40,"The bowl","tiers and roof"],
              [.40,.66,"Card stunt","the crowd spells it"],[.66,.86,"Pyro","3D shells"],
              [.86,1,"Lockup","school + venue"]],
+  probe:[[0,1,"Ladder","one axis at a time"]],
   flyover:[[0,.14,"Approach","starfield"],[.14,.30,"Exterior","floodlights"],
            [.30,.44,"The bowl","tiers"],[.44,.62,"Card stunt","the crowd spells it"],
            [.62,.80,"Pyro","shells"],[.80,1,"Lockup","school + venue"]]
