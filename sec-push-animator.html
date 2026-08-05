@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0050";
+var VERSION = "v1.0051";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -2996,7 +2996,9 @@ function medOf(a){
 function frameProfile(opts){
   opts=opts||{};
   var cue=opts.cue||"train", team=opts.team||"TEX";
-  var lid=opts.layout||"row4", L=LAYOUTS[lid]||LAYOUTS.row4;
+  /* the rig is two screens. row4 was an inherited default and it quietly
+     changed the surface every measurement was taken against. */
+  var lid=opts.layout||"pair", L=LAYOUTS[lid]||LAYOUTS.pair;
   var w=opts.w||1920, h=opts.h||1080, N=opts.frames||120, idx=opts.tv||1;
   var ev=makeEvent(cue,team,RIVAL[team]||"OU");
   var g=geoOf(L), cell=L.cells[Math.min(idx-1,L.cells.length-1)];
@@ -3034,7 +3036,9 @@ function frameProfile(opts){
 function glCompare(opts){
   opts=opts||{};
   var cue=opts.cue||"flyover3d", team=opts.team||"TEX";
-  var lid=opts.layout||"row4", L=LAYOUTS[lid]||LAYOUTS.row4;
+  /* the rig is two screens. row4 was an inherited default and it quietly
+     changed the surface every measurement was taken against. */
+  var lid=opts.layout||"pair", L=LAYOUTS[lid]||LAYOUTS.pair;
   var w=opts.w||1920, h=opts.h||1080, frames=opts.frames||60;
   var ev=makeEvent(cue,team,RIVAL[team]||"OU");
   var g=geoOf(L), r=g.rect(L.cells[0]), specs=[], i;
@@ -7263,8 +7267,20 @@ function bootTV(){
           });
           var st=null; try{ st=FPS.stats(); }catch(e){}
           var hz=(st&&st.hz)?st.hz:60;
+          /* THE NUMBER ON THE TICKER. windowMinFps is the worst 3 s window
+             AVERAGE; tickerMin is the worst SINGLE FRAME the meter has seen,
+             which is what #dev shows and what someone watching the wall
+             reports. A window can average 59 and contain one frame at 39, so
+             these disagree by design -- and the ticker is the stricter of the
+             two, which makes it the one the stated bar is written against.
+             Both are reported so they can never be confused again. */
+          var tick=st?{min:st.min,avg:st.avg,max:st.max,cur:st.cur,
+                       dropPct:st.dropPct,worstJsMs:st.worstJsMs,
+                       worstBrowserMs:st.worstOtherMs}:null;
           res({ test:"soak", seconds:secs, windows:windows.length,
-                minFps:minFps, worstWindowDropPct:maxPct,
+                tickerMin:tick?tick.min:null,        /* what #dev shows */
+                ticker:tick,
+                windowMinFps:minFps, worstWindowDropPct:maxPct,
                 totalDrops:totDrops, totalFrames:totFrames,
                 overallDropPct:+(100*totDrops/Math.max(1,totFrames)).toFixed(2),
                 displayHz:st?st.hz:null,
@@ -7274,11 +7290,12 @@ function bootTV(){
                    whole animation. Not an average, not a p95 — the worst window
                    in the run has to hold the refresh rate, because one window
                    below it is a visible stutter on a wall someone is watching. */
-                pass: (minFps>=(hz-0.5) && maxPct===0),
-                verdict: (minFps>=(hz-0.5) && maxPct===0)
-                  ? ("PERFECT — min "+minFps+" fps held for the whole run, zero drops")
-                  : ("FAILS THE BAR — min "+minFps+" fps (needs "+hz+"), worst window "+
-                     maxPct+"% dropped") });
+                /* judged on the TICKER minimum, because that is the number
+                   being watched and the stricter of the two */
+                pass: (tick && tick.min>=hz-0.5 && maxPct===0),
+                verdict: (tick && tick.min>=hz-0.5 && maxPct===0)
+                  ? ("PERFECT — worst single frame "+tick.min+" fps, zero drops")
+                  : ("FAILS — ticker min "+(tick?tick.min:"?")+" fps (needs "+hz+"), window min "+minFps+", worst window "+maxPct+"% dropped") });
         }
       },3000);
     });
@@ -8398,7 +8415,9 @@ function bootApp(){
     glbenchOld:function(opts){
       opts=opts||{};
       var cue=opts.cue||"flyover3d", team=opts.team||state.team;
-      var lid=opts.layout||"row4", L=LAYOUTS[lid]||LAYOUTS.row4;
+      /* the rig is two screens. row4 was an inherited default and it quietly
+     changed the surface every measurement was taken against. */
+  var lid=opts.layout||"pair", L=LAYOUTS[lid]||LAYOUTS.pair;
       var w=opts.w||1920, h=opts.h||1080, frames=opts.frames||90;
       var ev=makeEvent(cue,team,RIVAL[team]||"OU");
       var g=geoOf(L), r=g.rect(L.cells[0]);
