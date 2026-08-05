@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0040";
+var VERSION = "v1.0041";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -8008,15 +8008,47 @@ function bootApp(){
       }
       var c2=run(makeRenderer,"canvas2d");
       var gl=run(makeGLRenderer,"webgl");
+      /* THE RESULT IS ONLY READABLE IF YOU KNOW WHAT WAS ACCELERATED.
+         On a desktop this compares accelerated canvas2d against accelerated
+         WebGL, and canvas2d wins because our primitives are overwhelmingly
+         axis-aligned rectangles hitting the fillRect fast path while the GL
+         side pays CPU to build a vertex buffer before it can make its one
+         call. That is a fair fight and canvas2d takes it.
+
+         It is NOT the same fight on an embedded target. Two things flip:
+
+           · if Chromium falls back to SOFTWARE canvas2d on L4T -- which the
+             device report checks for by name -- then WebGL is the only
+             accelerated path and wins by whatever the GPU is worth;
+           · the GL path is CPU-heavy BY CONSTRUCTION -- it expands every
+             primitive to triangles in JavaScript before it can make its one
+             call -- so on a part with a strong GPU and a modest CPU that work
+             may cost MORE, not less. That applies to Orin and applies harder
+             to a QCS6490, whose CPU is the weaker of the two.
+
+           · the 6490 draws on an Adreno 643, which is TILE-BASED. Tilers are
+             happiest with geometry submitted once and shaded cheaply, and
+             least happy with a large vertex buffer re-uploaded every frame,
+             which is exactly what this path does. Memory bandwidth is the
+             thing to watch there, not draw-call count.
+
+         Those pull opposite ways, which is exactly why this ships as a
+         measurement rather than as a conclusion. Run it on the device. */
+      var G2=gpuInfo();
       var res={ cue:cue, layout:lid, surface:w+"x"+h, frames:frames,
                 primsPerFrame:Math.round(prims),
                 note:"geometry only — text excluded from BOTH backends",
+                renderer:G2.renderer, webglAccelerated:G2.accelerated,
+                canvas2dAccelerated:"confirm at chrome://gpu — Canvas: Hardware accelerated",
                 canvas2d:c2, webgl:gl };
       if(!gl.unavailable && c2.p50>0)
         res.verdict = (c2.p50/gl.p50>=1.5)
           ? ("WebGL is "+(c2.p50/gl.p50).toFixed(2)+"x faster on geometry — a port is worth costing")
           : ((gl.p50/c2.p50>=1.2)
-             ? ("canvas2d is "+(gl.p50/c2.p50).toFixed(2)+"x faster here — do not port")
+             ? ("canvas2d is "+(gl.p50/c2.p50).toFixed(2)+"x faster here — do not port, "+
+                "PROVIDED canvas2d is hardware accelerated on this device. If chrome://gpu "+
+                "reports Canvas as software, this is measuring a CPU rasteriser and the "+
+                "answer flips.")
              : "within noise of each other — canvas2d wins on simplicity, do not port");
       return res;
     },
