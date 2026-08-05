@@ -78,6 +78,9 @@ body.copy .copyrow{display:flex}
   letter-spacing:.055em;text-transform:uppercase;padding:6px 7px}
 .cplab{font-family:"IBM Plex Mono",monospace;font-size:7.5px;letter-spacing:.19em;
   text-transform:uppercase;color:var(--dimmer);display:flex;justify-content:space-between}
+.findrow{display:flex;gap:4px;padding:6px 9px;border-bottom:1px solid var(--hair);
+  background:#0C0A09;flex:none}
+.findrow input{flex:1;min-width:0}
 .grphd{font-family:"IBM Plex Mono",monospace;font-size:7.5px;letter-spacing:.19em;text-transform:uppercase;
   color:var(--dimmer);padding:8px 10px 3px;background:#0C0A09;border-bottom:1px solid #191412;
   position:sticky;top:0;z-index:2}
@@ -338,7 +341,12 @@ body.badge #badge{display:flex}
       <input type="text" id="t3" maxlength="40" spellcheck="false" placeholder="(the venue)"
              title="Line three — the small line under the lockup">
     </div>
-    <div class="hd"><h2>Push event</h2><span class="lb" id="evcount">—</span></div>
+    <div class="hd"><h2>Cue</h2><span class="lb" id="evcount">—</span></div>
+    <div class="findrow">
+      <input type="text" id="evFind" placeholder="find a cue…" spellcheck="false"
+             title="Filters by name, group or id — try: jungle, train, chrome, bug">
+      <button class="btn" id="evClear" title="Clear the filter">×</button>
+    </div>
     <div class="scroll" id="evlist"></div>
   </section>
 
@@ -577,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0035";
+var VERSION = "v1.0036";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1657,7 +1665,7 @@ var TYPES=[
  desc:function(c){ return "Custom message on the touchdown animation"; },
  sr:{}},
 
-{id:"jungle", grp:"house", label:"Welcome to the Jungle · 4:31", cue:"jungle", d:271000, house:true,
+{id:"jungle", grp:"music", label:"Welcome to the Jungle · 4:31", cue:"jungle", d:271000, house:true,
  amp:100,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
  period:1,clock:"15:00",hs:0,as:0,
  name:function(T){ return "WELCOME TO THE JUNGLE"; },
@@ -1767,7 +1775,11 @@ var JUNGLE={
 };
 
 var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
-var TYPE_GROUPS=[["custom","Custom message · your copy"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
+/* Order is FINDABILITY, not taxonomy. The two cues an operator reaches for by
+   name rather than by event -- type your own words, play the record -- go first;
+   the feed-driven ones follow in the order a game produces them. */
+var TYPE_GROUPS=[["custom","Custom message · your copy"],
+  ["music","Music · play it with the record"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
   ["ritual","Ritual"],["house","House cues · no push event"],
   ["patron","Patron · interactive"],["tv","Broadcast furniture"],["bench","Benchmark"]];
@@ -3354,125 +3366,262 @@ G.jungle=function(u,C){
     o.push({k:"word",t:txt,x:0.5,y:y,h:h,col:hexA("#FFFFFF",0.94*a),fit:0.86,track:tk});
   }
 
-  /* ── the arrangement ─────────────────────────────────────────────────── */
+  /* ── the pictures ───────────────────────────────────────────────────────
+     A music video does not pile everything into one frame — it CUTS, and each
+     section is a different image. So the contrast discipline of the rally clap
+     stays exactly as it was (flood on the beat, one enormous word, nothing
+     spare) and what changes between sections is the PICTURE, not the amount of
+     furniture. Twenty-odd layers a frame, and no two sections look alike.
+
+     The song is about arriving somewhere that eats you, which transposes onto a
+     visiting side walking into a full stadium without any help at all. Each
+     motif below is that idea at that moment: arrival, the teeth, the crowd, the
+     offer, being driven down, being worn down, the cage, the hunt, the eyes in
+     the dark, the heartbeat, and the aftermath.
+
+     No words from the record appear on screen. The pictures carry it. */
+
+  /* headlights on a road, still a long way out */
+  function arrival(p){
+    var z=Math.pow(p,2.2), gap=0.02+z*0.30, y=0.44+z*0.16, r=0.006+z*0.055;
+    o.push({k:"band",x:0.5-0.02-z*0.45,y:0.60,w:0.04+z*0.9,h:0.004,col:hexA("#FFFFFF",0.05+0.10*z)});
+    o.push({k:"glow",x:0.5-gap,y:y,r:r*4,col:hexA("#FFE9A8",0.30*z),a:1});
+    o.push({k:"glow",x:0.5+gap,y:y,r:r*4,col:hexA("#FFE9A8",0.30*z),a:1});
+    o.push({k:"dot",x:0.5-gap,y:y,r:r,col:hexA("#FFF6D8",0.5+0.5*z)});
+    o.push({k:"dot",x:0.5+gap,y:y,r:r,col:hexA("#FFF6D8",0.5+0.5*z)});
+  }
+  /* teeth, top and bottom, closing on the beat */
+  function jaws(bite){
+    var d2=0.055+0.075*bite;
+    for(i=0;i<11;i++){
+      var jx=i/10;
+      o.push({k:"tri",x:jx,y:-0.01+d2,w:0.10,h:d2,col:mixHex(T.deep,"#000000",0.4),dir:"down"});
+      o.push({k:"tri",x:jx+0.05,y:1.01-d2,w:0.10,h:d2,col:mixHex(T.deep,"#000000",0.4),dir:"up"});
+    }
+    o.push({k:"band",x:0,y:0,w:1,h:0.012,col:hexA(T.p,0.35+0.4*bite)});
+    o.push({k:"band",x:0,y:0.988,w:1,h:0.012,col:hexA(T.p,0.35+0.4*bite)});
+  }
+  /* the room standing up: heads, and arms that go up on the beat */
+  function crowd(lift){
+    for(i=0;i<26;i++){
+      var cxx=i*0.0395+0.008, ch=0.055+det(i+401)*0.045;
+      var up=((bi+i)%4===0)?hit:((bi+i)%2===0?back*0.5:0);
+      o.push({k:"dot",x:cxx,y:0.965-ch*0.5-0.02*up*lift,r:ch*0.42,col:"#05070B"});
+      o.push({k:"band",x:cxx-0.006,y:0.965-ch*0.5,w:0.012,h:0.06,col:"#05070B"});
+      if(up>0.25)
+        o.push({k:"band",x:cxx+ch*0.30,y:0.90-0.085*up*lift,w:0.008,h:0.085*up*lift,
+                col:hexA("#05070B",0.9)});
+    }
+  }
+  /* the offer: neon that promises and flickers */
+  function neon(){
+    for(i=0;i<7;i++){
+      var flick=(det(bar*7+i+411)>0.16)?1:0.25;
+      var nx=0.055+i*0.145, nw=0.09, nh=0.055+det(i+421)*0.10;
+      o.push({k:"band",x:nx,y:0.14+det(i+431)*0.10,w:nw,h:nh,
+              col:hexA(T.p,0.10*flick)});
+      o.push({k:"band",x:nx,y:0.14+det(i+431)*0.10,w:nw,h:0.006,
+              col:hexA("#FFFFFF",0.55*flick)});
+      o.push({k:"band",x:nx,y:0.14+det(i+431)*0.10+nh,w:nw,h:0.006,
+              col:hexA(T.p,0.75*flick)});
+    }
+  }
+  /* driven down: bars that slam from the top on every beat */
+  function slam(){
+    for(i=0;i<9;i++){
+      var s2=((bi+i)%2===0)?hit:back;
+      o.push({k:"band",x:i*0.111,y:0,w:0.085,h:0.10+0.42*s2,
+              col:hexA(T.p,0.10+0.30*s2)});
+    }
+  }
+  /* worn down: one more scratch every bar, and they stay */
+  function claws(n){
+    var c2=Math.min(15,n);
+    for(i=0;i<c2;i++){
+      var g2=Math.floor(i/3), k2=i%3;
+      var sx2=0.08+g2*0.19+k2*0.022, sy2=0.16+det(g2+441)*0.5;
+      var age=cl((n-i)/6,0,1);
+      o.push({k:"band",x:sx2,y:sy2,w:0.006,h:0.16+det(i+451)*0.12,
+              col:hexA("#FFFFFF",0.10+0.30*age),rot:14+det(g2+461)*10});
+    }
+  }
+  /* the cage comes down */
+  function cage(p){
+    for(i=0;i<13;i++)
+      o.push({k:"band",x:0.02+i*0.078,y:-0.02,w:0.012,h:0.06+1.0*p,
+              col:hexA("#0A0D14",0.85)});
+    o.push({k:"band",x:0,y:0.04+1.0*p,w:1,h:0.014,col:hexA("#0A0D14",0.9)});
+  }
+  /* something circling, and lights trying to find it */
+  function hunt(){
+    var ang=b*0.55;
+    for(i=0;i<3;i++){
+      var aa=ang+i*2.094, rr=0.30+0.05*Math.sin(b*0.9+i);
+      o.push({k:"dot",x:0.5+Math.cos(aa)*rr*0.56,y:0.48+Math.sin(aa)*rr,
+              r:0.012+0.006*hit,col:hexA(T.p,0.65)});
+      o.push({k:"glow",x:0.5+Math.cos(aa)*rr*0.56,y:0.48+Math.sin(aa)*rr,
+              r:0.09,col:hexA(T.p,0.22),a:1});
+    }
+    for(i=0;i<4;i++){
+      var sw=((b*0.42+i*0.25)%1);
+      o.push({k:"band",x:sw*1.3-0.15,y:-0.05,w:0.016,h:1.1,
+              col:hexA("#FFFFFF",0.06+0.16*hit),skew:-26});
+    }
+  }
+  /* eyes opening in the dark, one pair at a time */
+  function eyes(n){
+    var c2=Math.min(9,n);
+    for(i=0;i<c2;i++){
+      var ex=0.10+ (i%5)*0.195 + (i>4?0.09:0), ey=0.24+Math.floor(i/5)*0.30+det(i+471)*0.10;
+      var blink=((bar+i)%5===0)?(0.3+0.7*hit):1;
+      var op=cl((n-i)*0.6,0,1)*blink;
+      o.push({k:"glow",x:ex+0.014,y:ey,r:0.055,col:hexA(T.p,0.16*op),a:1});
+      o.push({k:"dot",x:ex,y:ey,r:0.0075*op,col:hexA(T.p,0.95*op)});
+      o.push({k:"dot",x:ex+0.028,y:ey,r:0.0075*op,col:hexA(T.p,0.95*op)});
+    }
+  }
+  /* a pulse trace, getting faster */
+  function heart(rate,amp){
+    var pts=64, prev=0.5;
+    for(i=0;i<pts;i++){
+      var px=i/pts, ph2=((px*rate)+b*0.5)%1;
+      var yy=0.5;
+      if(ph2<0.06) yy=0.5-amp*(ph2/0.06);
+      else if(ph2<0.14) yy=0.5-amp+amp*2.1*((ph2-0.06)/0.08);
+      else if(ph2<0.22) yy=0.5+amp*1.1-amp*1.1*((ph2-0.14)/0.08);
+      o.push({k:"band",x:px,y:Math.min(yy,prev),w:0.018,h:Math.max(0.004,Math.abs(yy-prev)),
+              col:hexA("#FFFFFF",0.30+0.45*hit)});
+      prev=yy;
+    }
+  }
+  function embers(p){
+    for(i=0;i<16;i++)
+      o.push({k:"dot",x:(det(i+481)+t*0.005)%1,y:1-((t*0.022+det(i+491))%1)*0.95,
+              r:0.0022+det(i+501)*0.0032,col:hexA(T.p,p*(0.2+det(i+511)*0.5))});
+  }
+
+  /* ── the cuts ─────────────────────────────────────────────────────────── */
   var VL=[J[0], T.venue.toUpperCase(), J[1], T.city.toUpperCase()];
 
   if(t<JSEC.riff){
-    ph="intro · the room before anything";
+    ph="arrival";
     fl=0; ringOn=false; pips=false;
     var iv=seg2(JSEC.intro,JSEC.riff);
-    room();
-    o.push({k:"ring",x:0.5,y:0.46,r:0.10+0.30*iv,col:hexA(T.p,0.28*iv),w:2});
-    o.push({k:"word",t:J[0],x:0.5,y:0.46,h:0.062,
-            col:hexA("#FFFFFF",0.10+iv*0.45),fit:0.80,track:0.34});
+    room(); arrival(iv);
+    o.push({k:"word",t:J[0],x:0.5,y:0.80,h:0.055,
+            col:hexA("#FFFFFF",0.08+iv*0.42),fit:0.80,track:0.34});
   }
   else if(t<JSEC.band){
-    ph="riff · bar "+bar;
+    ph="the teeth · bar "+bar;
     fl=0.42;
-    room(); ring(0.8);
-    hero("JUNGLE",0.46,0.30);
-    o.push({k:"word",t:"WELCOME TO THE",x:0.5,y:0.25,h:0.070,
-            col:hexA("#FFFFFF",0.40+0.45*down),fit:0.80,track:0.26});
+    room(); jaws(hit); ring(0.8);
+    hero("JUNGLE",0.46,0.28);
+    o.push({k:"word",t:"WELCOME TO THE",x:0.5,y:0.26,h:0.066,
+            col:hexA("#FFFFFF",0.40+0.45*down),fit:0.78,track:0.26});
     count();
   }
   else if(t<JSEC.v1){
-    ph="band in · everything at once";
+    ph="the room stands up";
     fl=1.15;
-    room(); ring();
-    hero(T.word,0.44,0.34);
-    tag(J[1],0.74,0.052,0.80+0.20*back,0.22);
+    room(); jaws(hit*0.5); crowd(1); ring();
+    hero(T.word,0.40,0.32);
+    tag(J[1],0.66,0.050,0.80+0.20*back,0.22);
     count();
   }
-  else if(t<JSEC.c1 || (t>=JSEC.v2 && t<JSEC.c2)){
-    ph=(t<JSEC.c1?"verse 1":"verse 2");
+  else if(t<JSEC.c1){
+    ph="the offer";
     fl=0.80;
-    room(); ring(0.9);
-    /* one taunt a phrase, not a wall of them */
-    hero(VL[Math.floor(bar/2)%4],0.44,0.20);
-    o.push({k:"word",t:"WELCOME TO THE JUNGLE",x:0.5,y:0.72,h:0.058,
-            col:hexA("#FFFFFF",0.45+0.40*down),fit:0.82,track:0.18});
+    room(); neon(); crowd(0.5); ring(0.9);
+    hero(VL[Math.floor(bar/2)%4],0.46,0.19);
     count();
   }
-  else if(t<JSEC.v2 || (t>=JSEC.c2 && t<JSEC.bridge)){
-    ph=(t<JSEC.v2?"chorus 1":"chorus 2");
+  else if(t<JSEC.v2){
+    ph="driven down";
     fl=1.05;
-    room(); ring();
-    o.push({k:"word",t:"WELCOME",x:0.5,y:0.26,h:0.13,col:hexA("#FFFFFF",0.92),
-            fit:0.86,track:0.06});
-    hero("JUNGLE",0.56,0.34);
+    room(); slam(); ring();
+    o.push({k:"word",t:"WELCOME",x:0.5,y:0.30,h:0.11,col:hexA("#FFFFFF",0.92),
+            fit:0.84,track:0.06});
+    hero("JUNGLE",0.58,0.30);
+    count();
+  }
+  else if(t<JSEC.c2){
+    ph="worn down";
+    fl=0.80;
+    room(); claws(bar-Math.floor(JSEC.v2*1000/(60000/JBPM)/4)+2); crowd(0.4); ring(0.9);
+    hero(VL[Math.floor(bar/2)%4],0.46,0.19);
+    count();
+  }
+  else if(t<JSEC.bridge){
+    ph="driven down";
+    fl=1.05;
+    room(); slam(); ring();
+    o.push({k:"word",t:"WELCOME",x:0.5,y:0.30,h:0.11,col:hexA("#FFFFFF",0.92),
+            fit:0.84,track:0.06});
+    hero("JUNGLE",0.58,0.30);
     count();
   }
   else if(t<JSEC.solo){
-    ph="bridge";
+    ph="the cage";
     fl=0.85;
-    room(); ring(0.9);
-    hero(T.word,0.44,0.30);
-    tag(J[1],0.72,0.050,0.75+0.25*back,0.20);
+    var cv2=seg2(JSEC.bridge,JSEC.solo);
+    room(); cage(cv2*0.34); ring(0.9);
+    hero(T.word,0.46,0.28);
+    tag(J[1],0.74,0.048,0.75+0.25*back,0.20);
     count();
   }
   else if(t<JSEC.brk){
-    ph="solo";
+    ph="the hunt";
     fl=1.0;
-    room();
-    /* the solo is the one place something moves faster than the beat: rings
-       thrown on every beat rather than every bar, and they overlap */
-    for(i=0;i<3;i++){
-      var re=cl(1-((b-i*0.34)%1),0,1);
-      o.push({k:"ring",x:0.5,y:0.46,r:0.06+(1-re)*0.62,col:"#FFFFFF",
-              w:Math.max(1,7*re),a:re*0.34});
-    }
-    hero(T.word,0.44,0.32);
-    tag(T.call.toUpperCase(),0.74,0.050,0.70+0.30*back,0.20);
+    room(); hunt();
+    hero(T.word,0.46,0.30);
+    tag(T.call.toUpperCase(),0.76,0.048,0.70+0.30*back,0.20);
     count();
   }
   else if(t<JSEC.build){
-    ph="breakdown · you know where you are";
-    /* everything goes. Half time — the room breathes on the BAR, not the beat,
-       and the flood is a whisper of what it was. */
+    ph="eyes in the dark";
     fl=0.10; ringOn=false; pips=false;
     var kv=seg2(JSEC.brk,JSEC.build);
-    o.push({k:"fill",col:mixHex(T.deep,"#000000",0.55)});
-    o.push({k:"fill",col:T.p,a:0.10*down});
-    o.push({k:"ring",x:0.5,y:0.46,r:0.14+0.34*(1-down),col:hexA(T.p,0.30*down),w:3});
-    o.push({k:"word",t:"YOU KNOW WHERE YOU ARE?",x:0.5,y:0.34,h:0.058,
-            col:hexA("#FFFFFF",0.28+0.42*down),fit:0.80,track:0.18});
-    if(kv>0.30)
-      o.push({k:"word",t:J[0],x:0.5,y:0.54,h:0.15,
-              col:hexA("#FFFFFF",cl((kv-0.30)*3,0,1)*(0.55+0.45*down)),fit:0.84,track:0.05});
-    if(kv>0.70) tag("AND YOU ARE NOT LEAVING",0.76,0.044,cl((kv-0.70)*3,0,1)*0.8,0.20);
+    o.push({k:"fill",col:mixHex(T.deep,"#000000",0.58)});
+    o.push({k:"fill",col:T.p,a:0.09*down});
+    eyes(1+kv*9);
+    o.push({k:"word",t:"YOU KNOW WHERE YOU ARE?",x:0.5,y:0.50,h:0.055,
+            col:hexA("#FFFFFF",0.26+0.44*down),fit:0.80,track:0.18});
+    if(kv>0.45)
+      o.push({k:"word",t:J[0],x:0.5,y:0.66,h:0.13,
+              col:hexA("#FFFFFF",cl((kv-0.45)*3,0,1)*(0.55+0.45*down)),fit:0.82,track:0.05});
+    if(kv>0.78) tag("AND YOU ARE NOT LEAVING",0.84,0.042,cl((kv-0.78)*4,0,1)*0.8,0.20);
   }
   else if(t<JSEC.last){
-    ph="build";
+    ph="the heartbeat";
     var uv=seg2(JSEC.build,JSEC.last);
     fl=0.35+0.95*uv;
-    /* the pulse tightens: one flood a beat, then two, then four */
     var mult=1+Math.floor(uv*3);
     var fast=Math.pow(1-((b*mult)%1),2.2);
-    o.push({k:"fill",col:T.p,a:heat*(0.10+0.34*uv)*fast});
-    o.push({k:"ring",x:0.5,y:0.46,r:0.08+(1-fast)*0.5,col:"#FFFFFF",
-            w:Math.max(1,7*fast),a:fast*0.4*uv});
-    hero(T.word,0.44,0.24+0.10*uv);
-    o.push({k:"word",t:"YOU ARE IN THE JUNGLE",x:0.5,y:0.72,h:0.062,
-            col:hexA("#FFFFFF",0.40+0.55*fast),fit:0.82,track:0.16});
+    o.push({k:"fill",col:T.p,a:heat*(0.10+0.30*uv)*fast});
+    heart(2+Math.floor(uv*4), 0.10+0.16*uv);
+    hero(T.word,0.24,0.18+0.08*uv);
+    o.push({k:"word",t:"YOU ARE IN THE JUNGLE",x:0.5,y:0.82,h:0.058,
+            col:hexA("#FFFFFF",0.40+0.55*fast),fit:0.80,track:0.16});
     count();
   }
   else if(t<JSEC.outro){
-    ph="last chorus · everything";
+    ph="everything";
     fl=1.35;
-    room(); ring();
-    hero(T.word,0.42,0.38);
-    o.push({k:"word",t:"WELCOME TO THE JUNGLE",x:0.5,y:0.70,h:0.066,
-            col:hexA("#FFFFFF",0.55+0.45*back),fit:0.86,track:0.16});
-    tag(J[1],0.84,0.044,0.88,0.22);
+    room(); jaws(hit); crowd(1); ring();
+    hero(T.word,0.40,0.34);
+    o.push({k:"word",t:"WELCOME TO THE JUNGLE",x:0.5,y:0.64,h:0.060,
+            col:hexA("#FFFFFF",0.55+0.45*back),fit:0.84,track:0.16});
+    tag(J[1],0.755,0.042,0.88,0.22);
     count();
   }
   else{
-    ph="outro · the room empties";
+    ph="aftermath";
     var ov=seg2(JSEC.outro,JSEC.end);
     fl=1.35*(1-ov); ringOn=(ov<0.6); pips=false;
-    room(); ring();
-    hero(T.word,0.44,0.32,hexA("#FFFFFF",(1-ov)*0.95));
-    o.push({k:"word",t:T.venue.toUpperCase(),x:0.5,y:0.70,h:0.046,
+    room(); ring(); embers(1-ov);
+    crowd(Math.max(0,1-ov*1.6));
+    hero(T.word,0.44,0.30,hexA("#FFFFFF",(1-ov)*0.95));
+    o.push({k:"word",t:T.venue.toUpperCase(),x:0.5,y:0.68,h:0.044,
             col:hexA("#FFFFFF",(1-ov)*0.55),fit:0.80,track:0.20});
   }
 
@@ -6579,12 +6728,25 @@ function bootApp(){
 
   /* ── event-type list · axis two ── */
   var list=document.getElementById("evlist");
+  var evFind=document.getElementById("evFind");
+  /* Thirty-eight cues is past the point where scanning a list works — the one
+     you want is somewhere in the middle and you have to already know its name to
+     spot it. Matches name, group and id, so "jungle", "music" and "train" all
+     find the thing you were thinking of. */
+  function evMatch(ty,e,q){
+    if(!q) return true;
+    return (e.name+" "+ty.label+" "+ty.id+" "+ty.grp+" "+e.sub).toLowerCase().indexOf(q)>=0;
+  }
   function renderList(){
     var T=TEAMS[state.team];
-    document.getElementById("evcount").textContent=TYPES.length+" types × 16";
+    var q=(evFind&&evFind.value||"").trim().toLowerCase();
+    var shown=0;
     list.innerHTML="";
     TYPE_GROUPS.forEach(function(g){
-      var rows=TYPES.filter(function(t){ return t.grp===g[0]; });
+      var rows=TYPES.filter(function(t){
+        if(t.grp!==g[0]) return false;
+        return evMatch(t, makeEvent(t.id,state.team,state.opp), q);
+      });
       if(!rows.length) return;
       var h=document.createElement("div"); h.className="grphd"; h.textContent=g[1];
       list.appendChild(h);
@@ -6600,8 +6762,21 @@ function bootApp(){
           '<div class="tr"><b>T'+e.tier+'</b>'+(e.d/1000).toFixed(1)+'s</div>';
         d.onclick=function(){ reselect({type:ty.id}); };
         list.appendChild(d);
+        shown++;
       });
     });
+    document.getElementById("evcount").textContent =
+      q ? (shown+" of "+TYPES.length+" match") : (TYPES.length+" cues × 16");
+    if(q&&!shown){
+      var n=document.createElement("div"); n.className="grphd";
+      n.textContent="nothing matches \u201c"+q+"\u201d"; list.appendChild(n);
+    }
+  }
+
+  if(evFind){
+    evFind.oninput=function(){ renderList(); };
+    document.getElementById("evClear").onclick=function(){
+      evFind.value=""; renderList(); evFind.focus(); };
   }
 
   /* ── stage ── */

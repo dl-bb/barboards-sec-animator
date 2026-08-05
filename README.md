@@ -79,7 +79,37 @@ So it borrows the rally clap's language, which is the cue in this file that genu
 across a bar: **the whole frame floods with the school colour on the hit and decays, one
 enormous word carries the message, a ring is thrown from the centre, four pips count the bar,
 and almost nothing else is on screen.** The arrangement changes *what the word says* and *how
-hard the room floods* — not how much furniture is on screen. 10–16 layers a frame.
+hard the room floods* — not how much furniture is on screen.
+
+### Twelve pictures, not one
+
+A music video does not pile everything into one frame — it **cuts**, and each section is a
+different image. So the contrast discipline above stays exactly as it is, and what changes
+between sections is the *picture*.
+
+| | Section | The picture |
+|---|---|---|
+| 0:00 | arrival | headlights still a long way out on a dark road |
+| 0:11 | the teeth | jaws closing from top and bottom, snapping on the beat |
+| 0:23 | the room stands up | a crowd rising, arms going up on the beat |
+| 0:34 | the offer | neon that promises, and flickers |
+| 0:56 | driven down | bars slamming from above on every beat |
+| 1:12 | worn down | one more claw mark every bar, and they stay |
+| 1:50 | the cage | bars coming down around it |
+| 2:00 | the hunt | something circling, lights trying to find it |
+| 2:30 | eyes in the dark | pairs opening one at a time, near black |
+| 3:05 | the heartbeat | a pulse trace, getting faster |
+| 3:20 | everything | teeth, crowd and the school name together |
+| 4:05 | aftermath | embers, and the room emptying |
+
+The song is about arriving somewhere that eats you, which transposes cleanly onto a visiting
+side walking into a full stadium with no help at all. Each motif is that idea at that moment.
+
+**11–99 layers a frame** depending on the section, and that spread is what makes the cuts
+read — the quiet ones are genuinely nearly empty.
+
+**No words from the record appear on screen.** Lyrics are not ours to reproduce, and a wall of
+karaoke text would fight the pictures anyway. The images carry it.
 
 Measured on-beat vs off-beat brightness: **1.40× when the band arrives**, 1.28–1.29× through
 the choruses and solo, and **1.01× in the breakdown** — which is correct, because the
