@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0045";
+var VERSION = "v1.0046";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -2351,15 +2351,40 @@ function makeRenderer(cv){
     lgrads[k]=g; return g;
   }
   var glowSprites={};
+  /* MEASURED ON THE DEVICE: this was the frame-time tail. The cache was keyed
+     on the exact colour string, and cues fade glows through a continuous ramp --
+     the train smokes with mixHex(...,life) -- so every puff of every frame was a
+     MISS: allocate a 256x256 canvas, build a radial gradient, fill 65k pixels,
+     eighteen times a frame, and hand the allocations to the collector.
+
+     On the 6490 that read as draw p50 0.3 ms against p95 18.2 ms and p99 24.6 --
+     a sixty-fold spread, with the slow frames clustered, which is what a GC
+     pattern looks like rather than a steady overrun.
+
+     The key is now quantised to 16 levels a channel. A 1/16 step inside a soft
+     radial falloff is invisible, and it turns a guaranteed miss into a hit: the
+     sprite set is bounded at 4096 instead of growing without limit. Alpha is not
+     quantised -- it is written on the cached object and consumed immediately by
+     the caller, so the fade stays exactly as smooth as it was. */
   function glowFor(col){
-    var g=glowSprites[col];
-    if(g) return g;
-    var c=document.createElement("canvas"); c.width=c.height=256;
-    var q=c.getContext("2d"), s=splitCol(col);
-    var rg=q.createRadialGradient(128,128,0,128,128,128);
-    rg.addColorStop(0,s.c); rg.addColorStop(1,"rgba(0,0,0,0)");
-    q.fillStyle=rg; q.fillRect(0,0,256,256);
-    g={cv:c,a:s.a}; glowSprites[col]=g; return g;
+    var s=splitCol(col), r, g2, b;
+    var m=/^rgba?((d+)[,s]+(d+)[,s]+(d+)/.exec(s.c);
+    if(m){ r=+m[1]; g2=+m[2]; b=+m[3]; }
+    else { var x=rgbOf(s.c); r=x[0]; g2=x[1]; b=x[2]; }
+    r=r&0xF0; g2=g2&0xF0; b=b&0xF0;
+    var key=r+","+g2+","+b;
+    var g=glowSprites[key];
+    if(!g){
+      var c=document.createElement("canvas"); c.width=c.height=256;
+      var q=c.getContext("2d");
+      var rg=q.createRadialGradient(128,128,0,128,128,128);
+      rg.addColorStop(0,"rgb("+r+","+g2+","+b+")");
+      rg.addColorStop(1,"rgba(0,0,0,0)");
+      q.fillStyle=rg; q.fillRect(0,0,256,256);
+      g={cv:c,a:1}; glowSprites[key]=g;
+    }
+    g.a=s.a;                 /* per-call, consumed synchronously by the caller */
+    return g;
   }
 
   /* One path for a run of same-colour particles instead of one path each:
