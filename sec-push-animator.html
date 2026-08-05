@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0037";
+var VERSION = "v1.0038";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1665,6 +1665,13 @@ var TYPES=[
  desc:function(c){ return "Custom message on the touchdown animation"; },
  sr:{}},
 
+{id:"crawl", grp:"house", label:"The origin crawl", cue:"crawl", d:120000, house:true,
+ amp:40,win:0,tier:1,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:1,clock:"15:00",hs:0,as:0,
+ name:"THE ORIGIN CRAWL", sub:function(T){ return "CHAPTER IV · "+T.ab; },
+ desc:function(c){ return "House cue — how BarBoards began, told badly, at an angle"; },
+ sr:{}},
+
 {id:"jungle", grp:"music", label:"Welcome to the Jungle · 4:31", cue:"jungle", d:271000, house:true,
  amp:100,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
  period:1,clock:"15:00",hs:0,as:0,
@@ -1772,6 +1779,109 @@ var JUNGLE={
   TENN:["THE CHECKERBOARD",         "A HUNDRED THOUSAND IN ORANGE"],
   TAMU:["HOME OF THE TWELFTH MAN",  "KYLE FIELD NEVER SITS DOWN"],
   VAN: ["THE STAR OF NASHVILLE",    "ANCHOR DOWN"]
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE CRAWL — an origin myth, told badly, at an angle
+
+   A parody opening crawl. Deliberately NOT the film: no logo, no fanfare, none
+   of its wording, and the type takes the school colour rather than that yellow.
+   What it borrows is the FORM — text receding to a vanishing point over stars —
+   which is the joke delivery mechanism, and the joke is that BarBoards is an
+   ancient order and every tradition in college football is a botched attempt at
+   frame synchronisation.
+
+   Every line is true about the system or true about the school, and wrong about
+   which one caused the other. That is the whole gag. */
+/* what the room is actually called, for the card — the substitution IS the joke */
+var SWHOME={TEX:"DKR", ALA:"BRYANT-DENNY", ARK:"THE BOAR'S NEST", AUB:"JORDAN-HARE",
+  FLA:"THE SWAMP", UGA:"SANFORD STADIUM", UK:"KROGER FIELD", LSU:"DEATH VALLEY",
+  MSST:"DAVIS WADE", MIZ:"FAUROT FIELD", OU:"OWEN FIELD", MISS:"VAUGHT-HEMINGWAY",
+  SCAR:"WILLIAMS-BRICE", TENN:"NEYLAND", TAMU:"KYLE FIELD", VAN:"FIRSTBANK"};
+var SWHEAD=[
+  "IT IS A DARK TIME FOR SATURDAY.",
+  "",
+  "THE TELEVISIONS OF THE GALAXY HANG IN ROWS, AND NO TWO OF THEM",
+  "AGREE ON WHAT SECOND IT IS. A MAN AT THE BAR WATCHES A",
+  "TOUCHDOWN FOUR TIMES, AT FOUR DIFFERENT TIMES, AND IS TOLD",
+  "THIS IS NORMAL.",
+  "",
+  "IT IS NOT NORMAL.",
+  "",
+  "ONE ORDER REFUSES TO ACCEPT IT."
+];
+var SWTAIL=[
+  "",
+  "FROM A HIDDEN CONTROL ROOM BEHIND THE TAPS, THE ORDER",
+  "PUBLISHES ONE CLOCK TO EVERY SCREEN AT ONCE.",
+  "",
+  "THERE IS NO HANDSHAKE. THERE IS NO NEGOTIATION. THERE IS NO",
+  "MASTER TAPE AND NO MAN WITH A REMOTE. THERE IS ONLY THE WALL",
+  "CLOCK, AND THE WALL CLOCK DOES NOT ARGUE.",
+  "",
+  "SIXTEEN SCHOOLS. FOURTEEN ARRANGEMENTS. FORTY CUES.",
+  "ONE CANVAS, SLICED ACROSS EVERY PANEL IN THE BUILDING.",
+  "",
+  "THE SEAMS ARE WHERE THE TELEVISIONS ARE. THE PICTURE DOES",
+  "NOT KNOW THEY EXIST.",
+  "",
+  "AND SO IT IS WRITTEN, IN A FILE NOBODY WILL EVER MINIFY:",
+  "",
+  "IF THE SCREENS ARE NOT IN STEP, NOTHING ELSE MATTERS."
+];
+/* four lines each, and each one is a real piece of that school's lore with the
+   causality pointed the wrong way round */
+var SWTEAM={
+  TEX: ["LONG BEFORE THE FORTY ACRES, AN ENGINEER RAISED TWO FINGERS",
+        "AT A DARK SCREEN AND THE SCREEN LIT.","",
+        "THE GESTURE SPREAD. NOBODY REMEMBERS IT WAS ORIGINALLY A",
+        "REQUEST FOR TWO MORE WINGS."],
+  ALA: ["THE ELDERS SPEAK OF A MAN IN A HOUNDSTOOTH HAT WHO DEMANDED",
+        "THAT EVERY SCREEN SHOW THE SAME PLAY AT THE SAME INSTANT.","",
+        "HE WAS OBEYED. HE HAS BEEN OBEYED EVER SINCE."],
+  ARK: ["THE HOG CALL WAS NEVER A CHEER. IT IS THE ORIGINAL",
+        "SYNCHRONISATION PROTOCOL: A SUSTAINED TONE, HELD FOUR",
+        "SECONDS, UNTIL EVERY SCREEN IN THE VALLEY AGREES.","",
+        "IT IS STILL THE MOST RELIABLE ONE."],
+  AUB: ["THE EAGLE WAS RELEASED TO CIRCLE THE STADIUM BECAUSE",
+        "SOMEBODY HAD TO CARRY THE SIGNAL.","",
+        "FIBRE WAS INSTALLED IN 1998. THE EAGLE WAS NEVER TOLD."],
+  FLA: ["THE SWAMP WAS DRAINED ONCE, IN ERROR, WHILE SEARCHING FOR",
+        "A LOOSE CABLE BEHIND THE SOUTH END ZONE.","",
+        "THE CABLE WAS NOT FOUND. THE SWAMP WAS PUT BACK."],
+  UGA: ["THE HEDGES WERE PLANTED TO HIDE THE CABLE RUNS.","",
+        "THE CABLES ARE STILL THERE. SO ARE THE HEDGES. NEITHER",
+        "HAS EVER BEEN ALLOWED TO LEAVE."],
+  UK:  ["THE BASKETBALL SCREENS WERE ALWAYS IN STEP.","",
+        "THE FOOTBALL SCREENS ASKED WHY. THAT QUESTION FOUNDED",
+        "AN ENTIRE ORDER."],
+  LSU: ["IN 1988 A ROOM JUMPED AT THE SAME INSTANT AND REGISTERED",
+        "ON A SEISMOGRAPH TWO MILES AWAY.","",
+        "THE INSTRUMENT WAS MEASURING FRAME SYNC. NOBODY EVER HAD",
+        "THE HEART TO MENTION IT."],
+  MSST:["TEN THOUSAND COWBELLS RINGING AT ONCE IS NOT NOISE.","",
+        "IT IS A CLOCK SIGNAL. IT IS ALSO, ADMITTEDLY, NOISE."],
+  MIZ: ["EVERYBODY COMES TO THE ZOU.","",
+        "NOBODY HAS EVER AGREED ON PRECISELY WHEN. THIS WAS,",
+        "FOR SOME TIME, THE CENTRAL PROBLEM."],
+  OU:  ["THE SCHOONER RUNS AFTER EVERY SCORE BECAUSE IT IS",
+        "DELIVERING THE FRAME BY HAND.","",
+        "MEASURED LATENCY: EIGHT SECONDS. UNACCEPTABLE. MAGNIFICENT."],
+  MISS:["IN THE GROVE, THE CHANDELIERS WERE HUNG BEFORE ANYONE",
+        "THOUGHT TO RUN THE POWER.","",
+        "PRIORITIES WERE, AND REMAIN, ENTIRELY CORRECT."],
+  SCAR:["THE SANDSTORM PLAYS BECAUSE SOMEBODY LEFT A TEST TONE",
+        "RUNNING DURING COMMISSIONING.","",
+        "TWENTY YEARS LATER, NOBODY CAN FIND THE CABLE TO STOP IT."],
+  TENN:["THE CHECKERBOARD IS NOT DECORATION. IT IS A TEST PATTERN.","",
+        "ONE HUNDRED THOUSAND PEOPLE CALIBRATING A SINGLE DISPLAY,",
+        "EVERY SATURDAY, WITHOUT BEING ASKED TWICE."],
+  TAMU:["THE TWELFTH MAN STANDS ALL GAME BECAUSE HE IS WAITING",
+        "FOR THE STREAM TO BUFFER.","",
+        "HE HAS NEVER SAT DOWN. IT HAS NEVER BUFFERED."],
+  VAN: ["THE ENGINEERS WERE ALL ALREADY HERE. THAT WAS THE PROBLEM.","",
+        "THEY BUILT IT PERFECTLY, DOCUMENTED IT THOROUGHLY, AND",
+        "THEN NOBODY CAME TO WATCH."]
 };
 
 var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
@@ -3251,6 +3361,107 @@ G.runacross=function(u,C){
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
+   THE CRAWL
+
+   There is no 3D in this renderer and no per-layer perspective — a word takes a
+   position and a size and that is all. So the crawl is built the way perspective
+   actually works, one line at a time.
+
+   Each line sits at a depth z along a plane running away from the viewer:
+
+       scale = NEAR / z          size, and how wide it is allowed to be
+       y     = HORIZON + K·scale place on screen
+
+   As z grows, scale falls, y converges on the horizon, and the gaps between
+   lines close up — which is the entire visual signature of a crawl. Lines are
+   not moved up the screen; they are moved AWAY, and the bunching comes out of
+   the arithmetic for free rather than being faked with an easing curve.
+
+   fit scales with the perspective too, so a long line narrows as it recedes
+   instead of staying the same width and breaking the illusion.
+
+   Not the film: no logo, no fanfare, none of its wording, and the type takes the
+   school colour instead of that yellow. */
+G.crawl=function(u,C){
+  var T=C.T, o=[], i;
+  var ph="", d=C.ev.d;
+  /* bright enough to read on black, tinted to the school */
+  var ink=mixHex("#FFC94A",T.p,0.34);
+
+  o.push({k:"fill",col:"#000000"});
+  /* the field of stars, fixed so it does not crawl with the text */
+  for(i=0;i<90;i++){
+    var tw=0.55+0.45*Math.sin(u*40+i*1.7);
+    o.push({k:"dot",x:det(i+601),y:det(i+701),r:0.0009+det(i+801)*0.0016,
+            col:hexA("#FFFFFF",(0.20+det(i+901)*0.55)*tw)});
+  }
+
+  /* A · the card */
+  if(u<0.08){
+    ph="a long time ago";
+    var av=seg(u,0,.08), fade=cl(av*6,0,1)*cl((1-av)*5,0,1);
+    var home=SWHOME[C.ev.team]||T.venue.toUpperCase();
+    o.push({k:"word",t:"IN "+home+",",x:0.5,y:0.43,h:0.048,
+            col:hexA("#5AC8FA",0.88*fade),fit:0.74,track:0.10});
+    o.push({k:"word",t:"IN A GALAXY FAR, FAR AWAY....",x:0.5,y:0.54,h:0.048,
+            col:hexA("#5AC8FA",0.88*fade),fit:0.74,track:0.10});
+  }
+  /* B · the mark, falling away into the dark */
+  else if(u<0.17){
+    ph="the mark recedes";
+    var bv=seg(u,.08,.17);
+    var sc=mix(2.6,0.06,Math.pow(bv,0.62));
+    var al=cl(bv*8,0,1)*cl((1-bv)*3.2,0,1);
+    o.push({k:"word",t:"BARBOARDS",x:0.5,y:0.46,h:0.30*sc,col:hexA(ink,al),
+            fit:0.92*Math.min(1,sc),track:0.02});
+    if(bv>0.30)
+      o.push({k:"word",t:"CHAPTER IV · THE PHANTOM LATENCY",x:0.5,y:0.46+0.20*sc,
+              h:0.055*Math.min(1.6,sc),col:hexA(ink,al*0.8),
+              fit:0.70*Math.min(1,sc),track:0.14});
+  }
+  /* C · the crawl */
+  else if(u<0.95){
+    ph="the crawl";
+    var cv=seg(u,.17,.95);
+    var L=SWHEAD.concat(SWTEAM[C.ev.team]||SWTEAM.TEX).concat(SWTAIL);
+    /* the plane: NEAR is where a line is when it fills the bottom of the frame,
+       GAP is the spacing between lines measured in depth */
+    var NEAR=0.62, HOR=0.285, K=1.16, GAP=0.150;
+    /* every line must clear the horizon by the end, so the travel is the whole
+       stack plus enough to empty it */
+    var travel=(L.length+7)*GAP;
+    var head=NEAR - cv*travel;              /* depth of line 0 right now       */
+    for(i=0;i<L.length;i++){
+      if(!L[i]) continue;                   /* blank lines are spacing only    */
+      var z=head + i*GAP;
+      if(z<=0.055) continue;                /* already past the viewer         */
+      var scale=NEAR/z;
+      if(scale>2.6) continue;               /* too near to be on screen        */
+      var y=HOR + K*scale;
+      if(y>1.10) continue;                  /* below the frame                 */
+      if(scale<0.032) continue;             /* dissolved into the horizon      */
+      /* fade out as it reaches the vanishing point, in as it enters the frame */
+      var a=cl((y-HOR)/0.10,0,1)*cl((1.10-y)/0.10,0,1);
+      o.push({k:"word",t:L[i],x:0.5,y:y,h:0.062*scale,col:hexA(ink,0.95*a),
+              fit:0.88*scale,track:0.045});
+    }
+    /* the horizon glow the type dissolves into */
+    o.push({k:"glow",x:0.5,y:HOR-0.02,r:0.30,col:hexA(ink,0.055),a:1});
+  }
+  /* D · the field, and where you actually are */
+  else{
+    ph="lockup";
+    var dv=seg(u,.95,1);
+    o.push({k:"word",t:T.word,x:0.5,y:0.44,h:0.20,col:hexA("#FFFFFF",cl(dv*4,0,1)),
+            fit:0.80,track:0.03});
+    o.push({k:"word",t:(JUNGLE[C.ev.team]?JUNGLE[C.ev.team][0]:T.venue.toUpperCase()),
+            x:0.5,y:0.60,h:0.05,col:hexA(ink,0.8*cl(dv*3,0,1)),fit:0.66,track:0.18});
+  }
+  o.push({k:"vig",a:0.34});
+  return {layers:o,phase:ph};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
    WELCOME TO THE JUNGLE — 4:31, scored to the record
 
    The first two passes got this wrong in the same way twice: sections divided by
@@ -3513,8 +3724,8 @@ G.jungle=function(u,C){
     else if(id==="eyes"){
       /* half time. The room breathes on the PHRASE, not the beat, and the eyes
          open with it — this is the only place the swell is the whole scene. */
-      o.push({k:"fill",col:hexA(mixHex(T.deep,"#000000",0.58),A2)});
-      o.push({k:"fill",col:hexA(T.p,0.08*swell*A2)});
+      o.push({k:"fill",col:mixHex(T.deep,"#000000",0.58),a:0.92*A2});
+      o.push({k:"fill",col:T.p,a:0.08*swell*A2});
       var n2=1+cl(into/10,0,1)*9;
       for(k=0;k<Math.min(9,n2);k++){
         var ex=0.10+(k%5)*0.195+(k>4?0.09:0), ey=0.24+Math.floor(k/5)*0.30+det(k+471)*0.10;
@@ -5392,7 +5603,7 @@ function fxDecorate(f, ev, C, level){
      numbers, or a lower third whose name is ghosted three deep, is not a richer
      lower third — it is a broken one. These cues carry their own finish and the
      gain control leaves them alone apart from a whisper of vignette. */
-  if(ev.grp==="tv"){
+  if(ev.grp==="tv" || ev.cue==="crawl"){
     f.layers.push({k:"vig",a:level>=3?0.26:0.18});
     f.fxOff="furniture: rendered crisp";
     return f;
@@ -5872,6 +6083,8 @@ var PHASES = {
   custom:[[0,.24,"Run","line one crosses"],[.24,.48,"Land","line two"],
           [.48,.528,"Flash","384 ms"],[.528,.86,"Payoff","team finish"],
           [.86,1,"Lockup","line two + line three"]],
+  crawl:[[0,.08,"The card","in a galaxy far, far away"],[.08,.17,"The mark","falls away"],
+         [.17,.95,"The crawl","the whole sorry history"],[.95,1,"Lockup","where you are"]],
   jungle:[[0,.041,"Intro","guitar alone"],[.041,.085,"Riff","the grid locks"],
           [.085,.125,"Band in","everything at once"],[.125,.207,"Verse 1","driving"],
           [.207,.266,"Chorus","full frame"],[.266,.443,"Verse 2 · chorus 2 · bridge","held"],
@@ -7523,13 +7736,16 @@ function audit(){
         try{ f=frameAt(e,L,e.d*s/12, s%4); }   /* rotate through all four FX tiers */
         catch(err){ fails.push(e.id+"/"+lid+" @"+s+"/12: "+err.message); continue; }
         var topFill=-1;
-        f.layers.forEach(function(l,k){ if(l.k==="fill"&&(l.a===undefined||l.a>=0.98)) topFill=k; });
+        var opacityOf=function(l){
+          return (l.a===undefined?1:l.a) * splitCol(l.col||"#000").a;
+        };
+        f.layers.forEach(function(l,k){ if(l.k==="fill"&&opacityOf(l)>=0.98) topFill=k; });
         f.layers.forEach(function(l,k){
           if(l.a!==undefined&&(l.a<-0.001||l.a>1.001)) fails.push(e.id+"/"+lid+": "+l.k+" alpha "+l.a);
           if(l.k==="word"){
             if(!l.t) fails.push(e.id+"/"+lid+": empty word");
             if(!isFinite(l.x+l.y+l.h)) fails.push(e.id+"/"+lid+": word geometry NaN");
-            if(k<topFill&&(l.a===undefined||l.a>0.5))
+            if(k<topFill&&opacityOf(l)>0.5)
               fails.push(e.id+"/"+lid+" @"+s+"/12: \""+l.t+"\" is under an opaque fill");
           }
           if((l.k==="band"||l.k==="cell")&&!isFinite(l.x+l.y+l.w+l.h))
