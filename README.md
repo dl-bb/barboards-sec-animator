@@ -81,11 +81,45 @@ enormous word carries the message, a ring is thrown from the centre, four pips c
 and almost nothing else is on screen.** The arrangement changes *what the word says* and *how
 hard the room floods* — not how much furniture is on screen.
 
-### Twelve pictures, not one
+### Scored, not sectioned
 
-A music video does not pile everything into one frame — it **cuts**, and each section is a
-different image. So the contrast discipline above stays exactly as it is, and what changes
-between sections is the *picture*.
+The first two passes divided the song by **seconds**, cut hard, and drove everything from one
+"is it on a beat" channel. That is a metronome with pictures. A record is a riff with its own
+syncopation, a backbeat answering the kick, crashes marking the turns, fills pushing you into
+the next thing, and phrases swelling and falling underneath all of it.
+
+**1 · Scenes are listed by bar, not by second.** Every cut lands on a downbeat by
+construction — there is no arithmetic in which it can drift onto an off-beat. Verified: all
+12 cuts land within 0.016 bars, which is the sampling resolution, not error.
+
+**2 · Scenes crossfade.** Each carries a fade length in bars, and while one is arriving the
+one before it is still on screen and falling. Nothing snaps. (89 layers mid-crossfade against
+31 once settled.)
+
+**3 · Six channels, not one.** Different things answer different parts of the kit:
+
+| Channel | Fires on | Drives |
+|---|---|---|
+| `kick` | beats 1 and 3 | the floor, the flood |
+| `snare` | beats 2 and 4 | the backbeat — arms go up on this |
+| `riff` | a 16-step pattern | the guitar's own syncopation, not quarters |
+| `crash` | scene change | the cymbal on the turn |
+| `fill` | the bar before a cut | a stutter that accelerates into it |
+| `swell` | an 8-bar cosine | the rise and fall under everything |
+
+The swell is what makes it feel like music rather than lighting: slow, continuous, and what a
+phrase actually does. It shapes the *pictures* — how deep the jaws bite, how bright the neon
+burns, how wide the eyes open — while the kit shapes the *flood*.
+
+Measured: off-quarter 16ths carry real accents (step 5 at 0.072 rivals the snare at 0.056), so
+the guitar's rhythm reads through rather than a click track. Crash on a scene change hits
+3× the baseline. The fill lifts the bar before every cut.
+
+`JRIFF` is sixteen steps of one bar — `1` accent, `x` ghost, `.` rest — a string because it is
+meant to be edited by ear against the record, like the bar numbers and the tempo.
+
+Each scene is also its own **picture**, because a music video cuts rather than piling
+everything into one frame:
 
 | | Section | The picture |
 |---|---|---|
