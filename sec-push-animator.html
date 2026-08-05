@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0047";
+var VERSION = "v1.0048";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -828,6 +828,7 @@ var LINK = (function(){
   var reports={};                       /* per-output self-report, keyed by tv index */
   api.reports=function(){ return reports; };
   api.report=null;                      /* an output installs this to describe itself */
+  api.soak=null;                        /* ...and this to count presented frames   */
   api.profile=null;                     /* ...and this to profile the hardware it is on */
 
   function isMQTT(u){ return /^(wss?|mqtts?):\/\//i.test(u); }
@@ -1000,6 +1001,17 @@ var LINK = (function(){
         try{
           var mr;
           if(m.m==="gl") mr=glCompare(m.o||{});
+          else if(m.m==="soak"){
+            /* asynchronous by nature — it has to watch real time pass */
+            if(!api.soak){ mr={error:"no soak on this build"}; }
+            else{
+              api.soak((m.o&&m.o.seconds)||30).then(function(v){
+                cli.publish(topic("diagr"), JSON.stringify(
+                  {tv:myRank,txt:JSON.stringify(v,null,1)}), false);
+              });
+              return;                       /* the reply comes when it finishes */
+            }
+          }
           else mr=frameProfile(m.o||{});
           cli.publish(topic("diagr"), JSON.stringify(
             {tv:myRank,txt:JSON.stringify(mr,null,1)}), false);
@@ -7132,6 +7144,56 @@ function bootTV(){
   /* profiling has to run where the frames are, so the output owns it and the
      link only carries the request and the answer */
   LINK.profile=function(){ return deviceReport(FPS); };
+  /* A SOAK, not a burst. frameProfile times how long a frame COSTS; this counts
+     the frames actually PRESENTED, on the live loop, over a real stretch of
+     time. They are different questions and only the second one is "is it
+     smooth" -- a frame can cost 3 ms and still be dropped if the compositor
+     misses its flip, which is exactly what an in-process GPU and a disabled
+     direct compositor make more likely.
+
+     Reports a window every 3 s so a fault that happens once every few seconds
+     is visible as a window rather than averaged into nothing. */
+  LINK.soak=function(seconds){
+    var secs=Math.max(3,Math.min(300,+seconds||30));
+    return new Promise(function(res){
+      var windows=[], t0=Date.now();
+      var iv=setInterval(function(){
+        var w=null;
+        try{ w=FPS.windowDrops?FPS.windowDrops(3000):null; }catch(e){}
+        if(w) windows.push({t:Math.round((Date.now()-t0)/1000),
+                            fps:w.fps, drops:w.drops, frames:w.frames, pct:w.dropPct});
+        if(Date.now()-t0>=secs*1000){
+          clearInterval(iv);
+          if(!windows.length){ res({error:"no frames presented — screen hidden?"}); return; }
+          var minFps=1e9, maxPct=0, totDrops=0, totFrames=0, bad=[];
+          windows.forEach(function(x){
+            if(x.fps<minFps) minFps=x.fps;
+            if(x.pct>maxPct) maxPct=x.pct;
+            totDrops+=x.drops; totFrames+=x.frames;
+            if(x.pct>0) bad.push(x.t+"s:"+x.pct+"%");
+          });
+          var st=null; try{ st=FPS.stats(); }catch(e){}
+          var hz=(st&&st.hz)?st.hz:60;
+          res({ test:"soak", seconds:secs, windows:windows.length,
+                minFps:minFps, worstWindowDropPct:maxPct,
+                totalDrops:totDrops, totalFrames:totFrames,
+                overallDropPct:+(100*totDrops/Math.max(1,totFrames)).toFixed(2),
+                displayHz:st?st.hz:null,
+                windowsWithDrops:bad,
+                series:windows,
+                /* THE BAR, as stated: stable 60 with a MINIMUM of 60 across the
+                   whole animation. Not an average, not a p95 — the worst window
+                   in the run has to hold the refresh rate, because one window
+                   below it is a visible stutter on a wall someone is watching. */
+                pass: (minFps>=(hz-0.5) && maxPct===0),
+                verdict: (minFps>=(hz-0.5) && maxPct===0)
+                  ? ("PERFECT — min "+minFps+" fps held for the whole run, zero drops")
+                  : ("FAILS THE BAR — min "+minFps+" fps (needs "+hz+"), worst window "+
+                     maxPct+"% dropped") });
+        }
+      },3000);
+    });
+  };
   LINK.report=function(){
     var F=FPS.stats();
     return {ms:Math.round(loopPos(ev.d)), u:+cl(loopPos(ev.d)/ev.d,0,1).toFixed(4),
