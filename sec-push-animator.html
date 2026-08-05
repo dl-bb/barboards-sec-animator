@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0042";
+var VERSION = "v1.0043";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -2374,6 +2374,43 @@ function makeRenderer(cv){
       else if(l.k==="scan") scan=Math.max(scan,l.a===undefined?1:l.a);
       else if((l.k==="fill"||l.k==="flash")&&(l.a===undefined||l.a>=0.999)) start=i;
     }
+    /* TILER OVERDRAW. Occlusion above skips everything under the last OPAQUE
+       full-canvas fill; what it cannot skip is the translucent fills that come
+       straight after it -- a cue laying a ground colour and then flooding it on
+       the beat is two full-screen passes, and the jungle reaches four.
+
+       On an immediate-mode desktop GPU that is close to free. On the Adreno 643
+       the wall actually runs on, every full-screen pass is 2 Mpx of fragment
+       work through a tiler, and 2.12 of them per frame measured across the cue
+       set is the single largest thing we hand it.
+
+       Alpha compositing is associative, so a RUN of consecutive full-canvas
+       fills can be folded on the CPU into one colour and drawn once. Exactly,
+       not approximately -- the pixels are identical, which is asserted rather
+       than assumed. */
+    var mergedTo=-1, mergedCol=null;
+    if(start<n && (layers[start].k==="fill"||layers[start].k==="flash")){
+      var j=start, acc=null;
+      while(j<n && (layers[j].k==="fill"||layers[j].k==="flash")){
+        var lj=layers[j];
+        var sc=splitCol(lj.k==="flash"?"#FFFFFF":lj.col);
+        var rgb=rgbOf(sc.c.charAt(0)==="#"?sc.c:"#000000");
+        var a=(lj.a===undefined?1:lj.a)*sc.a;
+        if(acc===null) acc=[rgb[0],rgb[1],rgb[2],a];
+        else{
+          /* src over dst, both covering the whole canvas */
+          var oa=acc[3]+a*(1-acc[3]);
+          if(oa<=0) acc=[rgb[0],rgb[1],rgb[2],0];
+          else acc=[(rgb[0]*a+acc[0]*acc[3]*(1-a))/oa,
+                    (rgb[1]*a+acc[1]*acc[3]*(1-a))/oa,
+                    (rgb[2]*a+acc[2]*acc[3]*(1-a))/oa, oa];
+        }
+        j++;
+      }
+      if(j-start>1){ mergedTo=j-1;
+        mergedCol="rgba("+Math.round(acc[0])+","+Math.round(acc[1])+","+
+                  Math.round(acc[2])+","+(+acc[3].toFixed(4))+")"; }
+    }
     setOverlay(vig,scan);
 
     /* a still frame does not need redrawing 60 times a second */
@@ -2399,7 +2436,13 @@ function makeRenderer(cv){
       ox=vp.ox-vx0+(sh?sh.x*W:0); oy=vp.oy-vy0+(sh?sh.y*H:0);
       ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
 
-      for(i=start;i<layers.length;i++){
+      var from=start;
+      if(mergedTo>=0){
+        /* the whole run of full-canvas fills, in one pass instead of N */
+        drawn+=drawLayer({k:"fill",col:mergedCol})?1:0;
+        from=mergedTo+1;
+      }
+      for(i=from;i<layers.length;i++){
         l=layers[i];
         if(l.k==="vig"||l.k==="scan") continue;
         if(l.k==="dot"){
@@ -2655,6 +2698,27 @@ function makeFPS(window_){
     buf:function(){ return {gaps:gaps,n:n,N:N}; },
     /* Diagnose the CADENCE, not the cost. Returns what the frame timing looks
        like it is being paced by, and whether that pacing is self-consistent. */
+    /* Drops over a moving window. The since-boot average hides the thing that
+       matters on a wall: a screen can read 0.4% for an hour and still be
+       stuttering right now, because one bad minute is diluted by fifty good
+       ones. This is what it is doing THIS window. */
+    windowDrops:function(ms){
+      var span=ms||3000, c=Math.min(n,N), i, g, acc=0, fr=0, dr=0;
+      var base=this.stats?0:0;
+      var budget=0, srt=[];
+      for(i=0;i<c;i++) srt.push(gaps[(n-1-i+N)%N]);
+      if(!srt.length) return null;
+      var sorted=srt.slice().sort(function(a,b){ return a-b; });
+      budget=sorted[Math.floor(sorted.length*0.25)];   /* the refresh interval */
+      for(i=0;i<c;i++){
+        g=srt[i]; acc+=g; fr++;
+        if(g>budget*1.5) dr++;
+        if(acc>=span) break;
+      }
+      return {windowMs:Math.round(acc), frames:fr, drops:dr,
+              dropPct:+(100*dr/Math.max(1,fr)).toFixed(1),
+              fps:+(1000*fr/Math.max(1,acc)).toFixed(1)};
+    },
     cadence:function(){
       var c=Math.min(n,N); if(c<30) return null;
       /* dominant gap, but taken from a histogram rather than any single sample */
@@ -3224,6 +3288,7 @@ function makeFrameGraph(cv,w,h){
    identically on an output and in the control room. */
 function installDevHUD(meter){
   if(!DEV) return null;
+  var devHUDwin=null, devHUDwinAt=0;
   var api_cadence = meter && meter.cadence ? function(){ return meter.cadence(); } : null;
   document.body.classList.add("dev");
   var host=document.getElementById("devfps");
@@ -3259,6 +3324,21 @@ function installDevHUD(meter){
       "        browser "+p5(F.worstOtherMs.toFixed(2))+" ms  "+F.blame+"\n"+
       (CAD?("CADENCE "+CAD.baseHz+" Hz  on "+CAD.onCadencePct+"%  x2+ "+CAD.doubledPct+
             "%  irr "+CAD.irregularPct+"%\n"):"")+
+      /* the rolling window, recomputed on a 3 s tick rather than every frame:
+         a number that updates sixty times a second cannot be read, and this one
+         is meant to be watched on a wall. The since-boot average hides the fault
+         that matters -- a screen can read 0.4% for an hour and be stuttering
+         right now, because one bad minute is diluted by fifty good ones. */
+      (function(){
+        var t=Date.now();
+        if(!devHUDwin || t-devHUDwinAt>=3000){
+          devHUDwinAt=t;
+          try{ devHUDwin=meter.windowDrops?meter.windowDrops(3000):null; }catch(e){ devHUDwin=null; }
+        }
+        if(!devHUDwin) return "";
+        return "LAST 3s  "+p3(devHUDwin.fps)+" fps   drops "+devHUDwin.drops+
+               "/"+devHUDwin.frames+"  ("+devHUDwin.dropPct+"%)\n";
+      })()+
       (typeof CLOCK!=="undefined"
         ? ("CLOCK   "+(CLOCK.on?(CLOCK.locked()?"locked":"acquiring"):"off")+
            "  "+(CLOCK.offset()>=0?"+":"")+CLOCK.offset().toFixed(1)+" ms"+
