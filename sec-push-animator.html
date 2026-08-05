@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0039";
+var VERSION = "v1.0040";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -2892,6 +2892,198 @@ function deviceReport(FPS){
     v.forEach(function(x){ L.push("  "+x); });
     return L.join("\n");
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A WEBGL BACKEND, FOR MEASUREMENT
+
+   Opt in with ?gl=1. It is NOT the production path and is not trying to be —
+   it exists to answer one question with numbers instead of opinion:
+
+       on THIS device, is one drawArrays faster than N fillRects?
+
+   That is the whole case for porting. canvas2d issues a driver call per
+   primitive; this walks the same layer spec, expands every primitive to
+   triangles on the CPU into one interleaved buffer, and submits the frame as a
+   SINGLE draw call. If that is not decisively faster on an Orin then the port
+   is not worth writing, and we will have learned it in an afternoon rather than
+   in a rewrite.
+
+   Same display list, deliberately. A benchmark that renders something else is
+   not a benchmark.
+
+   WHAT IT DOES NOT DO: text. Glyphs need an atlas and an upload path, and text
+   is a real part of our load, so GEOMETRY-ONLY IS THE ONLY HONEST COMPARISON —
+   glbench() therefore measures canvas2d with text suppressed too. Numbers from
+   this tell you about fills, bands, rings and dots. They tell you nothing about
+   type, and the type is where canvas2d was already measured to hurt.
+   ══════════════════════════════════════════════════════════════════════════ */
+function makeGLRenderer(cv){
+  var gl=null;
+  try{ gl=cv.getContext("webgl",{alpha:false,antialias:false,depth:false,
+                                 preserveDrawingBuffer:false}); }catch(e){}
+  if(!gl) return null;
+  var VS="attribute vec2 p;attribute vec4 c;varying vec4 v;"+
+         "void main(){v=c;gl_Position=vec4(p.x*2.0-1.0,1.0-p.y*2.0,0.0,1.0);}";
+  var FS="precision mediump float;varying vec4 v;void main(){gl_FragColor=vec4(v.rgb*v.a,v.a);}";
+  function sh(t,src){ var o=gl.createShader(t); gl.shaderSource(o,src); gl.compileShader(o);
+    if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; }
+  var prog=gl.createProgram();
+  gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));
+  gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));
+  gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) return null;
+  gl.useProgram(prog);
+  var aP=gl.getAttribLocation(prog,"p"), aC=gl.getAttribLocation(prog,"c");
+  var buf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.enableVertexAttribArray(aP); gl.enableVertexAttribArray(aC);
+  gl.vertexAttribPointer(aP,2,gl.FLOAT,false,24,0);
+  gl.vertexAttribPointer(aC,4,gl.FLOAT,false,24,8);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);   /* premultiplied, per the shader */
+  gl.disable(gl.DEPTH_TEST);
+
+  /* one growable interleaved buffer: x,y,r,g,b,a per vertex */
+  var CAP=1<<16, arr=new Float32Array(CAP*6), n=0;
+  function need(v){ if((n+v)*6<=arr.length) return;
+    var next=new Float32Array(Math.max(arr.length*2,(n+v)*6*2));
+    next.set(arr); arr=next; CAP=arr.length/6; }
+  var vx=0,vy=0,vw=1,vh=1;                        /* this screen's window */
+  function V(x,y,r,g,b,a){ var i=n*6;
+    arr[i]=(x-vx)/vw; arr[i+1]=(y-vy)/vh;
+    arr[i+2]=r; arr[i+3]=g; arr[i+4]=b; arr[i+5]=a; n++; }
+  function quad(x0,y0,x1,y1,x2,y2,x3,y3,c){
+    need(6);
+    V(x0,y0,c[0],c[1],c[2],c[3]); V(x1,y1,c[0],c[1],c[2],c[3]); V(x2,y2,c[0],c[1],c[2],c[3]);
+    V(x0,y0,c[0],c[1],c[2],c[3]); V(x2,y2,c[0],c[1],c[2],c[3]); V(x3,y3,c[0],c[1],c[2],c[3]);
+  }
+  function rect(x,y,w,h,c){ quad(x,y,x+w,y,x+w,y+h,x,y+h,c); }
+  /* a fan, used for dots and for the soft falloff of a glow */
+  function fan(cx,cy,r,ar,c,edgeA,seg){
+    var k=seg||14, i, a0, a1;
+    for(i=0;i<k;i++){
+      a0=i/k*6.28318; a1=(i+1)/k*6.28318;
+      need(3);
+      V(cx,cy,c[0],c[1],c[2],c[3]);
+      V(cx+Math.cos(a0)*r,cy+Math.sin(a0)*r*ar,c[0],c[1],c[2],edgeA);
+      V(cx+Math.cos(a1)*r,cy+Math.sin(a1)*r*ar,c[0],c[1],c[2],edgeA);
+    }
+  }
+  var COL={};
+  function col(cstr,a){
+    var k=cstr||"#000";
+    var e=COL[k];
+    if(!e){ var sp=splitCol(k), rgb=rgbOf(sp.c.charAt(0)==="#"?sp.c:hexOfRgb(sp.c));
+            e=[rgb[0]/255,rgb[1]/255,rgb[2]/255,sp.a]; COL[k]=e; }
+    return [e[0],e[1],e[2],e[3]*(a===undefined?1:a)];
+  }
+  function hexOfRgb(c){
+    var m=/rgba?\(([^)]+)\)/.exec(c); if(!m) return "#000";
+    var p=m[1].split(","), h="#";
+    for(var i=0;i<3;i++) h+=("0"+(parseInt(p[i],10)||0).toString(16)).slice(-2);
+    return h;
+  }
+
+  var W=1,H=1,AR=1, calls=0, prims=0;
+  var api={ isGL:true };
+  api.gl=function(){ return gl; };
+  api.resize=function(w,h,r,dpr){
+    W=Math.max(1,Math.round(w*(dpr||1))); H=Math.max(1,Math.round(h*(dpr||1)));
+    cv.width=W; cv.height=H; cv.style.width=w+"px"; cv.style.height=h+"px";
+    vx=r.x; vy=r.y; vw=r.w; vh=r.h; AR=(W/H)*(vh/vw);
+    gl.viewport(0,0,W,H);
+  };
+  api.stats=function(){ return {calls:calls,prims:prims,verts:n}; };
+  api.draw=function(fr){
+    n=0; prims=0;
+    var L=fr.layers, i, l, c;
+    for(i=0;i<L.length;i++){
+      l=L[i];
+      switch(l.k){
+        case "fill": case "flash":
+          c=col(l.k==="flash"?"#FFFFFF":l.col,l.a); rect(vx,vy,vw,vh,c); prims++; break;
+        case "band": case "cell": {
+          c=col(l.col,l.a);
+          var x=l.x,y=l.y,w=l.w,h=l.h;
+          if(l.rot||l.skew){
+            /* the CPU does the transform so the GPU still sees one buffer */
+            var rr=(l.rot||0)*Math.PI/180, sk=Math.tan((l.skew||0)*Math.PI/180);
+            var cs=Math.cos(rr), sn=Math.sin(rr);
+            var P=[[0,0],[w,0],[w,h],[0,h]], q=[];
+            for(var v=0;v<4;v++){
+              var px=P[v][0]+sk*P[v][1], py=P[v][1];
+              /* rotation is about the origin, in PIXELS, so undo the aspect */
+              var ax=px, ay=py/AR;
+              q.push([x+(ax*cs-ay*sn), y+(ax*sn+ay*cs)*AR]);
+            }
+            quad(q[0][0],q[0][1],q[1][0],q[1][1],q[2][0],q[2][1],q[3][0],q[3][1],c);
+          } else rect(x,y,w,h,c);
+          prims++; break;
+        }
+        case "lgrad": {
+          var c0=col(l.c0,l.a), c1=col(l.c1,l.a);
+          need(6);
+          var hz=(l.dir==="h");
+          var A=hz?c0:c0, B=hz?c1:c1;
+          var x0=l.x,y0=l.y,x1=l.x+l.w,y1=l.y+l.h;
+          V(x0,y0,A[0],A[1],A[2],A[3]);
+          V(hz?x1:x1,hz?y0:y0,hz?B[0]:A[0],hz?B[1]:A[1],hz?B[2]:A[2],hz?B[3]:A[3]);
+          V(x1,y1,B[0],B[1],B[2],B[3]);
+          V(x0,y0,A[0],A[1],A[2],A[3]);
+          V(x1,y1,B[0],B[1],B[2],B[3]);
+          V(x0,y1,hz?A[0]:B[0],hz?A[1]:B[1],hz?A[2]:B[2],hz?A[3]:B[3]);
+          prims++; break;
+        }
+        case "dot": c=col(l.col,l.a); fan(l.x,l.y,l.r,AR,c,c[3],12); prims++; break;
+        case "glow": c=col(l.col,l.a); fan(l.x,l.y,l.r,AR,c,0,16); prims++; break;
+        case "ring": {
+          c=col(l.col,l.a);
+          var rw=(l.w||3)/W, k=28;
+          for(var g2=0;g2<k;g2++){
+            var b0=g2/k*6.28318, b1=(g2+1)/k*6.28318;
+            var ro=l.r+rw, ri=Math.max(0,l.r-rw);
+            quad(l.x+Math.cos(b0)*ri, l.y+Math.sin(b0)*ri*AR,
+                 l.x+Math.cos(b0)*ro, l.y+Math.sin(b0)*ro*AR,
+                 l.x+Math.cos(b1)*ro, l.y+Math.sin(b1)*ro*AR,
+                 l.x+Math.cos(b1)*ri, l.y+Math.sin(b1)*ri*AR, c);
+          }
+          prims++; break;
+        }
+        case "tri": {
+          c=col(l.col,l.a); need(3);
+          var d2=(l.dir==="down")?1:-1;
+          V(l.x-l.w/2,l.y,c[0],c[1],c[2],c[3]);
+          V(l.x+l.w/2,l.y,c[0],c[1],c[2],c[3]);
+          V(l.x,l.y+d2*l.h,c[0],c[1],c[2],c[3]);
+          prims++; break;
+        }
+        case "vig": {
+          /* radial darkening, as a ring of quads from a transparent centre */
+          c=[0,0,0,l.a===undefined?0.3:l.a];
+          var kk=20;
+          for(var q2=0;q2<kk;q2++){
+            var t0=q2/kk*6.28318, t1=(q2+1)/kk*6.28318;
+            need(3);
+            V(vx+vw*0.5,vy+vh*0.5,0,0,0,0);
+            V(vx+vw*(0.5+Math.cos(t0)*0.78),vy+vh*(0.5+Math.sin(t0)*0.78),0,0,0,c[3]);
+            V(vx+vw*(0.5+Math.cos(t1)*0.78),vy+vh*(0.5+Math.sin(t1)*0.78),0,0,0,c[3]);
+          }
+          prims++; break;
+        }
+        /* word, qr and scan are not implemented — see the note above */
+        default: break;
+      }
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    gl.bufferData(gl.ARRAY_BUFFER,arr.subarray(0,n*6),gl.DYNAMIC_DRAW);
+    gl.vertexAttribPointer(aP,2,gl.FLOAT,false,24,0);
+    gl.vertexAttribPointer(aC,4,gl.FLOAT,false,24,8);
+    gl.drawArrays(gl.TRIANGLES,0,n);
+    calls=1;                                    /* the entire point */
+    return {drawn:n>0,calls:1,verts:n};
+  };
+  return api;
 }
 
 function baselineTest(seconds){
@@ -7766,6 +7958,68 @@ function bootApp(){
     cadence:function(){ return FPS.cadence(); },
     baseline:baselineTest,
     gpu:gpuInfo,
+    /* ── canvas2d vs WebGL, on the frames we actually ship ────────────────
+       Same display list into both backends, TEXT SUPPRESSED IN BOTH, because
+       the GL path has no glyph atlas and a comparison where one side draws
+       type and the other does not is not a comparison. So this answers the
+       geometry question only -- which is the question that decides whether a
+       real port is worth writing.
+
+       Run it ON THE DEVICE. A desktop answer is worthless here, which is the
+       same reason the device report exists. */
+    glbench:function(opts){
+      opts=opts||{};
+      var cue=opts.cue||"flyover3d", team=opts.team||state.team;
+      var lid=opts.layout||"row4", L=LAYOUTS[lid]||LAYOUTS.row4;
+      var w=opts.w||1920, h=opts.h||1080, frames=opts.frames||90;
+      var ev=makeEvent(cue,team,RIVAL[team]||"OU");
+      var g=geoOf(L), r=g.rect(L.cells[0]);
+      /* build every frame ONCE so neither backend pays for the grammar */
+      var specs=[], i;
+      for(i=0;i<frames;i++){
+        var fr=frameAt(ev,L,ev.d*i/frames,FX);
+        fr.layers=fr.layers.filter(function(l){
+          return l.k!=="word"&&l.k!=="qr"&&l.k!=="scan";
+        });
+        specs.push(fr);
+      }
+      var prims=specs.reduce(function(a,x){ return a+x.layers.length; },0)/frames;
+
+      function run(mk,label){
+        var cv=document.createElement("canvas");
+        cv.style.cssText="position:fixed;left:-99999px;top:0";
+        document.body.appendChild(cv);
+        var R2=mk(cv);
+        if(!R2){ document.body.removeChild(cv); return {backend:label,unavailable:true}; }
+        R2.resize(w,h,r,1);
+        var k, t0, ts=[];
+        for(k=0;k<8;k++) R2.draw(specs[k%frames],null);      /* warm */
+        for(k=0;k<frames;k++){
+          t0=performance.now();
+          R2.draw(specs[k],null);
+          ts.push(performance.now()-t0);
+        }
+        ts.sort(function(a,b){ return a-b; });
+        var p=function(q){ return +ts[Math.min(ts.length-1,Math.floor(ts.length*q))].toFixed(3); };
+        var out={backend:label, p50:p(0.5), p95:p(0.95), p99:p(0.99), max:p(1)};
+        if(R2.stats) out.drawCalls=R2.stats().calls;
+        document.body.removeChild(cv);
+        return out;
+      }
+      var c2=run(makeRenderer,"canvas2d");
+      var gl=run(makeGLRenderer,"webgl");
+      var res={ cue:cue, layout:lid, surface:w+"x"+h, frames:frames,
+                primsPerFrame:Math.round(prims),
+                note:"geometry only — text excluded from BOTH backends",
+                canvas2d:c2, webgl:gl };
+      if(!gl.unavailable && c2.p50>0)
+        res.verdict = (c2.p50/gl.p50>=1.5)
+          ? ("WebGL is "+(c2.p50/gl.p50).toFixed(2)+"x faster on geometry — a port is worth costing")
+          : ((gl.p50/c2.p50>=1.2)
+             ? ("canvas2d is "+(gl.p50/c2.p50).toFixed(2)+"x faster here — do not port")
+             : "within noise of each other — canvas2d wins on simplicity, do not port");
+      return res;
+    },
     /* Walk the load up until the draw crosses the frame budget and report the
        knee. This is the number that decides how much a QCS6490 can be asked to
        draw — run it on the device, not here. */
