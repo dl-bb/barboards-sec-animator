@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0052";
+var VERSION = "v1.0053";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -829,6 +829,7 @@ var LINK = (function(){
   api.reports=function(){ return reports; };
   api.report=null;                      /* an output installs this to describe itself */
   api.soak=null;                        /* ...and this to count presented frames   */
+  api.sweep=null;                       /* ...and this to walk the cost ladder     */
   api.profile=null;                     /* ...and this to profile the hardware it is on */
 
   function isMQTT(u){ return /^(wss?|mqtts?):\/\//i.test(u); }
@@ -1003,6 +1004,16 @@ var LINK = (function(){
         try{
           var mr;
           if(m.m==="gl") mr=glCompare(m.o||{});
+          else if(m.m==="sweep"){
+            if(!api.sweep){ mr={error:"no sweep on this build"}; }
+            else{
+              api.sweep(m.o||{}).then(function(v){
+                cli.publish(topic("diagr"), JSON.stringify(
+                  {tv:myRank,txt:JSON.stringify(v,null,1)}), false);
+              });
+              return;
+            }
+          }
           else if(m.m==="soak"){
             /* asynchronous by nature — it has to watch real time pass */
             if(!api.soak){ mr={error:"no soak on this build"}; }
@@ -3898,7 +3909,7 @@ G.runacross=function(u,C){
    ?load= scales each from 1 to 40, so the same cue walks from trivial to
    hopeless and the knee is measurable rather than guessed at. */
 G.probe=function(u,C){
-  var T=C.T, o=[], i, mode=C.ev.probe||"calls";
+  var T=C.T, o=[], i, mode=C.ev.probe||SWEEPMODE||"calls";
   var N=LOAD;                              /* ?load= is the rung on the ladder */
   o.push({k:"fill",col:T.deep});
 
@@ -4238,6 +4249,7 @@ G.crawl=function(u,C){
    JRIFF is sixteen steps of one bar — '1' accent, 'x' ghost, '.' rest. It is a
    string because it is meant to be edited by ear against the record, like the
    bar numbers and the tempo. */
+var SWEEPMODE=null;
 var JRIFF = "1..x.1..1..x.x..";
 /* bar 0 is the riff downbeat at JANCHOR. Everything before it is the intro. */
 var JSCN = [
@@ -7246,6 +7258,38 @@ function bootTV(){
 
      Reports a window every 3 s so a fault that happens once every few seconds
      is visible as a window rather than averaged into nothing. */
+  /* THE SWEEP. Every rung measured on the device in one request, because
+     hand-driving four cues from the panel cost three round trips each and I got
+     the version skew wrong twice doing it. The harness should hold the state,
+     not me.
+
+     Each rung is a frameProfile, which is cheap and synchronous -- the soak is
+     the expensive one and stays a separate request. What this gives is the
+     SHAPE: which axis the 6490 charges for as it scales. */
+  LINK.sweep=function(o){
+    o=o||{};
+     var modes=o.modes||["calls","fill","state","text"];
+     var loads=o.loads||[1,4,12,28];
+     var lid=o.layout||"pair", w=o.w||1920, h=o.h||1080, N=o.frames||45;
+     var rows=[], saveLoad=LOAD;
+     modes.forEach(function(m){
+       loads.forEach(function(ld){
+         LOAD=ld; SWEEPMODE=m;                     /* the grammar reads these */
+         var r=null;
+         try{ r=frameProfile({cue:"probe",layout:lid,w:w,h:h,frames:N,
+                              team:o.team||"TEX"}); }catch(e){ r={err:e.message}; }
+         if(r&&!r.err){
+           rows.push({axis:m,load:ld,layers:r.layersMidCue,
+                      buildP99:r.build.p99, drawP50:r.draw.p50,
+                      drawP95:r.draw.p95, drawP99:r.draw.p99, drawMax:r.draw.max});
+         } else rows.push({axis:m,load:ld,error:r?r.err:"failed"});
+       });
+     });
+     LOAD=saveLoad; SWEEPMODE=null;
+     return Promise.resolve({test:"sweep",layout:lid,surface:w+"x"+h,
+                             framesPerRung:N,rows:rows,
+                             note:"draw ms per frame. Budget 16.67 at 60 Hz."});
+  };
   LINK.soak=function(seconds){
     var secs=Math.max(3,Math.min(300,+seconds||30));
     return new Promise(function(res){
