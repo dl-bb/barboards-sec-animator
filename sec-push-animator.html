@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0043";
+var VERSION = "v1.0044";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -2435,6 +2435,7 @@ function makeRenderer(cv){
 
       ox=vp.ox-vx0+(sh?sh.x*W:0); oy=vp.oy-vy0+(sh?sh.y*H:0);
       ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
+      lastFill=null;
 
       var from=start;
       if(mergedTo>=0){
@@ -2464,6 +2465,8 @@ function makeRenderer(cv){
   }
 
   /* returns true if anything was actually rasterised */
+  var lastFill=null;
+  function setFill(c){ if(c!==lastFill){ ctx.fillStyle=c; lastFill=c; } }
   function drawLayer(l){
     var a=(l.a===undefined?1:l.a);
     if(a<=0.004) return false;
@@ -2508,12 +2511,31 @@ function makeRenderer(cv){
           /* generous margin — a rotated box can reach outside its own bbox */
           var m=Math.max(w,h);
           if(x+w+m<vx0||x-m>vx1||y+h+m<vy0||y-m>vy1) return false;
-          s=splitCol(l.col); ctx.globalAlpha=a*s.a; ctx.fillStyle=s.c;
-          ctx.save(); ctx.translate(x,y);
-          if(l.rot) ctx.rotate(l.rot*Math.PI/180);
-          if(l.skew) ctx.transform(1,0,Math.tan(l.skew*Math.PI/180),1,0,0);
-          if(l.sc!==undefined&&l.sc!==1){ ctx.translate(w/2,h/2); ctx.scale(l.sc,l.sc); ctx.translate(-w/2,-h/2); }
-          ctx.fillRect(0,0,w,h); ctx.restore(); invalidate();
+          s=splitCol(l.col); ctx.globalAlpha=a*s.a; setFill(s.c);
+          /* Compose the matrix and set it ONCE, rather than save/translate/
+             rotate/restore. save() and restore() push and pop the ENTIRE
+             canvas state -- clip, styles, alpha, transform -- and the train
+             draws forty rotated bands a frame for its wheel spokes alone.
+             On a desktop that is invisible; on the Adreno box the wall runs on,
+             CPU is the scarce side and this is pure CPU. Two matrix writes
+             instead of a stack pair, and the pixels are unchanged. */
+          var ca=1, cb=0, cc=0, cd=1;
+          if(l.rot){ var rr=l.rot*Math.PI/180, cs=Math.cos(rr), sn=Math.sin(rr);
+                     ca=cs; cb=sn; cc=-sn; cd=cs; }
+          if(l.skew){ var tk=Math.tan(l.skew*Math.PI/180);
+                      cc=ca*tk+cc; cd=cb*tk+cd; }
+          var sx=x, sy=y;
+          if(l.sc!==undefined&&l.sc!==1){
+            var hw=w/2, hh=h/2;
+            sx+= (ca*hw+cc*hh) - (ca*hw+cc*hh)*l.sc;
+            sy+= (cb*hw+cd*hh) - (cb*hw+cd*hh)*l.sc;
+            ca*=l.sc; cb*=l.sc; cc*=l.sc; cd*=l.sc;
+          }
+          ctx.setTransform(DPR*ca, DPR*cb, DPR*cc, DPR*cd,
+                           DPR*(ox+sx), DPR*(oy+sy));
+          ctx.fillRect(0,0,w,h);
+          ctx.setTransform(DPR,0,0,DPR,ox*DPR,oy*DPR);
+          invalidate();
           return true;
         }
         if(l.sc!==undefined&&l.sc!==1){
