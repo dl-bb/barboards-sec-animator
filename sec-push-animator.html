@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0046";
+var VERSION = "v1.0047";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -2368,9 +2368,13 @@ function makeRenderer(cv){
      the caller, so the fade stays exactly as smooth as it was. */
   function glowFor(col){
     var s=splitCol(col), r, g2, b;
-    var m=/^rgba?((d+)[,s]+(d+)[,s]+(d+)/.exec(s.c);
-    if(m){ r=+m[1]; g2=+m[2]; b=+m[3]; }
-    else { var x=rgbOf(s.c); r=x[0]; g2=x[1]; b=x[2]; }
+    if(s.c.charAt(0)==="#"){ var x=rgbOf(s.c); r=x[0]; g2=x[1]; b=x[2]; }
+    else{
+      /* "rgb(r, g, b)" — parsed without a regex, because this file has been
+         bitten once already by escaping on the way through a shell */
+      var p=s.c.slice(s.c.indexOf("(")+1).split(",");
+      r=parseInt(p[0],10)||0; g2=parseInt(p[1],10)||0; b=parseInt(p[2],10)||0;
+    }
     r=r&0xF0; g2=g2&0xF0; b=b&0xF0;
     var key=r+","+g2+","+b;
     var g=glowSprites[key];
