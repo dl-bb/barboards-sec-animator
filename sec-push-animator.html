@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0051";
+var VERSION = "v1.0052";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -8506,7 +8506,7 @@ function bootApp(){
       opts=opts||{};
       var w=opts.w||1920, h=opts.h||1080, fx=(opts.fx===undefined?FX:opts.fx);
       var cue=opts.cue||"flyover", team=opts.team||state.team;
-      var L=LAYOUTS[opts.layout||"row4"], g=geoOf(L);
+      var L=LAYOUTS[opts.layout||"pair"], g=geoOf(L);
       var cv=document.createElement("canvas");
       cv.style.cssText="position:fixed;left:-99999px;top:0";
       document.body.appendChild(cv);
