@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0055";
+var VERSION = "v1.0056";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1787,6 +1787,27 @@ var TYPES=[
 
 /* ── benchmark ─────────────────────────────────────────────────────────
    Deliberately heavy. Not for a wall on a Saturday; for finding the knee. */
+{id:"riv-vs", grp:"rivalry", label:"The versus screen", cue:"versus", d:9000, house:true,
+ amp:98,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "FIGHT CARD · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Rivalry — The versus screen"; }, sr:{}},
+
+{id:"riv-tape", grp:"rivalry", label:"Tale of the tape", cue:"tape", d:14000, house:true,
+ amp:98,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "WEIGH-IN · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Rivalry — Tale of the tape"; }, sr:{}},
+
+{id:"riv-trophy", grp:"rivalry", label:"The trophy", cue:"trophy", d:11000, house:true,
+ amp:98,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "THE HARDWARE · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Rivalry — The trophy"; }, sr:{}},
+
 {id:"riv-clash", grp:"rivalry", label:"The collision", cue:"clash", d:10000, house:true,
  amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
  period:4,clock:"0:00",hs:0,as:0,
@@ -1821,6 +1842,77 @@ var TYPES=[
  name:function(T,O){ return beefOf(T.ab,O.ab).name; },
  sub:function(T,O){ return "EYE TO EYE · "+T.ab+" vs "+O.ab; },
  desc:function(c){ return "Rivalry — The staredown"; }, sr:{}},
+
+/* ── broadcast moves · rivalry edition ─────────────────────────────────
+   Nine verbs off a live telecast, each on both schools' colours. The first
+   five are also primitives any other cue can call — see section 6g.
+
+   `ramp` is read by frameAt and remaps the cue's own clock before the
+   grammar ever sees it, so it composes with anything. bx-pylon carries one
+   because a goal-line camera that does not go slow is just a low angle. */
+{id:"bx-wipe", grp:"bcast", label:"The colour wipe", cue:"bwipe", d:9000, house:true,
+ amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "IT CARRIES · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Broadcast — the colour wipe"; }, sr:{}},
+
+{id:"bx-collide", grp:"bcast", label:"The matchup collision", cue:"bcollide", d:10000, house:true,
+ amp:98,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "HEAD ON · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Broadcast — the matchup collision"; }, sr:{}},
+
+{id:"bx-ramp", grp:"bcast", label:"The speed ramp", cue:"bramp", d:11000, house:true,
+ amp:94,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "SLAM TO SLOW · "+T.ab+" 62 YARDS"; },
+ desc:function(c){ return "Broadcast — the speed ramp"; }, sr:{}},
+
+{id:"bx-whip", grp:"bcast", label:"The whip", cue:"bwhip", d:10000, house:true,
+ amp:92,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "THREE CARDS, TWO WHIPS · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Broadcast — the whip transition"; }, sr:{}},
+
+{id:"bx-sweep", grp:"bcast", label:"The light sweep", cue:"bsweep", d:9000, house:true,
+ amp:86,win:0,tier:2,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "LIT ON ARRIVAL · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Broadcast — the specular pass"; }, sr:{}},
+
+{id:"bx-bug", grp:"bcast", label:"Bug becomes the card", cue:"bbug", d:11000, house:true,
+ amp:84,win:0,tier:2,reg:"neutral", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"2:00",hs:21,as:17,
+ name:function(T,O){ return T.ab+" "+21+" · "+O.ab+" "+17; },
+ sub:function(T,O){ return "IT GROWS, IT DOES NOT CUT"; },
+ desc:function(c){ return "Broadcast — bug expands to full screen"; }, sr:{}},
+
+{id:"bx-chain", grp:"bcast", label:"The drive chain", cue:"bchain", d:10000, house:true,
+ amp:82,win:0,tier:2,reg:"neutral", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "TWELVE PLAYS · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Broadcast — the drive chain"; }, sr:{}},
+
+{id:"bx-pylon", grp:"bcast", label:"The pylon pop", cue:"bpylon", d:9000, house:true,
+ ramp:[0.52,0.74,0.28],
+ amp:97,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "GOAL LINE CAMERA · "+T.ab; },
+ desc:function(c){ return "Broadcast — the pylon pop"; }, sr:{}},
+
+{id:"bx-roll", grp:"bcast", label:"The odometer", cue:"broll", d:9000, house:true,
+ amp:90,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:21,as:14,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "IT ROLLS · "+T.ab+" 14 → 21"; },
+ desc:function(c){ return "Broadcast — the score odometer"; }, sr:{}},
 
 {id:"lad-calls", grp:"bench", label:"Ladder · draw calls", cue:"probe", d:12000, house:true,
  amp:1,win:0,tier:0,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
@@ -2012,7 +2104,9 @@ var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
 var TYPE_GROUPS=[["custom","Custom message · your copy"],
   ["music","Music · play it with the record"],
   ["show","Shows · pick these by name"],
-  ["rivalry","Rivalry · two teams, one wall"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
+  ["rivalry","Rivalry · two teams, one wall"],
+  ["bcast","Broadcast moves · rivalry edition"],
+  ["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
   ["ritual","Ritual"],["house","House cues · no push event"],
   ["patron","Patron · interactive"],["tv","Broadcast furniture"],["bench","Benchmark"]];
@@ -2061,6 +2155,23 @@ var BEEF={
   "MSST|OU":  {name:"COWBELLS VS SCHOONER", since:1970,
                line:"NOISE AGAINST HORSEPOWER."}
 };
+var TROPHY={ "OU|TEX":"THE GOLDEN HAT", "MISS|MSST":"THE GOLDEN EGG",
+             "ARK|LSU":"THE GOLDEN BOOT" };
+function trophyOf(a,b){ return TROPHY[[a,b].sort().join("|")]||null; }
+/* venue strings run long ("Darrell K Royal-Texas Memorial Stadium") and the
+   tape has a fixed column. Take the town, drop the state. */
+/* Dark primaries (A&M maroon #500000, Miss State #5D1725) vanish against a dark
+   field. Lift toward white until the colour clears a luminance floor, so it can
+   be laid down OPAQUE and still read as itself. Bright primaries pass through
+   untouched. */
+function lift(col,floor){
+  var x=rgbOf(col), r=x[0], g=x[1], b=x[2];
+  var lum=(0.2126*r+0.7152*g+0.0722*b)/255, k=0;
+  while(lum<floor && k<0.8){ k+=0.05;
+    lum=(0.2126*(r+(255-r)*k)+0.7152*(g+(255-g)*k)+0.0722*(b+(255-b)*k))/255; }
+  return k<=0 ? col : mixHex(col,"#FFFFFF",k);
+}
+function townOf(T){ return String(T.city||"").split(",")[0].toUpperCase(); }
 function beefOf(a,b){
   var k=[a,b].sort().join("|"), e=BEEF[k];
   if(e) return e;
@@ -2086,6 +2197,9 @@ function makeEvent(typeId,teamKey,oppKey){
     id:ty.id+":"+tk+":"+ok+(ty.id==="custom"?(":"+TXT1+"/"+TXT2+"/"+TXT3):""),
     typeId:ty.id, team:tk, opp:ok,
     grp:ty.grp, label:ty.label, cue:ty.cue, house:!!ty.house, probe:ty.probe,
+    /* [a,b,rate] — a speed ramp on the cue's own clock, applied in frameAt
+       before the grammar runs. Optional, and absent on almost everything. */
+    ramp:ty.ramp,
     d:(typeof ty.d==="function")?ty.d(T):ty.d,
     amp:ty.amp, win:ty.win, tier:ty.tier, reg:ty.reg,
     cat:ty.cat, type:ty.type, play:ty.play, yards:ty.yards, dir:ty.dir,
@@ -4226,6 +4340,171 @@ G.standoff=function(u,C){
   }
   o.push({k:"vig",a:0.32});
   return {layers:o,phase:u>0.88?"go":("staredown · "+(side?"visitor":"home"))};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE FIGHT CARD
+
+   Worth writing down why the first five rivalry cues were mediocre, because it
+   was a failure of IDEAS and not of execution: FOUR OF THE FIVE WERE THE SAME
+   ANIMATION. Collision, tug, rip and staredown are each a vertical seam between
+   two colour fields that moves. Variations on one thought, dressed as five. And
+   none of them were ABOUT the rivalry -- the beef was a caption laid over an
+   abstract shape, so nothing distinguished the Iron Bowl from any two colours.
+
+   These take from FIGHT PROMOTION -- boxing, the weigh-in, the fighting-game
+   versus screen -- because that is the culture which has spent a century making
+   two names on a poster feel like a war, and a bar reads the language already.
+
+   They are also SPECIFIC, which is the actual fix. Every school here carries a
+   call (HOOK EM against GIG EM) and a fight song (Texas Fight against Aggie War
+   Hymn). Putting those side by side IS the rivalry. A moving seam never was.
+
+   On cost: type is the expensive primitive on the target -- 341 text layers hit
+   26.6 ms at p99 there. But that cost is a glyph-cache MISS, and a miss comes
+   from text whose SIZE varies continuously. Text that slams into place at a
+   FIXED size and holds is a cache hit after its first frame. So these can be
+   far wordier than the first five provided nothing scales -- everything below
+   animates POSITION and ALPHA, never size.
+
+   Note that `word` has no `a` field; the renderer ignores it. Alpha on type has
+   to go through hexA() on the colour, or it silently does nothing. */
+
+/* -- 6 - THE VERSUS SCREEN --------------------------------------------- */
+G.versus=function(u,C){
+  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
+  var V=TEAMS[C.ev.opp]||c.H;
+  o.push({k:"fill",col:"#05070B"});
+  /* both plates slam in from off-frame and stop dead */
+  var slam=eb(cl(u/0.30,0,1)), lx=mix(-0.62,0,slam), rx=mix(0.62,0,slam);
+  /* the hard diagonal is the whole grammar of a fight poster */
+  /* already opaque; lift only so a maroon-on-maroon card still has two sides */
+  o.push({k:"band",x:lx-0.12,y:-0.1,w:0.70,h:1.2,col:lift(c.hp,0.13),skew:-18});
+  /* The seam sits right of centre ON PURPOSE. At 0.42 the visitor took the
+     larger half of the home side's own wall -- measured 39% against 55% --
+     which is the same mistake the tug of war made. Home gets the bigger
+     plate; it is their building. */
+  o.push({k:"band",x:rx+0.55,y:-0.1,w:0.70,h:1.2,col:lift(c.vp2,0.13),skew:-18});
+  o.push({k:"band",x:lx+0.542,y:-0.1,w:0.014,h:1.2,col:hexA("#FFFFFF",0.5),skew:-18});
+  o.push({k:"word",t:c.H.word,x:lx+0.25,y:0.36,h:0.15,col:"#FFFFFF",fit:0.40,track:0.02});
+  o.push({k:"word",t:V.word,   x:rx+0.75,y:0.64,h:0.15,col:"#FFFFFF",fit:0.40,track:0.02});
+  /* the calls, small, under each name -- this is the specificity */
+  o.push({k:"word",t:c.H.call,x:lx+0.25,y:0.47,h:0.038,
+          col:hexA("#FFFFFF",0.72*slam),fit:0.26,track:0.18});
+  o.push({k:"word",t:V.call,  x:rx+0.75,y:0.75,h:0.038,
+          col:hexA("#FFFFFF",0.72*slam),fit:0.26,track:0.18});
+  if(u>0.30){
+    var vv=seg(u,0.30,0.46);
+    o.push({k:"glow",x:0.5,y:0.5,r:0.10+0.24*vv,col:hexA("#FFE9A8",0.55*(1-vv)),a:1});
+    if(vv<0.5) o.push({k:"flash",a:(0.5-vv)*1.05});
+    for(i=0;i<18;i++){
+      var a2=det(i+1701)*6.2832, rr=vv*(0.10+det(i+1711)*0.44);
+      o.push({k:"dot",x:0.5+Math.cos(a2)*rr*0.5,y:0.5+Math.sin(a2)*rr,
+              r:0.005*(1-vv),col:(i%2)?c.hp:c.vp2});
+    }
+    o.push({k:"word",t:"VS",x:0.5,y:0.50,h:0.19,col:"#FFFFFF",fit:0.13,track:0.02});
+  }
+  if(u>0.50){
+    var bv=cl(seg(u,0.50,0.62)*1.4,0,1);
+    o.push({k:"band",x:0.05,y:0.855,w:0.90,h:0.080,col:hexA("#000000",0.66*bv)});
+    o.push({k:"band",x:0.05,y:0.855,w:0.90,h:0.006,col:hexA("#FFFFFF",0.40*bv)});
+    o.push({k:"word",t:B.name,x:0.5,y:0.897,h:0.044,col:hexA("#FFFFFF",0.95*bv),
+            fit:0.80,track:0.14});
+    var tr=trophyOf(C.ev.team,C.ev.opp);
+    var top=tr?("FOR "+tr):(B.since?("SINCE "+B.since):"");
+    if(top&&u>0.66) o.push({k:"word",t:top,x:0.5,y:0.085,h:0.036,
+            col:hexA("#FFE9A8",0.9*cl(seg(u,0.66,0.76)*1.4,0,1)),fit:0.52,track:0.22});
+  }
+  o.push({k:"vig",a:0.30});
+  return {layers:o,phase:u<0.30?"slam":(u<0.50?"ignite":"the card")};
+};
+
+/* -- 7 - TALE OF THE TAPE ---------------------------------------------- */
+/* Every row is REAL and comes off the team record. Nothing is invented: there
+   are no head-to-head records in this file, so there are none on the wall. */
+G.tape=function(u,C){
+  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
+  var V=TEAMS[C.ev.opp]||c.H;
+  o.push({k:"fill",col:"#0A0C11"});
+  /* OPAQUE corners. The first cut tinted them at 22% and A&M measured 0% of
+     the frame -- a weigh-in where one fighter has no corner. */
+  var hCorner=mixHex("#0A0C11",lift(c.hp,0.18),0.62);
+  var vCorner=mixHex("#0A0C11",lift(c.vp2,0.18),0.62);
+  o.push({k:"band",x:0,y:0,w:0.285,h:1,col:hCorner});
+  o.push({k:"band",x:0.715,y:0,w:0.285,h:1,col:vCorner});
+  o.push({k:"band",x:0.283,y:0,w:0.006,h:1,col:lift(c.hp,0.30)});
+  o.push({k:"band",x:0.711,y:0,w:0.006,h:1,col:lift(c.vp2,0.30)});
+  /* a dim centre column so the middle third is a panel and not a void */
+  o.push({k:"band",x:0.289,y:0,w:0.422,h:1,col:"#111520"});
+  o.push({k:"word",t:c.H.ab,x:0.142,y:0.13,h:0.095,col:"#FFFFFF",fit:0.19,track:0.02});
+  o.push({k:"word",t:V.ab,   x:0.858,y:0.13,h:0.095,col:"#FFFFFF",fit:0.19,track:0.02});
+  var rows=[["NICKNAME",String(c.H.nick||"").toUpperCase(), String(V.nick||"").toUpperCase()],
+            ["HOME",    townOf(c.H),                        townOf(V)],
+            ["THE CALL",String(c.H.call||"").toUpperCase(),  String(V.call||"").toUpperCase()],
+            ["THE SONG",String(c.H.chant||"").toUpperCase(), String(V.chant||"").toUpperCase()]];
+  for(i=0;i<rows.length;i++){
+    var rv=cl(seg(u,0.08+i*0.14,0.22+i*0.14)*1.5,0,1);
+    if(rv<=0) continue;
+    var ry=0.315+i*0.135;
+    o.push({k:"band",x:0.345,y:ry-0.030,w:0.31,h:0.060,col:hexA("#FFFFFF",0.07*rv)});
+    o.push({k:"word",t:rows[i][0],x:0.5,y:ry,h:0.028,col:hexA("#FFFFFF",0.55*rv),
+            fit:0.27,track:0.22});
+    /* values slide in from their own corner; size never changes */
+    o.push({k:"word",t:rows[i][1],x:mix(-0.25,0.142,rv),y:ry,h:0.038,
+            col:"#FFFFFF",fit:0.26,track:0.04});
+    o.push({k:"word",t:rows[i][2],x:mix(1.25,0.858,rv),y:ry,h:0.038,
+            col:"#FFFFFF",fit:0.26,track:0.04});
+  }
+  if(u>0.72){
+    var fv=cl(seg(u,0.72,0.84)*1.4,0,1);
+    o.push({k:"band",x:0,y:0.875,w:1,h:0.125,col:hexA("#000000",0.72*fv)});
+    o.push({k:"word",t:B.name,x:0.5,y:0.925,h:0.050,col:hexA("#FFFFFF",0.95*fv),
+            fit:0.82,track:0.12});
+    if(B.since) o.push({k:"word",t:"SETTLED ON THE FIELD SINCE "+B.since,x:0.5,y:0.975,
+            h:0.026,col:hexA("#FFFFFF",0.55*fv),fit:0.50,track:0.20});
+  }
+  o.push({k:"vig",a:0.26});
+  return {layers:o,phase:"tale of the tape"};
+};
+
+/* -- 8 - THE TROPHY ---------------------------------------------------- */
+G.trophy=function(u,C){
+  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
+  var tr=trophyOf(C.ev.team,C.ev.opp);
+  o.push({k:"fill",col:"#07090E"});
+  o.push({k:"lgrad",x:0,y:0,w:1,h:1,c0:mixHex("#07090E",c.hp,0.18),c1:"#07090E",dir:"v"});
+  /* both sides reaching in for the same object, and neither reaching it */
+  var pull=Math.sin(u*7.4)*0.5+0.5;
+  for(i=0;i<9;i++){
+    var hy=0.10+i*0.092;
+    /* opaque, and thicker -- 55% orange over black desaturated to brown */
+    o.push({k:"band",x:0,y:hy,w:0.30+0.09*pull,h:0.030,
+            col:lift(c.hp,0.16),skew:-12});
+    o.push({k:"band",x:0.70-0.09*pull,y:hy+0.046,w:0.30+0.09*pull,h:0.030,
+            col:lift(c.vp2,0.16),skew:-12});
+  }
+  /* the cup: bowl, stem, base -- gold, lit from one side */
+  var gold="#E8C466", dark="#8A6E28", by=0.26+0.014*Math.sin(u*9);
+  o.push({k:"glow",x:0.5,y:by+0.15,r:0.28,col:hexA(gold,0.18+0.16*pull),a:1});
+  o.push({k:"band",x:0.40,y:by,w:0.20,h:0.022,col:gold});
+  o.push({k:"tri",x:0.5,y:by+0.022,w:0.20,h:0.155,col:gold,dir:"down"});
+  o.push({k:"tri",x:0.47,y:by+0.022,w:0.07,h:0.130,col:hexA("#FFFFFF",0.26),dir:"down"});
+  o.push({k:"band",x:0.487,y:by+0.175,w:0.026,h:0.085,col:dark});
+  o.push({k:"band",x:0.432,y:by+0.260,w:0.136,h:0.026,col:gold});
+  o.push({k:"band",x:0.410,y:by+0.286,w:0.180,h:0.020,col:dark});
+  o.push({k:"band",x:0.352,y:by+0.020,w:0.052,h:0.016,col:gold,rot:-34});
+  o.push({k:"band",x:0.596,y:by+0.020,w:0.052,h:0.016,col:gold,rot:34});
+  /* a rake of light travelling across the whole frame */
+  o.push({k:"band",x:mix(-0.2,1.2,(u*1.3)%1),y:-0.1,w:0.04,h:1.2,
+          col:hexA("#FFFFFF",0.15),skew:-20});
+  o.push({k:"word",t:tr||B.name,x:0.5,y:0.70,h:0.052,
+          col:hexA(gold,0.95*cl(u*4,0,1)),fit:0.72,track:0.14});
+  o.push({k:"word",t:tr?B.name:"ONE TROPHY. TWO CLAIMS.",x:0.5,y:0.80,h:0.038,
+          col:hexA("#FFFFFF",0.75*cl((u-0.18)*4,0,1)),fit:0.66,track:0.16});
+  if(u>0.78) o.push({k:"word",t:"ONE OF YOU LEAVES WITH IT",x:0.5,y:0.915,h:0.036,
+          col:hexA("#FFFFFF",0.85*cl(seg(u,0.78,0.90)*3,0,1)),fit:0.60,track:0.18});
+  o.push({k:"vig",a:0.34});
+  return {layers:o,phase:"the trophy"};
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -6658,6 +6937,578 @@ G.replay=function(u,C){
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
+   6g · BROADCAST MOVES — the rivalry edition
+
+   Nine moves lifted off a live football telecast, rebuilt for a bar wall.
+
+   The furniture above is what a broadcast PUTS on screen. This is what a
+   broadcast DOES -- the wipes, the collisions, the ramps, the whips. It is the
+   verbs rather than the nouns, and it is most of why a telecast reads as
+   televised.
+
+   THREE THINGS DECIDED WHAT MADE THE CUT.
+
+   1 · What the QCS6490 charges for. Measured, not guessed: 89 full-canvas
+       translucent layers cost 0.5 ms; 341 text layers cost 26.6 ms at p99.
+       Overdraw is free on this tiler and type has a six-times tail. Every move
+       here is therefore built out of floods, bands and triangles, and every one
+       spends its whole text budget on a rivalry name and a word.
+
+   2 · Thirty feet. The genuinely coolest things on a telecast -- the SkyCam
+       glide, the drone orbit, the freeze-and-orbit -- are slow and carried by
+       detail, and detail loses to contrast at the distance that matters. They
+       are why the flyover is filed under `bench` and not under a group anybody
+       is meant to call on a Saturday. Nothing here asks the room to squint.
+
+   3 · Two colours. A rivalry cue that renders one school is a cue with a bug in
+       it, so every move takes both and gives neither the whole frame until it
+       has earned it.
+
+   The first five are also PRIMITIVES -- wipeAt, carried, smear, specular and
+   ramp are exported for any cue to use, because a wipe is a thing you do to
+   something, not a thing you watch on its own. Each is additionally registered
+   as a cue so it can be seen, timed and measured in isolation.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── the wipe, and what it carries ───────────────────────────────────────────
+   The single most football move there is. A hard chamfered edge crosses the
+   frame in a team colour, and the thing you want it to deliver is drawn behind
+   it -- so the wipe is not a transition BETWEEN two pictures, it is the thing
+   that hands you the next one.
+
+   There is no clip in this layer model and it does not need one. The ground the
+   edge has already covered is just a band, and an element's alpha is a function
+   of how far the edge has passed it. Same picture, no state change, no path. */
+function wipeAt(p,dir){ return dir>0?mix(-0.40,1.40,p):mix(1.40,-0.40,p); }
+function wipeEdge(o,wx,col,dir,skew){
+  var sk=(skew===undefined)?-16:skew;
+  o.push({k:"band",x:dir>0?wx-0.44:wx,y:-0.12,w:0.44,h:1.24,col:col,skew:sk});
+  o.push({k:"band",x:dir>0?wx-0.013:wx,y:-0.12,w:0.013,h:1.24,
+          col:hexA("#FFFFFF",.85),skew:sk});
+}
+/* alpha for an element sitting at x, given an edge at wx travelling dir, with
+   a trail length tr. This is the whole trick. */
+function carried(x,wx,dir,tr){
+  return cl((dir>0?(wx-x):(x-wx))/(tr||0.18),0,1);
+}
+
+/* ── the smear ───────────────────────────────────────────────────────────────
+   Broadcast gets a whip from a real camera panning faster than the shutter. We
+   get it from overdraw, which is the axis this silicon gives away. `build` is
+   called n times with an x offset and an alpha and draws the same composition
+   each time -- eight copies of a lockup is eight bands, not eight frames. */
+function smear(o,build,p,n,dist){
+  var k=n||8, i, t;
+  for(i=0;i<k;i++){
+    t=i/(k-1||1);
+    build(o, t*dist*p, (1-t)*0.6);
+  }
+}
+
+/* ── the specular pass ───────────────────────────────────────────────────────
+   What makes a lockup read as machined rather than as a coloured box. Three
+   stacked skewed bands rather than an lgrad: a gradient costs a save/restore
+   and a pattern lookup, three bands cost three fillRects, and at thirty feet
+   nobody has ever seen the difference. */
+function specular(o,x,a,w,skew){
+  var ww=w||0.05, sk=(skew===undefined)?-18:skew;
+  o.push({k:"band",x:x-ww*1.9,y:-0.12,w:ww*3.8,h:1.25,col:hexA("#FFFFFF",0.05*a),skew:sk});
+  o.push({k:"band",x:x-ww*0.8,y:-0.12,w:ww*1.6,h:1.25,col:hexA("#FFFFFF",0.10*a),skew:sk});
+  o.push({k:"band",x:x-ww*0.22,y:-0.12,w:ww*0.44,h:1.25,col:hexA("#FFFFFF",0.22*a),skew:sk});
+}
+
+/* ── the speed ramp ──────────────────────────────────────────────────────────
+   The most recognisable timing signature in sport: real speed, a slam into slow
+   motion on the moment that matters, then a ramp back out.
+
+   It is a remap of normalised time and nothing else -- same layers, same cue,
+   entirely different read -- which is why it belongs here as a function and is
+   also wired into frameAt so any registry entry can ask for it with one field.
+
+   a and b bracket the slow window in INPUT time (wall clock, the fraction of
+   the cue that has elapsed); rate is how slow, 0.2 being a fifth speed. The
+   velocity step is deliberately hard rather than eased: the slam IS the move,
+   and a shoulder on it reads as a dropped frame rather than as an intention.
+
+   Monotonic and exactly onto [0,1] by construction, so a ramped cue still ends
+   where it ended and the rest lockup still lands on time. */
+function rampU(u,a,b,rate){
+  var r=(rate===undefined)?0.22:rate;
+  var tot=a+(b-a)*r+(1-b);
+  var v=(u<=a)?u:(u<=b? a+(u-a)*r : a+(b-a)*r+(u-b));
+  return cl(v/tot,0,1);
+}
+
+/* ── shared: the matchup lockup both ends of a move settle into ──────────── */
+function lockup(o,c,B,x,a,big){
+  var hw=big?0.62:0.5;
+  o.push({k:"band",x:0,y:x===undefined?0:0,w:hw,h:1,col:c.hp,a:a});
+  o.push({k:"band",x:hw,y:0,w:1-hw,h:1,col:c.vp2,a:a});
+  o.push({k:"word",t:c.H.ab,x:hw*0.5,y:0.44,h:0.20,col:"#FFFFFF",fit:hw*0.7,a:a});
+  o.push({k:"word",t:c.V.ab,x:hw+(1-hw)*0.5,y:0.44,h:0.14,
+          col:"#FFFFFF",fit:(1-hw)*0.7,a:a*0.92});
+  o.push({k:"word",t:B.name,x:0.5,y:0.70,h:0.045,col:hexA("#FFFFFF",.80),
+          fit:0.80,track:0.16,a:a});
+}
+
+/* ── 1 · THE COLOUR WIPE ─────────────────────────────────────────────────── */
+G.bwipe=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], ph="";
+  /* home owns the wall; the visitor takes it; home takes it back and keeps it.
+     Three crossings, because two reads as a mistake being corrected. */
+  var p1=eio(seg(u,0.08,0.30)), p2=eio(seg(u,0.42,0.62)), p3=eio(seg(u,0.74,0.94));
+  o.push({k:"fill",col:c.hp});
+
+  if(p1>0&&p3<=0){
+    /* the visitor's ground arrives behind the visitor's edge */
+    var w1=wipeAt(p1,1);
+    o.push({k:"band",x:0,y:0,w:cl(w1,0,1),h:1,col:c.vp2});
+  }
+  if(p2>0&&p3<=0){
+    var w2=wipeAt(p2,-1);
+    o.push({k:"band",x:cl(w2,0,1),y:0,w:1-cl(w2,0,1),h:1,col:c.hp});
+  }
+  if(p3>0) o.push({k:"fill",col:c.hp});
+
+  /* the word each edge is delivering. alpha comes from `carried`, so the type
+     is revealed BY the wipe rather than fading up next to it. */
+  if(p1>0&&p1<1){
+    ph="visitor takes it";
+    o.push({k:"word",t:c.V.word,x:0.5,y:0.48,h:0.24,col:"#FFFFFF",fit:0.78,
+            a:carried(0.5,wipeAt(p1,1),1,0.22)});
+    wipeEdge(o,wipeAt(p1,1),mixHex(c.vp2,"#FFFFFF",0.12),1);
+  }
+  else if(p2>0&&p2<1){
+    ph="home answers";
+    o.push({k:"word",t:c.H.word,x:0.5,y:0.48,h:0.24,col:"#FFFFFF",fit:0.78,
+            a:carried(0.5,wipeAt(p2,-1),-1,0.22)});
+    wipeEdge(o,wipeAt(p2,-1),mixHex(c.hp,"#FFFFFF",0.12),-1);
+  }
+  else if(p3>0&&p3<1){
+    ph="and keeps it";
+    o.push({k:"word",t:c.H.call,x:0.5,y:0.48,h:0.20,col:"#FFFFFF",fit:0.82,track:0.02,
+            a:carried(0.5,wipeAt(p3,1),1,0.22)});
+    wipeEdge(o,wipeAt(p3,1),"#FFFFFF",1);
+  }
+  else if(p3>=1){
+    ph="lockup";
+    o.push({k:"word",t:c.H.call,x:0.5,y:0.46,h:0.20,col:"#FFFFFF",fit:0.82,track:0.02});
+    o.push({k:"word",t:B.name,x:0.5,y:0.70,h:0.042,col:hexA("#FFFFFF",.78),
+            fit:0.78,track:0.16});
+  }
+  else{
+    ph="held";
+    o.push({k:"word",t:(p2>=1?c.H.word:c.V.word),x:0.5,y:0.48,h:0.24,
+            col:"#FFFFFF",fit:0.78});
+  }
+  /* the specular is period-locked to the cue, never to wall time, so sixteen
+     panels agree on where the highlight is */
+  specular(o,(u*1.7)%1*1.3-0.15,1,0.05);
+  o.push({k:"vig",a:0.26});
+  return {layers:o,phase:"wipe · "+ph};
+};
+
+/* ── 2 · THE COLLISION ───────────────────────────────────────────────────── */
+G.bcollide=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i, ph="", f={};
+  var HIT=0.44;
+  o.push({k:"fill",col:"#05070B"});
+
+  if(u<HIT){
+    /* two plates thrown at each other from opposite edges. eb overshoots, which
+       is the difference between arriving and landing. */
+    ph="the approach";
+    var v=eb(seg(u,0,HIT));
+    var hx=mix(-0.52,0.06,v), vx=mix(1.52,0.94,v);
+    /* motion streaks trailing each plate -- overdraw, therefore free */
+    for(i=1;i<=6;i++){
+      o.push({k:"band",x:hx-i*0.035,y:0.30,w:0.40,h:0.40,
+              col:hexA(c.hp,0.10*(1-i/7)),skew:-13});
+      o.push({k:"band",x:vx-0.40+i*0.035,y:0.30,w:0.40,h:0.40,
+              col:hexA(c.vp2,0.10*(1-i/7)),skew:-13});
+    }
+    plate(o,hx,0.30,0.40,0.40,c.hp,1,hexA("#FFFFFF",.30));
+    plate(o,vx-0.40,0.30,0.40,0.40,c.vp2,1,hexA("#FFFFFF",.30));
+    o.push({k:"word",t:c.H.ab,x:hx+0.20,y:0.50,h:0.15,col:"#FFFFFF",fit:0.30});
+    o.push({k:"word",t:c.V.ab,x:vx-0.20,y:0.50,h:0.15,col:"#FFFFFF",fit:0.30});
+  }
+  else if(u<0.60){
+    /* IMPACT. Two frames of near-white, a shockwave, and the whole frame
+       displacing. Broadcast shakes by three or four pixels; at thirty feet that
+       is invisible, so this is 0.9% of the frame -- which is what the FX tier
+       already learned and settled on. */
+    ph="impact";
+    var iv=seg(u,HIT,0.60), e=eo(iv);
+    o.push({k:"band",x:0,y:0,w:0.5,h:1,col:c.hp});
+    o.push({k:"band",x:0.5,y:0,w:0.5,h:1,col:c.vp2});
+    o.push({k:"flash",a:Math.pow(1-iv,1.6)*0.95});
+    for(i=0;i<5;i++)
+      o.push({k:"ring",x:0.5,y:0.5,r:0.04+e*(0.42+i*0.17),col:"#FFFFFF",
+              w:Math.max(1,10*(1-iv)),a:(1-iv)*0.46});
+    for(i=0;i<30;i++){
+      var d=(i%2)?1:-1, sp=0.06+det(i+2101)*0.60;
+      o.push({k:"tri",x:0.5+d*sp*e,y:0.06+det(i+2111)*0.88,
+              w:0.018+det(i+2121)*0.05,h:0.028+det(i+2131)*0.07,
+              col:hexA(d>0?c.vp2:c.hp,1-iv*0.55),dir:(i%3)?"up":"down"});
+    }
+    var s=(1-iv)*0.009;
+    f.shake={x:Math.sin(iv*47)*s, y:Math.cos(iv*63)*s};
+    o.push({k:"word",t:B.name,x:0.5,y:0.50,h:0.13,col:"#FFFFFF",fit:0.86,track:0.04,
+            a:cl(iv*2.4,0,1)});
+  }
+  else{
+    ph="lockup";
+    var lv=seg(u,0.60,0.80);
+    lockup(o,c,B,0,1,true);
+    o.push({k:"word",t:B.line,x:0.5,y:0.82,h:0.032,col:hexA("#FFFFFF",.62*lv),
+            fit:0.84,track:0.10});
+    specular(o,seg(u,0.62,0.80)*1.3-0.15,1-seg(u,0.78,0.86),0.06);
+  }
+  o.push({k:"vig",a:0.30});
+  f.layers=o; f.phase="collision · "+ph;
+  return f;
+};
+
+/* ── 3 · THE SPEED RAMP ──────────────────────────────────────────────────── */
+G.bramp=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i;
+  /* a return, so there is something whose speed can be a statement. The ramp
+     brackets the moment he crosses -- real speed to the goal line, a fifth
+     speed through it, real speed out. */
+  var t=rampU(u,0.46,0.74,0.18);
+  o.push({k:"fill",col:c.vd==="#000000"?"#06080C":mixHex(c.vp2,"#000000",0.62)});
+
+  /* the field: yard lines receding, and a goal line that means something */
+  for(i=0;i<=12;i++)
+    o.push({k:"band",x:0.02+i*0.082,y:0.24,w:0.0018,h:0.52,col:hexA("#FFFFFF",.13)});
+  o.push({k:"band",x:0.845,y:0.24,w:0.006,h:0.52,col:hexA("#FFFFFF",.55)});
+  o.push({k:"band",x:0.851,y:0.24,w:0.149,h:0.52,col:hexA(c.hp,.30)});
+
+  var rx=mix(0.05,0.93,eo(t)), crossed=rx>0.845;
+  /* the trail: eight copies behind him, which is what a long lens does to a
+     fast object and what this tiler will draw for nothing */
+  for(i=1;i<=8;i++)
+    o.push({k:"tri",x:rx-i*0.026,y:0.50,w:0.030,h:0.052,
+            col:hexA(c.hp,0.34*(1-i/9)),dir:"up"});
+  o.push({k:"glow",x:rx,y:0.50,r:0.10,col:hexA(c.hp,.40),a:1});
+  o.push({k:"tri",x:rx,y:0.50,w:0.038,h:0.062,col:"#FFFFFF",dir:"up"});
+
+  /* pursuit, losing ground -- the reason the ramp is worth spending */
+  for(i=0;i<3;i++)
+    o.push({k:"tri",x:rx-0.13-i*0.045,y:0.50+(i-1)*0.055,w:0.030,h:0.050,
+            col:hexA(c.vp2,.85),dir:"up"});
+
+  var ph="the run";
+  if(t>0.46&&t<0.78){
+    ph="ramped";
+    /* the tell that you are in slow motion, and the only type in the cue */
+    o.push({k:"band",x:0,y:0,w:1,h:1,col:hexA("#0A1830",.22)});
+    o.push({k:"word",t:String(Math.round(mix(0,62,t))) + " YARDS",x:0.5,y:0.17,
+            h:0.075,col:"#FFFFFF",fit:0.60,track:0.06});
+  }
+  if(crossed){
+    ph="in";
+    o.push({k:"flash",a:cl((rx-0.845)*7,0,1)*0.55*(1-seg(t,0.90,1))});
+    o.push({k:"word",t:c.H.call,x:0.5,y:0.84,h:0.10,col:"#FFFFFF",fit:0.70,track:0.03,
+            a:seg(t,0.86,0.96)});
+  }
+  o.push({k:"word",t:B.name,x:0.5,y:0.955,h:0.026,col:hexA("#FFFFFF",.38),
+          fit:0.50,track:0.18});
+  o.push({k:"vig",a:0.34});
+  return {layers:o,phase:"ramp · "+ph};
+};
+
+/* ── 4 · THE WHIP ────────────────────────────────────────────────────────── */
+G.bwhip=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], ph="";
+  /* three cards, joined by two whips. A whip is 150 ms and it is the only thing
+     on screen -- try to keep the outgoing card legible through it and you get
+     neither the card nor the whip. */
+  var CARD=[{col:c.hp,  big:c.H.ab, small:c.H.venue.split(" · ")[0].toUpperCase()},
+            {col:c.vp2, big:c.V.ab, small:c.V.venue.split(" · ")[0].toUpperCase()},
+            {col:"#0A0D14", big:B.name, small:B.since?("SINCE "+B.since):B.line}];
+  var W1=[0.30,0.38], W2=[0.64,0.72];
+  var idx=(u<W1[0])?0:(u<W2[0]?1:2);
+  var card=CARD[idx];
+
+  function build(oo,dx,a){
+    oo.push({k:"band",x:dx,y:0,w:1,h:1,col:hexA(card.col,a)});
+    if(a>0.5){
+      oo.push({k:"word",t:card.big,x:0.5+dx,y:0.46,h:idx===2?0.13:0.26,
+               col:"#FFFFFF",fit:0.84,track:idx===2?0.04:0});
+      oo.push({k:"word",t:card.small,x:0.5+dx,y:0.68,h:0.034,
+               col:hexA("#FFFFFF",.70),fit:0.70,track:0.16});
+    }
+  }
+  o.push({k:"fill",col:"#05070B"});
+  var w1=seg(u,W1[0],W1[1]), w2=seg(u,W2[0],W2[1]);
+  var p=(w1>0&&w1<1)?w1:((w2>0&&w2<1)?w2:0);
+
+  if(p>0){
+    ph="whip";
+    /* the smear IS the transition. Ten offset copies at falling alpha, which is
+       ten bands -- 0.5 ms for eighty-nine of these, so ten is not a number this
+       silicon notices. */
+    smear(o,build,pulse(p),10,0.55);
+    o.push({k:"flash",a:pulse(p)*0.18});
+  }else{
+    ph="card "+(idx+1);
+    build(o,0,1);
+    specular(o,((u*1.9)%1)*1.3-0.15,0.8,0.05);
+  }
+  o.push({k:"vig",a:0.24});
+  return {layers:o,phase:"whip · "+ph};
+};
+
+/* ── 5 · THE LIGHT SWEEP ─────────────────────────────────────────────────── */
+G.bsweep=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i;
+  /* the quietest move here and the one that does the most work: a lockup that
+     would otherwise be two flat rectangles, lit once as it arrives. */
+  var arrive=eo(seg(u,0.04,0.26));
+  o.push({k:"fill",col:"#06080C"});
+
+  var hw=mix(0,0.58,arrive);
+  o.push({k:"band",x:0,y:0,w:hw,h:1,col:c.hp});
+  o.push({k:"band",x:mix(1,0.58,arrive),y:0,w:mix(0,0.42,arrive),h:1,col:c.vp2});
+  /* the seam, bright, because the join is the composition */
+  o.push({k:"band",x:0.58-0.003,y:0,w:0.006,h:1,col:hexA("#FFFFFF",.55*arrive)});
+
+  o.push({k:"word",t:c.H.word,x:0.29,y:0.44,h:0.19,col:"#FFFFFF",fit:0.52,
+          a:seg(u,0.16,0.32)});
+  o.push({k:"word",t:c.V.ab,x:0.79,y:0.44,h:0.14,col:"#FFFFFF",fit:0.34,
+          a:seg(u,0.22,0.38)});
+  o.push({k:"word",t:B.name,x:0.5,y:0.74,h:0.042,col:hexA("#FFFFFF",.82),
+          fit:0.82,track:0.16,a:seg(u,0.30,0.46)});
+
+  /* two passes: the arrival sweep, fast and bright, then a slow idle one so a
+     held lockup is never a still frame. A wall that stops moving reads as a
+     wall that has crashed. */
+  var s1=seg(u,0.26,0.46);
+  if(s1>0&&s1<1) specular(o,mix(-0.2,1.2,eo(s1)),1.4,0.055);
+  var s2=((u-0.5)*0.75)%1;
+  if(u>0.5&&s2>0) specular(o,mix(-0.2,1.2,s2),0.55,0.09);
+
+  /* pips counting the lockup out, the way a network holds a card */
+  for(i=0;i<4;i++)
+    o.push({k:"band",x:0.46+i*0.022,y:0.90,w:0.014,h:0.008,
+            col:hexA("#FFFFFF",u*4>i?0.75:0.18)});
+  o.push({k:"vig",a:0.28});
+  return {layers:o,phase:"sweep · "+(s1>0&&s1<1?"pass":"held")};
+};
+
+/* ── 6 · THE BUG THAT BECOMES THE CARD ───────────────────────────────────── */
+G.bbug=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), ev=C.ev, o=[], i;
+  /* Broadcast does not cut from the bug to the full-screen stat -- the bug
+     GROWS into it and shrinks back, and that is the whole reason a package
+     reads as one system rather than as a pile of cards.
+
+     One rect interpolated between two geometries, and the contents crossfaded
+     across the middle of the move. */
+  var grow=eio(seg(u,0.22,0.40)), shrink=eio(seg(u,0.74,0.92));
+  var g=grow*(1-shrink);
+
+  o.push({k:"fill",col:"#07090E"});
+  o.push({k:"band",x:0,y:0.32,w:1,h:0.42,col:"#0C2A16",a:0.85*(1-g)});
+  for(i=0;i<=10;i++)
+    o.push({k:"band",x:0.06+i*0.088,y:0.32,w:0.0016,h:0.42,
+            col:hexA("#FFFFFF",.15*(1-g))});
+
+  /* bug geometry → card geometry */
+  var bx=mix(0.055,0.06,g), by=mix(0.795,0.12,g),
+      bw=mix(0.50,0.88,g),  bh=mix(0.115,0.76,g);
+  var sk=mix(-13,-4,g);                 /* the chamfer relaxes as it grows */
+  plate(o,bx,by,bw,bh,hexA("#0A0D14",.96),1,hexA("#FFFFFF",.20),sk);
+
+  /* the two colour chips are the one element that lives in BOTH states, so they
+     travel rather than crossfade -- that is what sells it as the same object */
+  var chw=mix(0.055,0.42,g), chh=mix(bh*0.72,0.10,g);
+  o.push({k:"band",x:mix(bx+0.012,bx+0.02,g),y:mix(by+bh*0.14,by+0.10,g),
+          w:chw,h:chh,col:c.hp,skew:sk});
+  o.push({k:"band",x:mix(bx+0.205,bx+0.46,g),y:mix(by+bh*0.14,by+0.10,g),
+          w:chw,h:chh,col:c.vp2,skew:sk});
+
+  if(g<0.5){
+    /* bug state */
+    var ba=1-g*2;
+    o.push({k:"word",t:c.H.ab,x:bx+0.085,y:by+bh*0.50,h:0.042,col:"#FFFFFF",
+            fit:.06,track:.02,a:ba});
+    o.push({k:"word",t:String(ev.hs),x:bx+0.155,y:by+bh*0.50,h:0.055,
+            col:"#FFFFFF",fit:.045,a:ba});
+    o.push({k:"word",t:c.V.ab,x:bx+0.278,y:by+bh*0.50,h:0.042,col:"#FFFFFF",
+            fit:.06,track:.02,a:ba});
+    o.push({k:"word",t:String(ev.as),x:bx+0.348,y:by+bh*0.50,h:0.055,
+            col:hexA("#FFFFFF",.74),fit:.045,a:ba});
+    o.push({k:"word",t:ev.clock,x:bx+0.435,y:by+bh*0.50,h:0.040,
+            col:"#FFFFFF",fit:.075,a:ba});
+  }else{
+    /* card state */
+    var ca=(g-0.5)*2;
+    o.push({k:"word",t:c.H.ab,x:bx+0.23,y:by+0.155,h:0.075,col:"#FFFFFF",fit:0.34,a:ca});
+    o.push({k:"word",t:c.V.ab,x:bx+0.67,y:by+0.155,h:0.075,col:"#FFFFFF",fit:0.34,a:ca});
+    o.push({k:"word",t:String(ev.hs),x:bx+0.23,y:by+0.40,h:0.26,col:"#FFFFFF",fit:0.34,a:ca});
+    o.push({k:"word",t:String(ev.as),x:bx+0.67,y:by+0.40,h:0.26,col:"#FFFFFF",fit:0.34,a:ca});
+    o.push({k:"band",x:bx+0.44,y:by+0.26,w:0.002,h:0.30,col:hexA("#FFFFFF",.28*ca)});
+    o.push({k:"word",t:B.name,x:bx+0.44,y:by+0.66,h:0.040,col:hexA("#FFFFFF",.80*ca),
+            fit:0.80,track:0.14});
+  }
+  o.push({k:"vig",a:0.26});
+  return {layers:o,phase:"bug · "+(g<0.05?"bug":(g>0.95?"card":(shrink>0?"collapsing":"expanding")))};
+};
+
+/* ── 7 · THE DRIVE CHAIN ─────────────────────────────────────────────────── */
+G.bchain=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i;
+  /* Twelve plays drawn left to right on a stagger. Real information, rendered
+     entirely as geometry -- the labels a broadcast puts on each tick are what
+     would put this in the text tail, so the colour carries the meaning instead
+     and one line of type says what the chain is. */
+  var N=12;
+  /* deterministic so every panel on the wall draws the same drive */
+  var gain=[], own=[];
+  for(i=0;i<N;i++){ gain[i]=0.02+det(i+4401)*0.075; own[i]=det(i+4411)>0.24?1:0; }
+
+  o.push({k:"fill",col:"#06080C"});
+  o.push({k:"band",x:0.06,y:0.475,w:0.88,h:0.05,col:hexA("#FFFFFF",.08)});
+
+  var draw=eo(seg(u,0.06,0.72)), x=0.06, tot=0;
+  for(i=0;i<N;i++){
+    /* each tick has its own window inside the draw, which is the stagger */
+    var t=cl((draw*N)-i,0,1);
+    if(t<=0) break;
+    var w=gain[i]*eb(t);
+    o.push({k:"band",x:x,y:0.475,w:w,h:0.05,col:own[i]?c.hp:c.vp2,a:0.95});
+    o.push({k:"band",x:x,y:0.475,w:0.0022,h:0.05,col:hexA("#FFFFFF",.45)});
+    /* the leading tick throws a pip above the line as it lands */
+    if(t<1) o.push({k:"tri",x:x+w,y:0.40,w:0.022,h:0.038,
+                    col:hexA("#FFFFFF",1-t),dir:"down"});
+    x+=w+0.004; tot+=Math.round(gain[i]*820);
+  }
+  /* the goal line, and the chain reaching it */
+  o.push({k:"band",x:0.94,y:0.42,w:0.004,h:0.16,col:hexA("#FFFFFF",.6)});
+  if(draw>=1){
+    o.push({k:"flash",a:pulse(seg(u,0.72,0.86))*0.35});
+    o.push({k:"word",t:c.H.call,x:0.5,y:0.30,h:0.11,col:"#FFFFFF",fit:0.66,track:0.03,
+            a:seg(u,0.74,0.88)});
+  }
+  o.push({k:"word",t:tot+" YARDS · "+N+" PLAYS",x:0.5,y:0.66,h:0.038,
+          col:hexA("#FFFFFF",.72),fit:0.60,track:0.12,a:cl(draw*1.6,0,1)});
+  o.push({k:"word",t:B.name,x:0.5,y:0.955,h:0.026,col:hexA("#FFFFFF",.38),
+          fit:0.50,track:0.18});
+  o.push({k:"vig",a:0.28});
+  return {layers:o,phase:"chain · "+(draw>=1?"drive over":"drawing")};
+};
+
+/* ── 8 · THE PYLON POP ───────────────────────────────────────────────────── */
+G.bpylon=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i;
+  /* There is no camera in this renderer, and this move does not need one. What
+     makes a pylon shot legible in a hundredth of a second is not lens geometry,
+     it is a SIGNATURE: the horizon shoved to the top, converging lines, and a
+     vignette heavy enough to be a lens. Reproduce the signature and the room
+     reads "goal line camera" without any perspective maths at all.
+
+     The cut is hard on purpose. Every other move here eases; a camera change
+     does not ease, and easing it is the one thing that would give it away. */
+  var IN=0.30, OUT=0.82, inPylon=(u>=IN&&u<OUT);
+  var t=inPylon?seg(u,IN,OUT):0;
+
+  if(!inPylon){
+    /* the wide shot we cut away from and back to */
+    o.push({k:"fill",col:mixHex(c.hp,"#000000",0.55)});
+    for(i=0;i<=10;i++)
+      o.push({k:"band",x:0.04+i*0.092,y:0.30,w:0.0018,h:0.44,col:hexA("#FFFFFF",.14)});
+    o.push({k:"word",t:u<IN?"FOURTH AND GOAL":B.name,x:0.5,y:0.50,h:0.10,
+            col:"#FFFFFF",fit:0.80,track:0.05});
+    o.push({k:"vig",a:0.30});
+    return {layers:o,phase:"pylon · "+(u<IN?"wide":"back to wide")};
+  }
+
+  /* low, wide, and lying on the grass */
+  o.push({k:"fill",col:"#0A1408"});
+  o.push({k:"band",x:0,y:0,w:1,h:0.22,col:mixHex(c.vd||c.vp2,"#000000",0.60)});
+  /* converging yard lines: a fan from a vanishing point above the frame, which
+     is what a lens on the turf actually gives you */
+  for(i=-7;i<=7;i++){
+    var top=0.5+i*0.030, bot=0.5+i*0.155;
+    o.push({k:"band",x:top,y:0.22,w:Math.max(0.0016,0.010*Math.abs(i)/7+0.002),
+            h:0.78,col:hexA("#FFFFFF",.10+0.04*(1-Math.abs(i)/7)),
+            skew:(bot-top)*46});
+  }
+  /* the goal line across, and the pylon itself, close enough to be furniture */
+  o.push({k:"band",x:0,y:0.60,w:1,h:0.022,col:hexA("#FFFFFF",.72)});
+  o.push({k:"band",x:0.055,y:0.44,w:0.055,h:0.30,col:"#F58220"});
+  o.push({k:"band",x:0.055,y:0.44,w:0.055,h:0.030,col:hexA("#FFFFFF",.55)});
+  o.push({k:"band",x:0.890,y:0.44,w:0.055,h:0.30,col:"#F58220"});
+  o.push({k:"band",x:0.890,y:0.44,w:0.055,h:0.030,col:hexA("#FFFFFF",.55)});
+
+  /* the ball crossing, and the flash when it does */
+  var bx=mix(0.18,0.62,eo(t)), by=mix(0.86,0.63,eo(t));
+  for(i=1;i<=5;i++)
+    o.push({k:"dot",x:bx-i*0.028,y:by+i*0.014,r:0.020-i*0.002,
+            col:hexA("#6B3A16",0.5*(1-i/6))});
+  o.push({k:"dot",x:bx,y:by,r:0.026,col:"#8B4A1C"});
+  o.push({k:"dot",x:bx,y:by,r:0.026,col:hexA("#FFFFFF",.18)});
+  if(t>0.62) o.push({k:"flash",a:pulse(seg(t,0.62,0.80))*0.5});
+  if(t>0.70)
+    o.push({k:"word",t:"TOUCHDOWN",x:0.5,y:0.30,h:0.13,col:"#FFFFFF",fit:0.88,track:0.04,
+            a:seg(t,0.70,0.82)});
+
+  /* a lens is a lens because of its edges */
+  o.push({k:"vig",a:0.62});
+  return {layers:o,phase:"pylon · goal line camera"};
+};
+
+/* ── 9 · THE ODOMETER ────────────────────────────────────────────────────── */
+G.broll=function(u,C){
+  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), ev=C.ev, o=[];
+  /* The detail nobody notices until it is missing: a score does not cut from 14
+     to 21, it ROLLS, and the side that scored flashes behind it.
+
+     There is no clip in this layer model, so the digits leaving and arriving are
+     faded against the plate rather than masked by it. At thirty feet that is the
+     same picture and it costs two word layers instead of a canvas. */
+  var to=(ev.hs|0)||21, from=Math.max(0,to-7);
+  var roll=eio(seg(u,0.30,0.52));
+
+  o.push({k:"fill",col:"#07090E"});
+  o.push({k:"band",x:0,y:0.30,w:1,h:0.44,col:"#0C2A16",a:0.8});
+
+  /* the bar, both schools, home on the left because it is home */
+  var by=0.40, bh=0.24;
+  plate(o,0.10,by,0.80,bh,hexA("#0A0D14",.97),1,hexA("#FFFFFF",.20));
+  /* the scoring side floods its own colour behind the roll and decays */
+  var flood=pulse(cl(seg(u,0.28,0.62),0,1));
+  o.push({k:"band",x:0.11,y:by+0.012,w:0.38,h:bh-0.024,col:hexA(c.hp,.30+0.65*flood)});
+  o.push({k:"band",x:0.51,y:by+0.012,w:0.38,h:bh-0.024,col:hexA(c.vp2,.30)});
+
+  o.push({k:"word",t:c.H.ab,x:0.20,y:by+0.06,h:0.045,col:"#FFFFFF",fit:0.14,track:0.04});
+  o.push({k:"word",t:c.V.ab,x:0.60,y:by+0.06,h:0.045,col:"#FFFFFF",fit:0.14,track:0.04});
+
+  /* the roll: outgoing digit up and out, incoming up and in */
+  var dh=0.13, cy=by+0.165;
+  if(roll<1){
+    o.push({k:"word",t:String(from),x:0.40,y:cy-dh*roll*1.15,h:dh,
+            col:hexA("#FFFFFF",1-roll*1.4),fit:0.16});
+    o.push({k:"word",t:String(to),x:0.40,y:cy+dh*(1-roll)*1.15,h:dh,
+            col:hexA("#FFFFFF",roll*1.4),fit:0.16});
+  }else{
+    o.push({k:"word",t:String(to),x:0.40,y:cy,h:dh,col:"#FFFFFF",fit:0.16});
+  }
+  o.push({k:"word",t:String(ev.as|0),x:0.80,y:cy,h:dh,
+          col:hexA("#FFFFFF",.80),fit:0.16});
+
+  /* the flash the moment the number lands, and nothing else */
+  o.push({k:"flash",a:pulse(seg(u,0.46,0.58))*0.30});
+  o.push({k:"word",t:B.name,x:0.5,y:0.80,h:0.036,col:hexA("#FFFFFF",.66),
+          fit:0.70,track:0.14,a:seg(u,0.55,0.70)});
+  specular(o,((u*1.4)%1)*1.3-0.15,0.7,0.05);
+  o.push({k:"vig",a:0.26});
+  return {layers:o,phase:"odometer · "+(roll<=0?"held":(roll<1?"rolling":from+" → "+to))};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
    6b · FX — the gain control
    Not a set of new cues. A layer that READS whatever frame a grammar produced
    and decorates it, so all 20 event types and all 16 schools get it without a
@@ -7207,6 +8058,10 @@ var PHASES = {
   flyover3d:[[0,.20,"Approach","the bowl appears"],[.20,.40,"The bowl","tiers and roof"],
              [.40,.66,"Card stunt","the crowd spells it"],[.66,.86,"Pyro","3D shells"],
              [.86,1,"Lockup","school + venue"]],
+  versus:[[0,.30,"Slam","both plates land"],[.30,.50,"Ignite","VS burns in"],
+          [.50,1,"The card","what it is called, what it is for"]],
+  tape:[[0,1,"Weigh-in","rows land from the outside in"]],
+  trophy:[[0,1,"The hardware","both sides reaching"]],
   clash:[[0,.46,"The charge","both walls accelerate"],[.46,.60,"Impact","shards and shockwave"],
          [.60,.86,"The seam","it fights"],[.86,1,"Lockup","home takes it"]],
   tug:[[0,1,"Pulls","twelve lurches, discrete on purpose"]],
@@ -7367,6 +8222,12 @@ function frameAt(ev,L,ms,fx){
      rest, and a rest that sparkles is not a rest */
   if(ms>=ev.d) return Object.assign(restFrame(C),{u:1,rest:true,C:C});
   var u=cl(ms/ev.d,0,1);
+  /* A speed ramp is a remap of the cue's own clock and nothing else, so it goes
+     here rather than inside any one grammar -- one line, and every cue in the
+     file can have one for the cost of a registry field. rampU is monotonic and
+     exactly onto [0,1], so a ramped cue still ends when its duration says it
+     does and the rest lockup still lands on time. */
+  if(ev.ramp) u=rampU(u,ev.ramp[0],ev.ramp[1],ev.ramp[2]);
   var f=(G[ev.cue]||G.runacross)(u,C);
   f.u=u; f.rest=false; f.C=C;
   return fxDecorate(f, ev, C, fx===undefined?FX:fx);
