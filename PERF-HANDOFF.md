@@ -179,6 +179,10 @@ too → measure.
   unparseable because the check printed FAIL and the chained commit ran anyway.
 - **Never put JS regex literals through a shell heredoc.** Backslashes are
   stripped; that is what broke v1.0046. Write patch scripts to a file.
+- **Never put backticks in a `git commit -m` message.** Bash runs them as
+  command substitution and silently deletes the word. v1.0056 shipped with
+  three words missing from its message before being amended. Same class as the
+  heredoc bug: write the message to a file and use `-F`.
 - **`#dev` forces BENCH**, which adds the `#tvbench` overlay. It perturbs what
   it measures — keep it on both sides of any A/B.
 - **Take five samples, not one.** See §2.
