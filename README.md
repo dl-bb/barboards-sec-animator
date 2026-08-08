@@ -18,13 +18,17 @@ Single file, no build step, no dependencies beyond Google Fonts (Anton + IBM Ple
 ## Two independent axes
 
 A push event has two axes: **what happened**, and **who it happened to**. They are selected
-separately, so all 35 cues are available for all 16 schools against any opponent.
+separately, so all 61 cues are available for all 16 schools against any opponent.
 
-**35 cues**
+**61 cues**
 
 | Group | Types |
 |---|---|
 | Custom message | **your own copy, on the touchdown animation** |
+| Music · play it with the record | **Welcome to the Jungle · 4:31** |
+| Shows · pick these by name | BarBoards College GameDay · the origin crawl · **BarBoards Sports open** · BarBoards Saturday open |
+| Rivalry · two teams, one wall | the versus screen · tale of the tape · the trophy · the collision · tug of war · the rip · the mash · the staredown |
+| **Broadcast moves · rivalry edition** | **the colour wipe · the matchup collision · the speed ramp · the whip · the light sweep · bug becomes the card · the drive chain · the pylon pop · the odometer** |
 | Scoring | touchdown · two-point conversion · safety |
 | Kicking | field goal 50+ · walk-off field goal |
 | Return touchdowns | pick six · scoop and score · kick return TD · blocked kick returned |
@@ -32,10 +36,68 @@ separately, so all 35 cues are available for all 16 schools against any opponent
 | Big plays | explosive play 40+ · fourth-down conversion · fake punt |
 | States & stoppages | red zone · two-minute warning · goal-line stand · review overturned |
 | Ritual | chant / call track |
-| House cues · no push event | **Welcome to the Jungle** · **the team train** · the wave · decibel meter · kickoff countdown · rally clap · phones up · spotlight sweep · ambient rail |
+| House cues · no push event | **the team train** · the wave · decibel meter · kickoff countdown · rally clap · phones up · spotlight sweep · ambient rail |
 | Patron · interactive | Color Wars |
-| Broadcast furniture | **BarBoards Sports open** · BarBoards Saturday open · score bug · lower third · replay wipe |
-| Benchmark | stadium flyover · stadium flyover 3D |
+| Broadcast furniture | score bug · lower third · replay wipe |
+| Benchmark | ladder × 4 · stadium flyover · stadium flyover 3D |
+
+## Broadcast moves — the rivalry edition
+
+The furniture group is what a broadcast **puts on screen**. This group is what a broadcast
+**does** — the wipes, the collisions, the ramps, the whips. It is the verbs rather than the
+nouns, and it is most of why a telecast reads as televised rather than as a screensaver.
+
+Three things decided what made the cut.
+
+**1 · What the silicon charges for.** Measured on the QCS6490, not guessed: 89 full-canvas
+translucent layers cost 0.5 ms, while 341 text layers cost 26.6 ms at p99. Overdraw is free
+on that tiler and type has a six-times tail. So every move here is built out of floods, bands
+and triangles, and spends its whole text budget on a rivalry name and a word. Peak cost across
+the nine is **46 layers and 8 words** in a frame.
+
+**2 · Thirty feet.** The genuinely coolest things on a telecast — the SkyCam glide, the drone
+orbit, the freeze-and-orbit — are slow and carried by detail, and detail loses to contrast at
+the distance that matters. That is why the flyover is filed under `bench` and not under a group
+anybody is meant to call on a Saturday. Nothing here asks the room to squint.
+
+**3 · Two colours.** A rivalry cue that renders one school is a cue with a bug in it. Every
+move takes both, on `rivColors` and `beefOf`, so all 240 orderings get a real rivalry name.
+
+| Move | What it is on air | What it is here |
+|---|---|---|
+| The colour wipe | a chamfered edge crossing in a team colour | three crossings; the type is revealed **by** the edge, not faded up beside it |
+| The matchup collision | two marks colliding, flash, shockwave | shake at 0.9% of frame — broadcast's 3 px is invisible at thirty feet |
+| The speed ramp | real speed, slam to slow, ramp out | a remap of the cue's own clock; see below |
+| The whip | a camera panning faster than the shutter | ten offset copies of the same card — overdraw, therefore free |
+| The light sweep | the specular that makes a lockup read as metal | three skewed bands, not a gradient — no save/restore, no pattern lookup |
+| Bug becomes the card | the bug **grows** into the full-screen stat | one rect interpolated between two geometries; the colour chips travel rather than crossfade, which is what sells it as the same object |
+| The drive chain | a timeline drawing left to right | twelve ticks on a stagger, colour carrying the meaning so the labels stay off |
+| The pylon pop | the goal-line camera | no camera — the *signature* of one: horizon shoved up, converging lines, vignette heavy enough to be a lens |
+| The odometer | a score rolling rather than cutting | outgoing digit up and out, incoming up and in, scoring side flooding its colour behind |
+
+### The ramp is a field, not a cue
+
+`rampU` remaps normalised time and nothing else — same layers, same grammar, entirely
+different read. It is applied in `frameAt` before the grammar ever runs, so **any** registry
+entry can have one for the cost of one field:
+
+    {id:"bx-pylon", …, ramp:[0.52, 0.74, 0.28]}
+
+`[a, b, rate]` brackets the slow window in input time and says how slow. The velocity step is
+deliberately hard rather than eased: the slam *is* the move, and a shoulder on it reads as a
+dropped frame rather than as an intention. Monotonic and exactly onto [0,1] by construction,
+so a ramped cue still ends when its duration says it does and the rest lockup still lands on
+time. Verified: identity on every cue without the field, and on `bx-pylon` cue time advances
+**0.079 across a window worth 0.22** of wall clock.
+
+### The first five are primitives
+
+`wipeAt` / `carried`, `smear`, `specular` and `rampU` are exported for any cue in the file to
+call, because a wipe is something you do *to* something rather than something you watch on its
+own. Each is additionally registered as a cue so it can be seen, timed and measured alone.
+
+There is no clip in the layer model and none of this needs one: the ground an edge has covered
+is just a band, and an element's alpha is a function of how far the edge has passed it.
 
 ## Welcome to the Jungle — 4:31, cut to the record
 
