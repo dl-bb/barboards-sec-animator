@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0056";
+var VERSION = "v1.0057";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1785,35 +1785,14 @@ var TYPES=[
  desc:function(c){ return c.p(0)+" 41 yd pass to "+c.p(2)+" to the "+c.ok+" 18"; },
  sr:{"pass.yards":41}},
 
-/* ── benchmark ─────────────────────────────────────────────────────────
-   Deliberately heavy. Not for a wall on a Saturday; for finding the knee. */
+/* ── rivalry ───────────────────────────────────────────────────────────
+   Two schools, one wall, neither given the whole frame until it earns it. */
 {id:"riv-vs", grp:"rivalry", label:"The versus screen", cue:"versus", d:9000, house:true,
  amp:98,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
  period:4,clock:"0:00",hs:0,as:0,
  name:function(T,O){ return beefOf(T.ab,O.ab).name; },
  sub:function(T,O){ return "FIGHT CARD · "+T.ab+" vs "+O.ab; },
  desc:function(c){ return "Rivalry — The versus screen"; }, sr:{}},
-
-{id:"riv-tape", grp:"rivalry", label:"Tale of the tape", cue:"tape", d:14000, house:true,
- amp:98,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "WEIGH-IN · "+T.ab+" vs "+O.ab; },
- desc:function(c){ return "Rivalry — Tale of the tape"; }, sr:{}},
-
-{id:"riv-trophy", grp:"rivalry", label:"The trophy", cue:"trophy", d:11000, house:true,
- amp:98,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "THE HARDWARE · "+T.ab+" vs "+O.ab; },
- desc:function(c){ return "Rivalry — The trophy"; }, sr:{}},
-
-{id:"riv-clash", grp:"rivalry", label:"The collision", cue:"clash", d:10000, house:true,
- amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "HEAD ON · "+T.ab+" vs "+O.ab; },
- desc:function(c){ return "Rivalry — The collision"; }, sr:{}},
 
 {id:"riv-tug", grp:"rivalry", label:"Tug of war", cue:"tug", d:11000, house:true,
  amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
@@ -1822,54 +1801,16 @@ var TYPES=[
  sub:function(T,O){ return "TERRITORY · "+T.ab+" vs "+O.ab; },
  desc:function(c){ return "Rivalry — Tug of war"; }, sr:{}},
 
-{id:"riv-rip", grp:"rivalry", label:"The rip", cue:"rip", d:9000, house:true,
- amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "TEAR IT OPEN · "+T.ab+" vs "+O.ab; },
- desc:function(c){ return "Rivalry — The rip"; }, sr:{}},
-
-{id:"riv-mash", grp:"rivalry", label:"The mash", cue:"mash", d:10000, house:true,
- amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "VORTEX · "+T.ab+" vs "+O.ab; },
- desc:function(c){ return "Rivalry — The mash"; }, sr:{}},
-
-{id:"riv-standoff", grp:"rivalry", label:"The staredown", cue:"standoff", d:11000, house:true,
- amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "EYE TO EYE · "+T.ab+" vs "+O.ab; },
- desc:function(c){ return "Rivalry — The staredown"; }, sr:{}},
-
-/* ── broadcast moves · rivalry edition ─────────────────────────────────
-   Nine verbs off a live telecast, each on both schools' colours. The first
-   five are also primitives any other cue can call — see section 6g.
-
-   `ramp` is read by frameAt and remaps the cue's own clock before the
-   grammar ever sees it, so it composes with anything. bx-pylon carries one
-   because a goal-line camera that does not go slow is just a low angle. */
+/* ── broadcast moves ───────────────────────────────────────────────────
+   Three verbs off a live telecast, on both schools' colours. All three are
+   also primitives any other cue can call — wipeAt/carried, smear and
+   specular — see section 6g. */
 {id:"bx-wipe", grp:"bcast", label:"The colour wipe", cue:"bwipe", d:9000, house:true,
  amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
  period:4,clock:"0:00",hs:0,as:0,
  name:function(T,O){ return beefOf(T.ab,O.ab).name; },
  sub:function(T,O){ return "IT CARRIES · "+T.ab+" vs "+O.ab; },
  desc:function(c){ return "Broadcast — the colour wipe"; }, sr:{}},
-
-{id:"bx-collide", grp:"bcast", label:"The matchup collision", cue:"bcollide", d:10000, house:true,
- amp:98,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "HEAD ON · "+T.ab+" vs "+O.ab; },
- desc:function(c){ return "Broadcast — the matchup collision"; }, sr:{}},
-
-{id:"bx-ramp", grp:"bcast", label:"The speed ramp", cue:"bramp", d:11000, house:true,
- amp:94,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "SLAM TO SLOW · "+T.ab+" 62 YARDS"; },
- desc:function(c){ return "Broadcast — the speed ramp"; }, sr:{}},
 
 {id:"bx-whip", grp:"bcast", label:"The whip", cue:"bwhip", d:10000, house:true,
  amp:92,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
@@ -1885,34 +1826,73 @@ var TYPES=[
  sub:function(T,O){ return "LIT ON ARRIVAL · "+T.ab+" vs "+O.ab; },
  desc:function(c){ return "Broadcast — the specular pass"; }, sr:{}},
 
-{id:"bx-bug", grp:"bcast", label:"Bug becomes the card", cue:"bbug", d:11000, house:true,
- amp:84,win:0,tier:2,reg:"neutral", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"2:00",hs:21,as:17,
- name:function(T,O){ return T.ab+" "+21+" · "+O.ab+" "+17; },
- sub:function(T,O){ return "IT GROWS, IT DOES NOT CUT"; },
- desc:function(c){ return "Broadcast — bug expands to full screen"; }, sr:{}},
+/* ── stadium screen · the big board ────────────────────────────────────
+   Ten bits off the video board rather than off the telecast. These are the
+   segments a venue runs BETWEEN plays, and the room is meant to answer
+   them — which is the whole difference from everything above. See 6h.
 
-{id:"bx-chain", grp:"bcast", label:"The drive chain", cue:"bchain", d:10000, house:true,
- amp:82,win:0,tier:2,reg:"neutral", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "TWELVE PLAYS · "+T.ab+" vs "+O.ab; },
- desc:function(c){ return "Broadcast — the drive chain"; }, sr:{}},
+   st-race carries a `ramp`, because a photo finish that does not go slow
+   at the line is not a photo finish. */
+{id:"st-kiss", grp:"stadium", label:"Kiss cam", cue:"kisscam", d:11000, house:true,
+ amp:70,win:0,tier:2,reg:"neutral", cat:"house",type:null,play:null,yards:0,
+ period:3,clock:"7:20",hs:0,as:0,
+ name:"KISS CAM", sub:function(T){ return T.venue.split(" · ")[0].toUpperCase(); },
+ desc:function(c){ return "Stadium — kiss cam"; }, sr:{}},
 
-{id:"bx-pylon", grp:"bcast", label:"The pylon pop", cue:"bpylon", d:9000, house:true,
- ramp:[0.52,0.74,0.28],
+{id:"st-race", grp:"stadium", label:"The race", cue:"race", d:12000, house:true,
+ ramp:[0.72,0.88,0.30],
+ amp:88,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:3,clock:"0:00",hs:0,as:0,
+ name:"THE RACE", sub:"PHOTO FINISH",
+ desc:function(c){ return "Stadium — the mascot race"; }, sr:{}},
+
+{id:"st-shell", grp:"stadium", label:"The shell game", cue:"shell", d:13000, house:true,
+ amp:76,win:0,tier:2,reg:"neutral", cat:"house",type:null,play:null,yards:0,
+ period:2,clock:"11:41",hs:0,as:0,
+ name:"FIND THE BALL", sub:"THREE HELMETS · ONE BALL",
+ desc:function(c){ return "Stadium — the shell game"; }, sr:{}},
+
+{id:"st-dance", grp:"stadium", label:"Dance cam", cue:"dancecam", d:11000, house:true,
+ amp:82,win:0,tier:2,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:3,clock:"4:02",hs:0,as:0,
+ name:"DANCE CAM", sub:"YOU ARE ON THE BOARD",
+ desc:function(c){ return "Stadium — dance cam"; }, sr:{}},
+
+{id:"st-trivia", grp:"stadium", label:"Trivia", cue:"trivia", d:13000, house:true,
+ amp:64,win:0,tier:1,reg:"neutral", cat:"house",type:null,play:null,yards:0,
+ period:2,clock:"9:15",hs:0,as:0,
+ name:"TRIVIA", sub:function(T){ return "SPONSORED BY THE HOUSE · "+T.ab; },
+ desc:function(c){ return "Stadium — trivia card"; }, sr:{}},
+
+{id:"st-battle", grp:"stadium", label:"Noise battle", cue:"battle", d:11000, house:true,
+ amp:94,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"2:00",hs:0,as:0,
+ name:"NOISE BATTLE", sub:"THIS SIDE vs THAT SIDE",
+ desc:function(c){ return "Stadium — section vs section"; }, sr:{}},
+
+{id:"st-att", grp:"stadium", label:"Guess the attendance", cue:"attend", d:10000, house:true,
+ amp:60,win:0,tier:1,reg:"neutral", cat:"house",type:null,play:null,yards:0,
+ period:3,clock:"12:00",hs:0,as:0,
+ name:"ATTENDANCE", sub:function(T){ return "TONIGHT AT "+T.venue.split(" · ")[0].toUpperCase(); },
+ desc:function(c){ return "Stadium — guess the attendance"; }, sr:{}},
+
+{id:"st-defense", grp:"stadium", label:"Defense siren", cue:"defsiren", d:9000, house:true,
+ amp:99,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"1:52",hs:0,as:0,
+ name:"DEFENSE", sub:"THIRD DOWN · GET UP",
+ desc:function(c){ return "Stadium — third-down siren"; }, sr:{}},
+
+{id:"st-wheel", grp:"stadium", label:"Spin to win", cue:"wheel", d:12000, house:true,
+ amp:74,win:0,tier:2,reg:"neutral", cat:"house",type:null,play:null,yards:0,
+ period:2,clock:"6:30",hs:0,as:0,
+ name:"SPIN TO WIN", sub:"SECTION 114 · ROW 12",
+ desc:function(c){ return "Stadium — the prize wheel"; }, sr:{}},
+
+{id:"st-pyro", grp:"stadium", label:"Fireworks", cue:"pyro", d:10000, house:true,
  amp:97,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
  period:4,clock:"0:00",hs:0,as:0,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "GOAL LINE CAMERA · "+T.ab; },
- desc:function(c){ return "Broadcast — the pylon pop"; }, sr:{}},
-
-{id:"bx-roll", grp:"bcast", label:"The odometer", cue:"broll", d:9000, house:true,
- amp:90,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
- period:4,clock:"0:00",hs:21,as:14,
- name:function(T,O){ return beefOf(T.ab,O.ab).name; },
- sub:function(T,O){ return "IT ROLLS · "+T.ab+" 14 → 21"; },
- desc:function(c){ return "Broadcast — the score odometer"; }, sr:{}},
+ name:"FIREWORKS", sub:function(T){ return T.call; },
+ desc:function(c){ return "Stadium — the pyro payoff"; }, sr:{}},
 
 {id:"lad-calls", grp:"bench", label:"Ladder · draw calls", cue:"probe", d:12000, house:true,
  amp:1,win:0,tier:0,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
@@ -2105,7 +2085,8 @@ var TYPE_GROUPS=[["custom","Custom message · your copy"],
   ["music","Music · play it with the record"],
   ["show","Shows · pick these by name"],
   ["rivalry","Rivalry · two teams, one wall"],
-  ["bcast","Broadcast moves · rivalry edition"],
+  ["bcast","Broadcast moves · off the telecast"],
+  ["stadium","Stadium screen · the big board"],
   ["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
   ["ritual","Ritual"],["house","House cues · no push event"],
@@ -4119,75 +4100,7 @@ function rivColors(C){
                ? mixHex(V.p,"#000000",0.45) : V.p};
 }
 
-/* ── 1 · THE COLLISION ─────────────────────────────────────────────────── */
-G.clash=function(u,C){
-  var c=rivColors(C), o=[], i, ph="", B=beefOf(C.ev.team,C.ev.opp);
-  o.push({k:"fill",col:"#05070B"});
-  var hit=0.46, seam=0.5;
-  if(u<hit){
-    /* the charge: both walls accelerate toward the middle */
-    ph="the charge";
-    var v=eio(seg(u,0,hit));
-    var lw=v*0.5, rw=v*0.5;
-    o.push({k:"band",x:0,y:0,w:lw,h:1,col:c.hp});
-    o.push({k:"band",x:1-rw,y:0,w:rw,h:1,col:c.vp2});
-    /* speed lines ahead of each wall */
-    for(i=0;i<10;i++){
-      var sy=0.05+i*0.095;
-      o.push({k:"band",x:lw,y:sy,w:0.06*v,h:0.006,col:hexA(c.hp,0.5)});
-      o.push({k:"band",x:1-rw-0.06*v,y:sy+0.045,w:0.06*v,h:0.006,col:hexA(c.vp2,0.5)});
-    }
-    o.push({k:"glow",x:lw,y:0.5,r:0.10+0.10*v,col:hexA(c.hp,0.35),a:1});
-    o.push({k:"glow",x:1-rw,y:0.5,r:0.10+0.10*v,col:hexA(c.vp2,0.35),a:1});
-  }
-  else if(u<0.60){
-    /* IMPACT */
-    ph="impact";
-    var iv=seg(u,hit,0.60);
-    o.push({k:"band",x:0,y:0,w:0.5,h:1,col:c.hp});
-    o.push({k:"band",x:0.5,y:0,w:0.5,h:1,col:c.vp2});
-    o.push({k:"flash",a:(1-iv)*0.9});
-    for(i=0;i<4;i++)
-      o.push({k:"ring",x:0.5,y:0.5,r:0.05+iv*(0.5+i*0.18),col:"#FFFFFF",
-              w:Math.max(1,9*(1-iv)),a:(1-iv)*0.5});
-    /* shards thrown from the seam, each side keeping its own colour */
-    for(i=0;i<26;i++){
-      var dir=(i%2)?1:-1, sp=0.05+det(i+1301)*0.55;
-      o.push({k:"tri",x:0.5+dir*sp*iv,y:0.08+det(i+1311)*0.84,
-              w:0.02+det(i+1321)*0.05,h:0.03+det(i+1331)*0.07,
-              col:hexA(dir>0?c.vp2:c.hp,1-iv*0.6),dir:(i%3)?"up":"down"});
-    }
-  }
-  else if(u<0.86){
-    /* the seam fights */
-    ph="the seam";
-    var sv=seg(u,0.60,0.86);
-    seam=0.5+Math.sin(sv*14)*0.06*(1-sv)+sv*0.12;   /* home pushes through */
-    o.push({k:"band",x:0,y:0,w:seam,h:1,col:c.hp});
-    o.push({k:"band",x:seam,y:0,w:1-seam,h:1,col:c.vp2});
-    for(i=0;i<20;i++){
-      var jy=i/20;
-      o.push({k:"tri",x:seam,y:jy+0.025,w:0.03,h:0.05,
-              col:(i%2)?c.hp:c.vp2,dir:(i%2)?"down":"up"});
-    }
-    o.push({k:"band",x:seam-0.004,y:0,w:0.008,h:1,col:hexA("#FFFFFF",0.7)});
-    o.push({k:"word",t:B.name,x:0.5,y:0.46,h:0.10,col:"#FFFFFF",fit:0.86,track:0.06,
-            a:cl(sv*3,0,1)});
-  }
-  else{
-    ph="lockup";
-    var lv=seg(u,0.86,1);
-    o.push({k:"band",x:0,y:0,w:0.72,h:1,col:c.hp});
-    o.push({k:"band",x:0.72,y:0,w:0.28,h:1,col:c.vp2});
-    o.push({k:"word",t:c.H.word,x:0.36,y:0.44,h:0.20,col:"#FFFFFF",fit:0.62,track:0.02});
-    o.push({k:"word",t:B.name,x:0.36,y:0.62,h:0.045,col:hexA("#FFFFFF",0.75),
-            fit:0.56,track:0.16,a:cl(lv*3,0,1)});
-  }
-  o.push({k:"vig",a:0.28});
-  return {layers:o,phase:ph};
-};
-
-/* ── 2 · TUG OF WAR ────────────────────────────────────────────────────── */
+/* ── 1 · TUG OF WAR ────────────────────────────────────────────────────── */
 G.tug=function(u,C){
   var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
   /* the seam lurches -- each lurch is one side winning a pull, and the steps
@@ -4225,123 +4138,6 @@ G.tug=function(u,C){
   return {layers:o,phase:"tug · "+Math.round(seam*100)+"/"+Math.round((1-seam)*100)};
 };
 
-/* ── 3 · THE RIP ───────────────────────────────────────────────────────── */
-G.rip=function(u,C){
-  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
-  o.push({k:"fill",col:c.vp2});
-  var open=(u<0.14)?0:eio(seg(u,0.14,0.72));
-  /* the tear: a jagged column that widens, home colour behind it */
-  var N=22;
-  if(open>0){
-    o.push({k:"band",x:0.5-open*0.55,y:0,w:open*1.10,h:1,col:c.hp});
-    for(i=0;i<N;i++){
-      var ty=i/N, w2=open*0.55, jag=det(i+1401)*0.05*open;
-      o.push({k:"tri",x:0.5-w2-jag,y:ty+0.5/N,w:0.045,h:1.0/N,
-              col:c.vp2,dir:(i%2)?"down":"up"});
-      o.push({k:"tri",x:0.5+w2+jag,y:ty+0.5/N,w:0.045,h:1.0/N,
-              col:c.vp2,dir:(i%2)?"up":"down"});
-    }
-    o.push({k:"band",x:0.5-open*0.55,y:0,w:0.005,h:1,col:hexA("#FFFFFF",0.6)});
-    o.push({k:"band",x:0.5+open*0.55,y:0,w:0.005,h:1,col:hexA("#FFFFFF",0.6)});
-  }
-  /* the crack, before it gives */
-  if(u<0.20){
-    var cv=seg(u,0,0.20);
-    for(i=0;i<14;i++)
-      o.push({k:"band",x:0.5+(det(i+1411)-0.5)*0.03*cv,y:i/14,w:0.004,h:1/14,
-              col:hexA("#FFFFFF",0.25+0.5*cv),rot:(det(i+1421)-0.5)*10});
-    if(cv>0.7) o.push({k:"flash",a:(cv-0.7)*1.6});
-  }
-  if(u>0.72){
-    var lv=seg(u,0.72,1);
-    o.push({k:"word",t:c.H.word,x:0.5,y:0.44,h:0.22,col:"#FFFFFF",fit:0.80,track:0.02,
-            a:cl(lv*4,0,1)});
-    o.push({k:"word",t:B.line,x:0.5,y:0.66,h:0.042,col:hexA("#FFFFFF",0.7*cl(lv*3,0,1)),
-            fit:0.74,track:0.14});
-  }
-  o.push({k:"vig",a:0.30});
-  return {layers:o,phase:u<0.20?"the crack":(u<0.72?"the rip":"lockup")};
-};
-
-/* ── 4 · THE MASH ──────────────────────────────────────────────────────── */
-G.mash=function(u,C){
-  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
-  o.push({k:"fill",col:"#05070B"});
-  var spin=u*5.2, tight=eio(cl(u/0.66,0,1));
-  /* A PINWHEEL, not a scatter. The first cut was 26 thin bands on black and
-     measured 67% empty -- it read as debris rather than as two colours fighting
-     for the same space. Wedges anchored at the centre and swept all the way out
-     fill the frame, and because they alternate every other wedge is the other
-     school, so the mash is structural rather than decorative. */
-  var arms=14;
-  for(i=0;i<arms;i++){
-    var ang=spin+(i/arms)*6.2832;
-    var len=0.62-0.16*tight;
-    o.push({k:"band",x:0.5,y:0.5,w:len,h:0.085+0.06*tight,
-            col:(i%2)?c.hp:c.vp2,rot:(ang*57.2958)%360});
-  }
-  /* a second, counter-rotating set so the two colours cross rather than fan */
-  for(i=0;i<arms;i++){
-    var ang2=-spin*0.7+(i/arms)*6.2832;
-    o.push({k:"band",x:0.5,y:0.5,w:0.46-0.12*tight,h:0.05+0.04*tight,
-            col:hexA((i%2)?c.vp2:c.hp,0.75),rot:(ang2*57.2958)%360});
-  }
-  /* the core stays small — it is an eye, not a wash */
-  o.push({k:"glow",x:0.5,y:0.5,r:0.05+0.10*tight,
-          col:hexA("#FFFFFF",0.25+0.35*tight),a:1});
-  if(u>0.66){
-    /* detonation: the two colours refuse to stay mixed */
-    var dv=seg(u,0.66,1);
-    o.push({k:"flash",a:cl((0.14-dv)*7,0,1)*0.9});
-    for(i=0;i<34;i++){
-      var a2=det(i+1501)*6.283, rr=dv*(0.20+det(i+1511)*0.70);
-      o.push({k:"dot",x:0.5+Math.cos(a2)*rr*0.58,y:0.5+Math.sin(a2)*rr,
-              r:(0.004+det(i+1521)*0.012)*(1-dv*0.7),
-              col:(i%2)?c.hp:c.vp2});
-    }
-    o.push({k:"word",t:B.name,x:0.5,y:0.46,h:0.11,col:"#FFFFFF",fit:0.86,track:0.06,
-            a:cl((dv-0.18)*4,0,1)});
-  }
-  o.push({k:"vig",a:0.34});
-  return {layers:o,phase:u<0.66?"the mash":"detonation"};
-};
-
-/* ── 5 · THE STAREDOWN ─────────────────────────────────────────────────── */
-G.standoff=function(u,C){
-  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
-  /* alternating pulses, tightening, until both sides go at once */
-  var rate=2+Math.floor(u*7), ph2=(u*rate*4)%1;
-  var side=Math.floor(u*rate*4)%2;
-  var hb=(side===0)?Math.pow(1-ph2,2.4):0;
-  var vb=(side===1)?Math.pow(1-ph2,2.4):0;
-  o.push({k:"fill",col:"#05070B"});
-  var bulge=0.34+u*0.10;
-  o.push({k:"band",x:0,y:0,w:bulge+0.10*hb,h:1,col:c.hp});
-  o.push({k:"band",x:1-bulge-0.10*vb,y:0,w:bulge+0.10*vb,h:1,col:c.vp2});
-  /* the gap between them, crackling */
-  for(i=0;i<12;i++){
-    var gy=i/12+0.04;
-    var gw=(1-2*bulge)-0.10*(hb+vb);
-    o.push({k:"band",x:bulge+0.10*hb,y:gy,w:Math.max(0,gw),h:0.004,
-            col:hexA("#FFFFFF",0.06+0.26*Math.max(hb,vb)*det(i+1601))});
-  }
-  o.push({k:"glow",x:bulge+0.10*hb,y:0.5,r:0.12,col:hexA(c.hp,0.35*hb+0.08),a:1});
-  o.push({k:"glow",x:1-bulge-0.10*vb,y:0.5,r:0.12,col:hexA(c.vp2,0.35*vb+0.08),a:1});
-  o.push({k:"word",t:c.H.ab,x:bulge*0.5,y:0.5,h:0.16,col:"#FFFFFF",fit:0.22,track:0.02,
-          sc:1+0.10*hb});
-  o.push({k:"word",t:(TEAMS[C.ev.opp]||c.H).ab,x:1-bulge*0.5,y:0.5,h:0.16,col:"#FFFFFF",
-          fit:0.22,track:0.02,sc:1+0.10*vb});
-  if(u>0.88){
-    var ev2=seg(u,0.88,1);
-    o.push({k:"flash",a:cl((0.2-ev2)*5,0,1)*0.85});
-    o.push({k:"band",x:0,y:0,w:0.5,h:1,col:c.hp});
-    o.push({k:"band",x:0.5,y:0,w:0.5,h:1,col:c.vp2});
-    o.push({k:"word",t:B.name,x:0.5,y:0.46,h:0.095,col:"#FFFFFF",fit:0.86,track:0.06});
-  }
-  o.push({k:"vig",a:0.32});
-  return {layers:o,phase:u>0.88?"go":("staredown · "+(side?"visitor":"home"))};
-};
-
 /* ══════════════════════════════════════════════════════════════════════════
    THE FIGHT CARD
 
@@ -4367,10 +4163,19 @@ G.standoff=function(u,C){
    far wordier than the first five provided nothing scales -- everything below
    animates POSITION and ALPHA, never size.
 
-   Note that `word` has no `a` field; the renderer ignores it. Alpha on type has
-   to go through hexA() on the colour, or it silently does nothing. */
+   An earlier note here said `word` has no `a` field and that alpha on type has
+   to go through hexA() on the colour. That is not right, and it is worth being
+   exact about because believing it costs you an afternoon: drawLayer reads
+   `var a=(l.a===undefined?1:l.a)` before its switch and the `word` case applies
+   it as `ctx.globalAlpha=a*s.a`, so `a` works on type exactly as it does on a
+   band. Measured on this build -- asked alpha 0 / .19 / .38 / .56 / .75 / 1
+   renders at luma 72 / 93 / 112 / 141 / 163 / 191, which is the ramp, not a
+   step. hexA() on the colour also works and composes with `a`; either is fine.
 
-/* -- 6 - THE VERSUS SCREEN --------------------------------------------- */
+   What is TRUE is the cache point above: it is SIZE that must not vary, not
+   alpha. Animate position and alpha freely; leave `h` alone. */
+
+/* -- 2 - THE VERSUS SCREEN --------------------------------------------- */
 G.versus=function(u,C){
   var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
   var V=TEAMS[C.ev.opp]||c.H;
@@ -4422,91 +4227,6 @@ G.versus=function(u,C){
 /* -- 7 - TALE OF THE TAPE ---------------------------------------------- */
 /* Every row is REAL and comes off the team record. Nothing is invented: there
    are no head-to-head records in this file, so there are none on the wall. */
-G.tape=function(u,C){
-  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
-  var V=TEAMS[C.ev.opp]||c.H;
-  o.push({k:"fill",col:"#0A0C11"});
-  /* OPAQUE corners. The first cut tinted them at 22% and A&M measured 0% of
-     the frame -- a weigh-in where one fighter has no corner. */
-  var hCorner=mixHex("#0A0C11",lift(c.hp,0.18),0.62);
-  var vCorner=mixHex("#0A0C11",lift(c.vp2,0.18),0.62);
-  o.push({k:"band",x:0,y:0,w:0.285,h:1,col:hCorner});
-  o.push({k:"band",x:0.715,y:0,w:0.285,h:1,col:vCorner});
-  o.push({k:"band",x:0.283,y:0,w:0.006,h:1,col:lift(c.hp,0.30)});
-  o.push({k:"band",x:0.711,y:0,w:0.006,h:1,col:lift(c.vp2,0.30)});
-  /* a dim centre column so the middle third is a panel and not a void */
-  o.push({k:"band",x:0.289,y:0,w:0.422,h:1,col:"#111520"});
-  o.push({k:"word",t:c.H.ab,x:0.142,y:0.13,h:0.095,col:"#FFFFFF",fit:0.19,track:0.02});
-  o.push({k:"word",t:V.ab,   x:0.858,y:0.13,h:0.095,col:"#FFFFFF",fit:0.19,track:0.02});
-  var rows=[["NICKNAME",String(c.H.nick||"").toUpperCase(), String(V.nick||"").toUpperCase()],
-            ["HOME",    townOf(c.H),                        townOf(V)],
-            ["THE CALL",String(c.H.call||"").toUpperCase(),  String(V.call||"").toUpperCase()],
-            ["THE SONG",String(c.H.chant||"").toUpperCase(), String(V.chant||"").toUpperCase()]];
-  for(i=0;i<rows.length;i++){
-    var rv=cl(seg(u,0.08+i*0.14,0.22+i*0.14)*1.5,0,1);
-    if(rv<=0) continue;
-    var ry=0.315+i*0.135;
-    o.push({k:"band",x:0.345,y:ry-0.030,w:0.31,h:0.060,col:hexA("#FFFFFF",0.07*rv)});
-    o.push({k:"word",t:rows[i][0],x:0.5,y:ry,h:0.028,col:hexA("#FFFFFF",0.55*rv),
-            fit:0.27,track:0.22});
-    /* values slide in from their own corner; size never changes */
-    o.push({k:"word",t:rows[i][1],x:mix(-0.25,0.142,rv),y:ry,h:0.038,
-            col:"#FFFFFF",fit:0.26,track:0.04});
-    o.push({k:"word",t:rows[i][2],x:mix(1.25,0.858,rv),y:ry,h:0.038,
-            col:"#FFFFFF",fit:0.26,track:0.04});
-  }
-  if(u>0.72){
-    var fv=cl(seg(u,0.72,0.84)*1.4,0,1);
-    o.push({k:"band",x:0,y:0.875,w:1,h:0.125,col:hexA("#000000",0.72*fv)});
-    o.push({k:"word",t:B.name,x:0.5,y:0.925,h:0.050,col:hexA("#FFFFFF",0.95*fv),
-            fit:0.82,track:0.12});
-    if(B.since) o.push({k:"word",t:"SETTLED ON THE FIELD SINCE "+B.since,x:0.5,y:0.975,
-            h:0.026,col:hexA("#FFFFFF",0.55*fv),fit:0.50,track:0.20});
-  }
-  o.push({k:"vig",a:0.26});
-  return {layers:o,phase:"tale of the tape"};
-};
-
-/* -- 8 - THE TROPHY ---------------------------------------------------- */
-G.trophy=function(u,C){
-  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
-  var tr=trophyOf(C.ev.team,C.ev.opp);
-  o.push({k:"fill",col:"#07090E"});
-  o.push({k:"lgrad",x:0,y:0,w:1,h:1,c0:mixHex("#07090E",c.hp,0.18),c1:"#07090E",dir:"v"});
-  /* both sides reaching in for the same object, and neither reaching it */
-  var pull=Math.sin(u*7.4)*0.5+0.5;
-  for(i=0;i<9;i++){
-    var hy=0.10+i*0.092;
-    /* opaque, and thicker -- 55% orange over black desaturated to brown */
-    o.push({k:"band",x:0,y:hy,w:0.30+0.09*pull,h:0.030,
-            col:lift(c.hp,0.16),skew:-12});
-    o.push({k:"band",x:0.70-0.09*pull,y:hy+0.046,w:0.30+0.09*pull,h:0.030,
-            col:lift(c.vp2,0.16),skew:-12});
-  }
-  /* the cup: bowl, stem, base -- gold, lit from one side */
-  var gold="#E8C466", dark="#8A6E28", by=0.26+0.014*Math.sin(u*9);
-  o.push({k:"glow",x:0.5,y:by+0.15,r:0.28,col:hexA(gold,0.18+0.16*pull),a:1});
-  o.push({k:"band",x:0.40,y:by,w:0.20,h:0.022,col:gold});
-  o.push({k:"tri",x:0.5,y:by+0.022,w:0.20,h:0.155,col:gold,dir:"down"});
-  o.push({k:"tri",x:0.47,y:by+0.022,w:0.07,h:0.130,col:hexA("#FFFFFF",0.26),dir:"down"});
-  o.push({k:"band",x:0.487,y:by+0.175,w:0.026,h:0.085,col:dark});
-  o.push({k:"band",x:0.432,y:by+0.260,w:0.136,h:0.026,col:gold});
-  o.push({k:"band",x:0.410,y:by+0.286,w:0.180,h:0.020,col:dark});
-  o.push({k:"band",x:0.352,y:by+0.020,w:0.052,h:0.016,col:gold,rot:-34});
-  o.push({k:"band",x:0.596,y:by+0.020,w:0.052,h:0.016,col:gold,rot:34});
-  /* a rake of light travelling across the whole frame */
-  o.push({k:"band",x:mix(-0.2,1.2,(u*1.3)%1),y:-0.1,w:0.04,h:1.2,
-          col:hexA("#FFFFFF",0.15),skew:-20});
-  o.push({k:"word",t:tr||B.name,x:0.5,y:0.70,h:0.052,
-          col:hexA(gold,0.95*cl(u*4,0,1)),fit:0.72,track:0.14});
-  o.push({k:"word",t:tr?B.name:"ONE TROPHY. TWO CLAIMS.",x:0.5,y:0.80,h:0.038,
-          col:hexA("#FFFFFF",0.75*cl((u-0.18)*4,0,1)),fit:0.66,track:0.16});
-  if(u>0.78) o.push({k:"word",t:"ONE OF YOU LEAVES WITH IT",x:0.5,y:0.915,h:0.036,
-          col:hexA("#FFFFFF",0.85*cl(seg(u,0.78,0.90)*3,0,1)),fit:0.60,track:0.18});
-  o.push({k:"vig",a:0.34});
-  return {layers:o,phase:"the trophy"};
-};
-
 /* ══════════════════════════════════════════════════════════════════════════
    THE LADDER — synthetic cues that isolate ONE cost at a time
 
@@ -6937,14 +6657,13 @@ G.replay=function(u,C){
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
-   6g · BROADCAST MOVES — the rivalry edition
+   6g · BROADCAST MOVES
 
-   Nine moves lifted off a live football telecast, rebuilt for a bar wall.
+   Three moves lifted off a live football telecast, rebuilt for a bar wall.
 
    The furniture above is what a broadcast PUTS on screen. This is what a
-   broadcast DOES -- the wipes, the collisions, the ramps, the whips. It is the
-   verbs rather than the nouns, and it is most of why a telecast reads as
-   televised.
+   broadcast DOES -- the wipe, the whip, the sweep. It is the verbs rather than
+   the nouns, and it is most of why a telecast reads as televised.
 
    THREE THINGS DECIDED WHAT MADE THE CUT.
 
@@ -6964,10 +6683,11 @@ G.replay=function(u,C){
        it, so every move takes both and gives neither the whole frame until it
        has earned it.
 
-   The first five are also PRIMITIVES -- wipeAt, carried, smear, specular and
-   ramp are exported for any cue to use, because a wipe is a thing you do to
-   something, not a thing you watch on its own. Each is additionally registered
-   as a cue so it can be seen, timed and measured in isolation.
+   All three are also PRIMITIVES -- wipeAt, carried, smear and specular are
+   exported for any cue to use, because a wipe is a thing you do to something,
+   not a thing you watch on its own. Each is additionally registered as a cue so
+   it can be seen, timed and measured in isolation. rampU sits with them for the
+   same reason and is wired into frameAt; the stadium race is what calls it now.
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── the wipe, and what it carries ───────────────────────────────────────────
@@ -7039,18 +6759,6 @@ function rampU(u,a,b,rate){
   return cl(v/tot,0,1);
 }
 
-/* ── shared: the matchup lockup both ends of a move settle into ──────────── */
-function lockup(o,c,B,x,a,big){
-  var hw=big?0.62:0.5;
-  o.push({k:"band",x:0,y:x===undefined?0:0,w:hw,h:1,col:c.hp,a:a});
-  o.push({k:"band",x:hw,y:0,w:1-hw,h:1,col:c.vp2,a:a});
-  o.push({k:"word",t:c.H.ab,x:hw*0.5,y:0.44,h:0.20,col:"#FFFFFF",fit:hw*0.7,a:a});
-  o.push({k:"word",t:c.V.ab,x:hw+(1-hw)*0.5,y:0.44,h:0.14,
-          col:"#FFFFFF",fit:(1-hw)*0.7,a:a*0.92});
-  o.push({k:"word",t:B.name,x:0.5,y:0.70,h:0.045,col:hexA("#FFFFFF",.80),
-          fit:0.80,track:0.16,a:a});
-}
-
 /* ── 1 · THE COLOUR WIPE ─────────────────────────────────────────────────── */
 G.bwipe=function(u,C){
   var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], ph="";
@@ -7108,117 +6816,7 @@ G.bwipe=function(u,C){
   return {layers:o,phase:"wipe · "+ph};
 };
 
-/* ── 2 · THE COLLISION ───────────────────────────────────────────────────── */
-G.bcollide=function(u,C){
-  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i, ph="", f={};
-  var HIT=0.44;
-  o.push({k:"fill",col:"#05070B"});
-
-  if(u<HIT){
-    /* two plates thrown at each other from opposite edges. eb overshoots, which
-       is the difference between arriving and landing. */
-    ph="the approach";
-    var v=eb(seg(u,0,HIT));
-    var hx=mix(-0.52,0.06,v), vx=mix(1.52,0.94,v);
-    /* motion streaks trailing each plate -- overdraw, therefore free */
-    for(i=1;i<=6;i++){
-      o.push({k:"band",x:hx-i*0.035,y:0.30,w:0.40,h:0.40,
-              col:hexA(c.hp,0.10*(1-i/7)),skew:-13});
-      o.push({k:"band",x:vx-0.40+i*0.035,y:0.30,w:0.40,h:0.40,
-              col:hexA(c.vp2,0.10*(1-i/7)),skew:-13});
-    }
-    plate(o,hx,0.30,0.40,0.40,c.hp,1,hexA("#FFFFFF",.30));
-    plate(o,vx-0.40,0.30,0.40,0.40,c.vp2,1,hexA("#FFFFFF",.30));
-    o.push({k:"word",t:c.H.ab,x:hx+0.20,y:0.50,h:0.15,col:"#FFFFFF",fit:0.30});
-    o.push({k:"word",t:c.V.ab,x:vx-0.20,y:0.50,h:0.15,col:"#FFFFFF",fit:0.30});
-  }
-  else if(u<0.60){
-    /* IMPACT. Two frames of near-white, a shockwave, and the whole frame
-       displacing. Broadcast shakes by three or four pixels; at thirty feet that
-       is invisible, so this is 0.9% of the frame -- which is what the FX tier
-       already learned and settled on. */
-    ph="impact";
-    var iv=seg(u,HIT,0.60), e=eo(iv);
-    o.push({k:"band",x:0,y:0,w:0.5,h:1,col:c.hp});
-    o.push({k:"band",x:0.5,y:0,w:0.5,h:1,col:c.vp2});
-    o.push({k:"flash",a:Math.pow(1-iv,1.6)*0.95});
-    for(i=0;i<5;i++)
-      o.push({k:"ring",x:0.5,y:0.5,r:0.04+e*(0.42+i*0.17),col:"#FFFFFF",
-              w:Math.max(1,10*(1-iv)),a:(1-iv)*0.46});
-    for(i=0;i<30;i++){
-      var d=(i%2)?1:-1, sp=0.06+det(i+2101)*0.60;
-      o.push({k:"tri",x:0.5+d*sp*e,y:0.06+det(i+2111)*0.88,
-              w:0.018+det(i+2121)*0.05,h:0.028+det(i+2131)*0.07,
-              col:hexA(d>0?c.vp2:c.hp,1-iv*0.55),dir:(i%3)?"up":"down"});
-    }
-    var s=(1-iv)*0.009;
-    f.shake={x:Math.sin(iv*47)*s, y:Math.cos(iv*63)*s};
-    o.push({k:"word",t:B.name,x:0.5,y:0.50,h:0.13,col:"#FFFFFF",fit:0.86,track:0.04,
-            a:cl(iv*2.4,0,1)});
-  }
-  else{
-    ph="lockup";
-    var lv=seg(u,0.60,0.80);
-    lockup(o,c,B,0,1,true);
-    o.push({k:"word",t:B.line,x:0.5,y:0.82,h:0.032,col:hexA("#FFFFFF",.62*lv),
-            fit:0.84,track:0.10});
-    specular(o,seg(u,0.62,0.80)*1.3-0.15,1-seg(u,0.78,0.86),0.06);
-  }
-  o.push({k:"vig",a:0.30});
-  f.layers=o; f.phase="collision · "+ph;
-  return f;
-};
-
-/* ── 3 · THE SPEED RAMP ──────────────────────────────────────────────────── */
-G.bramp=function(u,C){
-  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i;
-  /* a return, so there is something whose speed can be a statement. The ramp
-     brackets the moment he crosses -- real speed to the goal line, a fifth
-     speed through it, real speed out. */
-  var t=rampU(u,0.46,0.74,0.18);
-  o.push({k:"fill",col:c.vd==="#000000"?"#06080C":mixHex(c.vp2,"#000000",0.62)});
-
-  /* the field: yard lines receding, and a goal line that means something */
-  for(i=0;i<=12;i++)
-    o.push({k:"band",x:0.02+i*0.082,y:0.24,w:0.0018,h:0.52,col:hexA("#FFFFFF",.13)});
-  o.push({k:"band",x:0.845,y:0.24,w:0.006,h:0.52,col:hexA("#FFFFFF",.55)});
-  o.push({k:"band",x:0.851,y:0.24,w:0.149,h:0.52,col:hexA(c.hp,.30)});
-
-  var rx=mix(0.05,0.93,eo(t)), crossed=rx>0.845;
-  /* the trail: eight copies behind him, which is what a long lens does to a
-     fast object and what this tiler will draw for nothing */
-  for(i=1;i<=8;i++)
-    o.push({k:"tri",x:rx-i*0.026,y:0.50,w:0.030,h:0.052,
-            col:hexA(c.hp,0.34*(1-i/9)),dir:"up"});
-  o.push({k:"glow",x:rx,y:0.50,r:0.10,col:hexA(c.hp,.40),a:1});
-  o.push({k:"tri",x:rx,y:0.50,w:0.038,h:0.062,col:"#FFFFFF",dir:"up"});
-
-  /* pursuit, losing ground -- the reason the ramp is worth spending */
-  for(i=0;i<3;i++)
-    o.push({k:"tri",x:rx-0.13-i*0.045,y:0.50+(i-1)*0.055,w:0.030,h:0.050,
-            col:hexA(c.vp2,.85),dir:"up"});
-
-  var ph="the run";
-  if(t>0.46&&t<0.78){
-    ph="ramped";
-    /* the tell that you are in slow motion, and the only type in the cue */
-    o.push({k:"band",x:0,y:0,w:1,h:1,col:hexA("#0A1830",.22)});
-    o.push({k:"word",t:String(Math.round(mix(0,62,t))) + " YARDS",x:0.5,y:0.17,
-            h:0.075,col:"#FFFFFF",fit:0.60,track:0.06});
-  }
-  if(crossed){
-    ph="in";
-    o.push({k:"flash",a:cl((rx-0.845)*7,0,1)*0.55*(1-seg(t,0.90,1))});
-    o.push({k:"word",t:c.H.call,x:0.5,y:0.84,h:0.10,col:"#FFFFFF",fit:0.70,track:0.03,
-            a:seg(t,0.86,0.96)});
-  }
-  o.push({k:"word",t:B.name,x:0.5,y:0.955,h:0.026,col:hexA("#FFFFFF",.38),
-          fit:0.50,track:0.18});
-  o.push({k:"vig",a:0.34});
-  return {layers:o,phase:"ramp · "+ph};
-};
-
-/* ── 4 · THE WHIP ────────────────────────────────────────────────────────── */
+/* ── 2 · THE WHIP ────────────────────────────────────────────────────────── */
 G.bwhip=function(u,C){
   var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], ph="";
   /* three cards, joined by two whips. A whip is 150 ms and it is the only thing
@@ -7260,7 +6858,7 @@ G.bwhip=function(u,C){
   return {layers:o,phase:"whip · "+ph};
 };
 
-/* ── 5 · THE LIGHT SWEEP ─────────────────────────────────────────────────── */
+/* ── 3 · THE LIGHT SWEEP ─────────────────────────────────────────────────── */
 G.bsweep=function(u,C){
   var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i;
   /* the quietest move here and the one that does the most work: a lockup that
@@ -7297,215 +6895,563 @@ G.bsweep=function(u,C){
   return {layers:o,phase:"sweep · "+(s1>0&&s1<1?"pass":"held")};
 };
 
-/* ── 6 · THE BUG THAT BECOMES THE CARD ───────────────────────────────────── */
-G.bbug=function(u,C){
-  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), ev=C.ev, o=[], i;
-  /* Broadcast does not cut from the bug to the full-screen stat -- the bug
-     GROWS into it and shrinks back, and that is the whole reason a package
-     reads as one system rather than as a pile of cards.
+/* ══════════════════════════════════════════════════════════════════════════
+   6h · THE BIG BOARD — ten bits off the stadium screen
 
-     One rect interpolated between two geometries, and the contents crossfaded
-     across the middle of the move. */
-  var grow=eio(seg(u,0.22,0.40)), shrink=eio(seg(u,0.74,0.92));
-  var g=grow*(1-shrink);
+   Everything above is taken off the TELECAST. This is taken off the video
+   board, which is a different job with a different audience: the telecast is
+   watched, the board is ANSWERED. A kiss cam that nobody reacts to has failed
+   in a way that a lower third cannot.
 
-  o.push({k:"fill",col:"#07090E"});
-  o.push({k:"band",x:0,y:0.32,w:1,h:0.42,col:"#0C2A16",a:0.85*(1-g)});
-  for(i=0;i<=10;i++)
-    o.push({k:"band",x:0.06+i*0.088,y:0.32,w:0.0016,h:0.42,
-            col:hexA("#FFFFFF",.15*(1-g))});
+   Researched rather than invented. The kiss cam dates to the early 1980s in
+   California and exists to fill dead air between plays; the mascot race, the
+   three-shell game (built for exactly three winning outcomes so a sponsor can
+   own one), trivia, the noise meter, the prize wheel and the pyro payoff are
+   the segments that turn up in venue after venue because they all do the same
+   thing -- give a crowd something to do while nothing is happening.
 
-  /* bug geometry → card geometry */
-  var bx=mix(0.055,0.06,g), by=mix(0.795,0.12,g),
-      bw=mix(0.50,0.88,g),  bh=mix(0.115,0.76,g);
-  var sk=mix(-13,-4,g);                 /* the chamfer relaxes as it grows */
-  plate(o,bx,by,bw,bh,hexA("#0A0D14",.96),1,hexA("#FFFFFF",.20),sk);
+   WHAT THAT MEANS FOR THE BUILD.
 
-  /* the two colour chips are the one element that lives in BOTH states, so they
-     travel rather than crossfade -- that is what sells it as the same object */
-  var chw=mix(0.055,0.42,g), chh=mix(bh*0.72,0.10,g);
-  o.push({k:"band",x:mix(bx+0.012,bx+0.02,g),y:mix(by+bh*0.14,by+0.10,g),
-          w:chw,h:chh,col:c.hp,skew:sk});
-  o.push({k:"band",x:mix(bx+0.205,bx+0.46,g),y:mix(by+bh*0.14,by+0.10,g),
-          w:chw,h:chh,col:c.vp2,skew:sk});
+   1 · Half of the famous ones are CAMERA bits. A bar wall has no crowd camera,
+       so the kiss cam and the dance cam are rendered as the FRAME and the
+       treatment -- the thing the board puts around the feed. In a room that
+       knows the bit, the frame alone is the whole joke, and the crowd here is
+       drawn rather than shot.
 
-  if(g<0.5){
-    /* bug state */
-    var ba=1-g*2;
-    o.push({k:"word",t:c.H.ab,x:bx+0.085,y:by+bh*0.50,h:0.042,col:"#FFFFFF",
-            fit:.06,track:.02,a:ba});
-    o.push({k:"word",t:String(ev.hs),x:bx+0.155,y:by+bh*0.50,h:0.055,
-            col:"#FFFFFF",fit:.045,a:ba});
-    o.push({k:"word",t:c.V.ab,x:bx+0.278,y:by+bh*0.50,h:0.042,col:"#FFFFFF",
-            fit:.06,track:.02,a:ba});
-    o.push({k:"word",t:String(ev.as),x:bx+0.348,y:by+bh*0.50,h:0.055,
-            col:hexA("#FFFFFF",.74),fit:.045,a:ba});
-    o.push({k:"word",t:ev.clock,x:bx+0.435,y:by+bh*0.50,h:0.040,
-            col:"#FFFFFF",fit:.075,a:ba});
-  }else{
-    /* card state */
-    var ca=(g-0.5)*2;
-    o.push({k:"word",t:c.H.ab,x:bx+0.23,y:by+0.155,h:0.075,col:"#FFFFFF",fit:0.34,a:ca});
-    o.push({k:"word",t:c.V.ab,x:bx+0.67,y:by+0.155,h:0.075,col:"#FFFFFF",fit:0.34,a:ca});
-    o.push({k:"word",t:String(ev.hs),x:bx+0.23,y:by+0.40,h:0.26,col:"#FFFFFF",fit:0.34,a:ca});
-    o.push({k:"word",t:String(ev.as),x:bx+0.67,y:by+0.40,h:0.26,col:"#FFFFFF",fit:0.34,a:ca});
-    o.push({k:"band",x:bx+0.44,y:by+0.26,w:0.002,h:0.30,col:hexA("#FFFFFF",.28*ca)});
-    o.push({k:"word",t:B.name,x:bx+0.44,y:by+0.66,h:0.040,col:hexA("#FFFFFF",.80*ca),
-            fit:0.80,track:0.14});
+   2 · The rest are pure animation and translate exactly. The race, the shell
+       game, the wheel and the fireworks are the same cue on a board as on a
+       wall, which is why they carry most of the weight of this group.
+
+   3 · A board bit has a RESULT. Each of these resolves -- a winner, a reveal,
+       a landed wedge, an official number -- because a segment that fades out
+       without answering itself trains a room to stop looking.
+
+   Costs are the same as everywhere else in this file: floods, bands, dots and
+   triangles are nearly free, and type is the axis with the tail. Text here
+   slams into place at a FIXED size and holds, so it is a glyph-cache hit after
+   its first frame -- position and alpha animate, size never does.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* A drawn crowd. Dots batch in the renderer when consecutive and same-coloured,
+   so a bowl of two hundred people is close to one draw call rather than two
+   hundred -- which is what makes the camera bits affordable at all. */
+function crowd(o,rows,cols,y0,y1,col,a,bounce){
+  var r,cc,x,y,ph;
+  for(r=0;r<rows;r++){
+    for(cc=0;cc<cols;cc++){
+      x=(cc+0.5)/cols+(det(r*97+cc)-0.5)*0.012;
+      ph=bounce?Math.sin(bounce*6.2832+det(r*31+cc)*6.2832)*0.006:0;
+      y=y0+(y1-y0)*((r+0.5)/rows)+ph;
+      o.push({k:"dot",x:x,y:y,r:0.0075,col:col,a:a});
+    }
   }
-  o.push({k:"vig",a:0.26});
-  return {layers:o,phase:"bug · "+(g<0.05?"bug":(g>0.95?"card":(shrink>0?"collapsing":"expanding")))};
+}
+
+/* ── 1 · KISS CAM ────────────────────────────────────────────────────────── */
+G.kisscam=function(u,C){
+  var T=C.T, o=[], i, ph="";
+  o.push({k:"fill",col:"#0B0E16"});
+  /* the bowl, in two bands of anonymity so the frame has something to hunt */
+  crowd(o,4,26,0.30,0.52,hexA("#6E7A93",0.55),1,0);
+  crowd(o,4,22,0.55,0.76,hexA("#59637A",0.50),1,0);
+
+  /* the hunt: three candidate framings before it settles, because a kiss cam
+     that goes straight to its target has no tension in it */
+  var STOPS=[[0.24,0.52],[0.71,0.44],[0.38,0.63],[0.55,0.53]];
+  var k=Math.min(STOPS.length-1,Math.floor(seg(u,0.06,0.62)*STOPS.length));
+  var kn=Math.min(STOPS.length-1,k+1);
+  var fr=(seg(u,0.06,0.62)*STOPS.length)%1;
+  var settled=u>=0.62;
+  var fx=settled?STOPS[STOPS.length-1][0]:mix(STOPS[k][0],STOPS[kn][0],eio(fr));
+  var fy=settled?STOPS[STOPS.length-1][1]:mix(STOPS[k][1],STOPS[kn][1],eio(fr));
+  ph=settled?"caught":"hunting";
+
+  /* the frame: a bright box with a heart sitting on it. A heart is two dots and
+     a triangle -- there are no curves in this renderer and it does not need any */
+  var fw=0.20, fh=0.26, e=hexA("#FF3D7F",0.95);
+  o.push({k:"band",x:fx-fw/2,y:fy-fh/2,w:fw,h:fh,col:hexA("#FF3D7F",0.10)});
+  o.push({k:"band",x:fx-fw/2,y:fy-fh/2,w:fw,h:0.008,col:e});
+  o.push({k:"band",x:fx-fw/2,y:fy+fh/2-0.008,w:fw,h:0.008,col:e});
+  o.push({k:"band",x:fx-fw/2,y:fy-fh/2,w:0.005,h:fh,col:e});
+  o.push({k:"band",x:fx+fw/2-0.005,y:fy-fh/2,w:0.005,h:fh,col:e});
+
+  function heart(x,y,s,col,a){
+    o.push({k:"dot",x:x-s*0.5,y:y-s*0.35,r:s*0.55,col:col,a:a});
+    o.push({k:"dot",x:x+s*0.5,y:y-s*0.35,r:s*0.55,col:col,a:a});
+    o.push({k:"tri",x:x,y:y-s*0.62,w:s*2.05,h:s*2.5,col:col,dir:"down",a:a});
+  }
+  heart(fx,fy-fh/2-0.045,0.030,"#FF3D7F",1);
+
+  /* once it settles the room is supposed to do something, so the frame says so
+     and the hearts start climbing */
+  if(settled){
+    var sv=seg(u,0.62,1);
+    for(i=0;i<14;i++){
+      var t=((sv*1.4+det(i+610))%1);
+      heart(fx+(det(i+620)-0.5)*0.34, fy-0.06-t*0.42, 0.014+det(i+630)*0.012,
+            "#FF3D7F", (1-t)*0.85);
+    }
+    o.push({k:"flash",a:pulse(seg(u,0.62,0.72))*0.22});
+  }
+  /* the title, bottom, fixed size, never scaled */
+  plate(o,0.30,0.855,0.40,0.085,hexA("#B3003C",.95),1,hexA("#FF9EC4",.8));
+  o.push({k:"word",t:"KISS CAM",x:0.50,y:0.897,h:0.055,col:"#FFFFFF",fit:.34,track:.10});
+  o.push({k:"word",t:T.venue.split(" · ")[0].toUpperCase(),x:0.5,y:0.955,h:0.024,
+          col:hexA("#FFFFFF",.45),fit:.50,track:.16});
+  o.push({k:"vig",a:0.34});
+  return {layers:o,phase:"kiss cam · "+ph};
 };
 
-/* ── 7 · THE DRIVE CHAIN ─────────────────────────────────────────────────── */
-G.bchain=function(u,C){
-  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i;
-  /* Twelve plays drawn left to right on a stagger. Real information, rendered
-     entirely as geometry -- the labels a broadcast puts on each tick are what
-     would put this in the text tail, so the colour carries the meaning instead
-     and one line of type says what the chain is. */
-  var N=12;
-  /* deterministic so every panel on the wall draws the same drive */
-  var gain=[], own=[];
-  for(i=0;i<N;i++){ gain[i]=0.02+det(i+4401)*0.075; own[i]=det(i+4411)>0.24?1:0; }
+/* ── 2 · THE RACE ────────────────────────────────────────────────────────── */
+G.race=function(u,C){
+  var c=rivColors(C), T=C.T, o=[], i, ph="";
+  /* Three contenders, the oldest bit on a video board. The lead changes twice,
+     because a race whose winner is obvious at the halfway mark is a countdown.
+     st-race carries a `ramp`, so u is already slowed across the line. */
+  var LANES=[{col:c.hp, tag:C.T.ab}, {col:c.vp2, tag:(TEAMS[C.ev.opp]||C.T).ab},
+             {col:"#E8B23A", tag:"HOUSE"}];
+  /* each runner gets its own pace curve; they cross twice and finish close */
+  var PACE=[function(t){ return t*0.96+Math.sin(t*4.1)*0.045; },
+            function(t){ return t*0.93+Math.sin(t*3.2+1.9)*0.055; },
+            function(t){ return t*0.90+Math.sin(t*2.6+3.4)*0.040; }];
 
-  o.push({k:"fill",col:"#06080C"});
-  o.push({k:"band",x:0.06,y:0.475,w:0.88,h:0.05,col:hexA("#FFFFFF",.08)});
+  o.push({k:"fill",col:"#0A1A0E"});
+  /* the track */
+  for(i=0;i<3;i++)
+    o.push({k:"band",x:0,y:0.30+i*0.16,w:1,h:0.145,
+            col:i%2?hexA("#FFFFFF",.045):hexA("#FFFFFF",.025)});
+  /* the finish line, checkered, and the only place the eye should end up */
+  for(i=0;i<10;i++)
+    o.push({k:"band",x:0.885,y:0.30+i*0.048,w:0.030,h:0.048,
+            col:i%2?"#FFFFFF":"#111111"});
 
-  var draw=eo(seg(u,0.06,0.72)), x=0.06, tot=0;
+  var run=eo(cl(u/0.86,0,1)), best=-1, bestX=-1;
+  for(i=0;i<3;i++){
+    var p=cl(PACE[i](run),0,1), x=mix(0.06,0.90,p), y=0.372+i*0.16;
+    if(x>bestX){ bestX=x; best=i; }
+    /* the trail is what makes it read as fast rather than as a moving dot */
+    var j;
+    for(j=1;j<=7;j++)
+      o.push({k:"tri",x:x-j*0.021,y:y-0.030,w:0.030,h:0.060,
+              col:hexA(LANES[i].col,0.30*(1-j/8)),dir:"up"});
+    o.push({k:"glow",x:x,y:y,r:0.075,col:hexA(LANES[i].col,.40),a:1});
+    o.push({k:"tri",x:x,y:y-0.036,w:0.040,h:0.072,col:LANES[i].col,dir:"up"});
+    o.push({k:"word",t:LANES[i].tag,x:0.045,y:y,h:0.030,
+            col:hexA(LANES[i].col,.95),fit:.09,track:.04});
+  }
+
+  if(u<0.86){ ph="the race"; }
+  else{
+    ph="photo finish";
+    o.push({k:"flash",a:pulse(seg(u,0.86,0.94))*0.55});
+    plate(o,0.24,0.055,0.52,0.115,hexA("#0A0D14",.95),1,hexA(LANES[best].col,.95));
+    o.push({k:"word",t:LANES[best].tag+" WINS",x:0.50,y:0.112,h:0.062,
+            col:"#FFFFFF",fit:.44,track:.06});
+    /* confetti in the winner's colour, and only the winner's */
+    for(i=0;i<24;i++){
+      var fy=((seg(u,0.86,1)*0.9+det(i+710))%1);
+      o.push({k:"band",x:det(i+720),y:fy*0.9,w:0.006,h:0.020,
+              col:i%2?"#FFFFFF":LANES[best].col,a:0.7*(1-fy*0.5),rot:det(i+730)*360});
+    }
+  }
+  o.push({k:"vig",a:0.30});
+  return {layers:o,phase:"race · "+ph};
+};
+
+/* ── 3 · THE SHELL GAME ──────────────────────────────────────────────────── */
+G.shell=function(u,C){
+  var T=C.T, o=[], i, ph="";
+  /* Three helmets, one ball, built for exactly three outcomes -- which is how
+     the bit is sold, because a sponsor can own one of them. */
+  var SLOT=[0.24,0.50,0.76], y=0.52, s=0.085;
+  /* the shuffle is a fixed sequence of swaps so every panel on a wall agrees
+     on where the ball ended up. A wall that disagrees with itself is worse
+     than a wall that is wrong. */
+  /* SLOT pairs, and deliberately only ADJACENT ones. These used to be helmet
+     indices, which meant a swap between the two outer helmets travelled through
+     the middle slot -- and the helmet parked there. Adjacent slots always leave
+     the third helmet at the far end of the table, so nothing can pass through
+     anything. Any permutation is still reachable from adjacent transpositions. */
+  var SWAPS=[[0,1],[1,2],[0,1],[1,2],[0,1]];
+  var pos=[0,1,2], under=0;            /* which slot each helmet occupies */
+  function inSlot(sl){ for(var q=0;q<3;q++) if(pos[q]===sl) return q; return 0; }
+
+  var SHOW=0.18, SHUF=0.72, LIFT=0.84;
+  var lift=u>=LIFT, shuffling=(u>=SHOW&&u<SHUF);
+  var live=[SLOT[0],SLOT[1],SLOT[2]], arc=[0,0,0];
+
+  if(u>=SHOW){
+    var n=SWAPS.length, prog=cl((u-SHOW)/(SHUF-SHOW),0,1)*n;
+    var done=Math.min(n,Math.floor(prog)), fr=prog-done;
+    for(i=0;i<done;i++){
+      var s0=SWAPS[i][0], s1=SWAPS[i][1], h0=inSlot(s0), h1=inSlot(s1);
+      pos[h0]=s1; pos[h1]=s0;
+    }
+    for(i=0;i<3;i++) live[i]=SLOT[pos[i]];
+    if(done<n){
+      var q0=SWAPS[done][0], q1=SWAPS[done][1];
+      var a1=inSlot(q0), b1=inSlot(q1), e=eio(cl(fr*1.15,0,1));
+      live[a1]=mix(SLOT[q0],SLOT[q1],e);
+      live[b1]=mix(SLOT[q1],SLOT[q0],e);
+      /* They must not pass THROUGH each other. The first cut lifted both by the
+         same amount, so at the crossover the two helmets sat exactly on top of
+         one another and the shuffle read as two helmets, not three. One goes
+         over and one goes under, which is also how it is done with real cups. */
+      arc[a1]=-Math.sin(e*Math.PI)*0.130;
+      arc[b1]= Math.sin(e*Math.PI)*0.070;
+    }
+  }
+
+  o.push({k:"fill",col:T.deep==="#000000"?"#0A0C12":mixHex(T.deep,"#000000",0.35)});
+  o.push({k:"band",x:0,y:0.66,w:1,h:0.010,col:hexA("#FFFFFF",.18)});   /* the table */
+
+  /* the ball, drawn before the helmets so a lifted helmet reveals it */
+  var ballX=live[under];
+  if(u<SHOW||lift) o.push({k:"dot",x:ballX,y:y+0.055,r:0.026,col:"#8B4A1C"});
+  if(u<SHOW||lift) o.push({k:"dot",x:ballX,y:y+0.048,r:0.010,col:hexA("#FFFFFF",.35)});
+
+  /* Mind the units: `dot` takes its radius as a fraction of W, while `band`
+     takes h as a fraction of H. On a 16:9 output that is a 1.78x difference,
+     so a dome and a jaw written with the same number are NOT the same size --
+     the first cut of this read as a plain circle for exactly that reason.
+
+     What makes a helmet legible at thirty feet is the white cage on the front.
+     Everything else is detail the room never resolves, so the cage gets the
+     contrast and the dome just has to be round. */
+  function helmet(x,cy,col,a){
+    var A=(a===undefined?1:a);
+    o.push({k:"dot",x:x,y:cy,r:s,col:col,a:A});
+    o.push({k:"band",x:x-s,y:cy,w:s*2,h:0.075,col:col,a:A});
+    o.push({k:"band",x:x-s*0.24,y:cy-s*1.05,w:s*0.48,h:0.135,col:hexA("#FFFFFF",.30*A)});
+    o.push({k:"dot",x:x-s*0.34,y:cy+0.006,r:s*0.22,col:hexA("#000000",.32*A)});
+    /* the cage — two bars and a return, bright, on the front of the shell */
+    o.push({k:"band",x:x+s*0.28,y:cy+0.016,w:s*1.02,h:0.019,col:hexA("#F2F5FA",.95*A)});
+    o.push({k:"band",x:x+s*0.28,y:cy+0.055,w:s*1.02,h:0.019,col:hexA("#F2F5FA",.95*A)});
+    o.push({k:"band",x:x+s*1.12,y:cy+0.016,w:s*0.18,h:0.058,col:hexA("#F2F5FA",.95*A)});
+  }
+  /* draw back-to-front so the one going OVER is actually on top */
+  var order=[0,1,2].sort(function(p,q){ return (y+arc[q])-(y+arc[p]); });
+  for(i=0;i<3;i++){
+    var h=order[i], cy=y+arc[h];
+    if(lift && h===under) cy=y-mix(0,0.22,eo(seg(u,LIFT,0.94)));
+    helmet(live[h],cy,h===under&&lift?mixHex(T.p,"#FFFFFF",0.15):T.p,1);
+  }
+
+  if(u<SHOW) ph="watch the ball";
+  else if(shuffling) ph="the shuffle";
+  else if(!lift) ph="pick one";
+  else{
+    ph="the reveal";
+    o.push({k:"flash",a:pulse(seg(u,LIFT,0.94))*0.35});
+    o.push({k:"ring",x:ballX,y:y+0.055,r:0.04+eo(seg(u,LIFT,1))*0.16,col:"#FFE08A",
+            w:Math.max(1,7*(1-seg(u,LIFT,1))),a:1-seg(u,LIFT,1)});
+  }
+  o.push({k:"word",t:lift?"THERE IT IS":"FIND THE BALL",x:0.5,y:0.845,h:0.070,
+          col:"#FFFFFF",fit:.62,track:.06});
+  o.push({k:"word",t:"THREE HELMETS · ONE BALL",x:0.5,y:0.925,h:0.026,
+          col:hexA("#FFFFFF",.50),fit:.46,track:.16});
+  o.push({k:"vig",a:0.30});
+  return {layers:o,phase:"shell · "+ph};
+};
+
+/* ── 4 · DANCE CAM ───────────────────────────────────────────────────────── */
+G.dancecam=function(u,C){
+  var T=C.T, o=[], i;
+  /* The other camera bit, and the one that is really a lighting cue. The beat
+     is the cue's own clock rather than wall time, so sixteen panels flash
+     together without a sync message. */
+  var BEAT=8, b=(u*BEAT)%1, hit=Math.pow(1-b,2.2), bar=Math.floor(u*BEAT);
+  var HUES=["#FF2E88","#22D3EE","#FFE08A","#7C4DFF"];
+  var col=HUES[bar%HUES.length];
+
+  o.push({k:"fill",col:"#07070D"});
+  o.push({k:"fill",col:hexA(col,0.10+0.26*hit)});
+
+  /* light cones from the rig, alternating direction on the bar */
+  for(i=0;i<5;i++){
+    var lx=0.10+i*0.20, sk=(i%2?18:-18);
+    o.push({k:"band",x:lx-0.05,y:-0.10,w:0.10,h:0.80,
+            col:hexA(HUES[(bar+i)%HUES.length],0.07+0.10*hit),skew:sk});
+  }
+  /* the mirror ball, and its glints -- dots, so they batch */
+  o.push({k:"glow",x:0.5,y:0.20,r:0.16,col:hexA("#FFFFFF",.28+0.25*hit),a:1});
+  o.push({k:"dot",x:0.5,y:0.20,r:0.055,col:hexA("#CFD8E6",.95)});
+  for(i=0;i<18;i++){
+    var a0=(i/18)*6.2832+u*1.6, rr=0.075+((i%3)*0.012);
+    o.push({k:"dot",x:0.5+Math.cos(a0)*rr,y:0.20+Math.sin(a0)*rr*1.7,
+            r:0.006,col:hexA("#FFFFFF",0.35+0.5*hit)});
+  }
+  /* the room, bouncing on the beat */
+  crowd(o,5,28,0.52,0.80,hexA("#9FB0CC",0.60),1,u*BEAT);
+
+  o.push({k:"word",t:"DANCE CAM",x:0.5,y:0.885,h:0.080,col:"#FFFFFF",fit:.70,track:.08});
+  o.push({k:"word",t:"YOU ARE ON THE BOARD",x:0.5,y:0.950,h:0.026,
+          col:hexA(col,.85),fit:.52,track:.18});
+  o.push({k:"vig",a:0.30});
+  return {layers:o,phase:"dance cam · bar "+(bar+1)+"/"+BEAT};
+};
+
+/* ── 5 · TRIVIA ──────────────────────────────────────────────────────────── */
+G.trivia=function(u,C){
+  var T=C.T, o=[], i;
+  /* A board segment with a right answer, which is the point -- the timer is
+     what makes a room commit before the reveal. */
+  var Q="WHAT YEAR DID THIS RIVALRY START?";
+  var B=beefOf(C.ev.team,C.ev.opp);
+  var yr=B.since||1894;
+  var A=[String(yr-6),String(yr),String(yr+11)], RIGHT=1;
+  var REVEAL=0.74;
+
+  o.push({k:"fill",col:mixHex(T.deep==="#000000"?"#0C1018":T.deep,"#000000",0.25)});
+  plate(o,0.06,0.10,0.88,0.20,hexA("#0A0D14",.94),1,hexA(T.p,.9));
+  o.push({k:"word",t:"TRIVIA",x:0.5,y:0.152,h:0.034,col:hexA("#FFFFFF",.55),
+          fit:.30,track:.24});
+  o.push({k:"word",t:Q,x:0.5,y:0.235,h:0.048,col:"#FFFFFF",fit:.80,track:.02});
+
+  /* the three answers arrive on a stagger, never together */
+  for(i=0;i<3;i++){
+    var t=eo(cl(seg(u,0.12,0.44)*3-i,0,1));
+    if(t<=0) continue;
+    var y=0.40+i*0.135, x=mix(-0.55,0.14,t);
+    var right=(i===RIGHT), shown=u>=REVEAL;
+    var col=shown?(right?"#1F7A3A":hexA("#0A0D14",.55)):hexA("#141A26",.95);
+    plate(o,x,y,0.72,0.105,col,1,shown&&right?"#7BE49B":hexA("#FFFFFF",.16));
+    o.push({k:"band",x:x+0.006,y:y+0.012,w:0.075,h:0.081,
+            col:shown&&right?"#7BE49B":T.p,skew:-13});
+    o.push({k:"word",t:String.fromCharCode(65+i),x:x+0.046,y:y+0.053,h:0.042,
+            col:"#FFFFFF",fit:.05});
+    o.push({k:"word",t:A[i],x:x+0.42,y:y+0.053,h:0.050,
+            col:shown&&!right?hexA("#FFFFFF",.35):"#FFFFFF",fit:.46,track:.04});
+  }
+
+  /* the clock, draining -- a bar, because a number nobody can read is not a clock */
+  var left=1-cl(seg(u,0.16,REVEAL),0,1);
+  o.push({k:"band",x:0.14,y:0.845,w:0.72,h:0.020,col:hexA("#FFFFFF",.14)});
+  o.push({k:"band",x:0.14,y:0.845,w:0.72*left,h:0.020,
+          col:left<0.25?"#E23B2E":(left<0.55?"#E8B23A":"#1F7A3A")});
+  if(u>=REVEAL){
+    o.push({k:"flash",a:pulse(seg(u,REVEAL,0.84))*0.30});
+    o.push({k:"word",t:"SINCE "+yr+" · "+B.name,x:0.5,y:0.925,h:0.034,
+            col:hexA("#FFFFFF",.80),fit:.72,track:.10});
+  }
+  o.push({k:"vig",a:0.26});
+  return {layers:o,phase:"trivia · "+(u<REVEAL?"answer it":"the reveal")};
+};
+
+/* ── 6 · NOISE BATTLE ────────────────────────────────────────────────────── */
+G.battle=function(u,C){
+  var c=rivColors(C), o=[], i;
+  /* The decibel meter already in this file is one number with a peak hold.
+     This is the other version of the bit and a different cue: two halves of a
+     room set against each other, which is the one that actually gets a crowd
+     out of its seats. */
+  var HOME=function(t){ return 0.30+t*0.52+Math.sin(t*7.2)*0.10; };
+  var AWAY=function(t){ return 0.34+t*0.44+Math.sin(t*6.1+2.2)*0.11; };
+  var t=cl(u/0.84,0,1), hv=cl(HOME(t),0,1), av=cl(AWAY(t),0,1);
+  var over=u>=0.84, homeWins=hv>=av;
+
+  o.push({k:"fill",col:"#06080E"});
+  o.push({k:"band",x:0.499,y:0,w:0.002,h:1,col:hexA("#FFFFFF",.20)});
+
+  /* each side is a stack of segments that light from the bottom, which is how
+     every meter on every board in the country reads */
+  var SEG=16;
+  function meter(x0,w,v,col,peak){
+    for(i=0;i<SEG;i++){
+      var lit=(i/SEG)<v;
+      var y=0.80-i*0.042;
+      o.push({k:"band",x:x0,y:y,w:w,h:0.034,
+              col:lit?(i>SEG*0.82?"#E23B2E":(i>SEG*0.6?"#E8B23A":col)):hexA("#FFFFFF",.055)});
+    }
+    o.push({k:"band",x:x0,y:0.80-Math.floor(peak*SEG)*0.042,w:w,h:0.006,
+            col:hexA("#FFFFFF",.9)});
+  }
+  meter(0.10,0.30,hv,c.hp,Math.max(hv,0.5));
+  meter(0.60,0.30,av,c.vp2,Math.max(av,0.5));
+
+  o.push({k:"word",t:c.H.ab,x:0.25,y:0.115,h:0.075,col:"#FFFFFF",fit:.26});
+  o.push({k:"word",t:(TEAMS[C.ev.opp]||c.H).ab,x:0.75,y:0.115,h:0.075,col:"#FFFFFF",fit:.26});
+  o.push({k:"word",t:"NOISE BATTLE",x:0.5,y:0.905,h:0.048,
+          col:hexA("#FFFFFF",.70),fit:.44,track:.16});
+
+  if(over){
+    /* the winning half floods, the losing half goes quiet */
+    var wv=seg(u,0.84,1);
+    o.push({k:"band",x:homeWins?0:0.5,y:0,w:0.5,h:1,
+            col:hexA(homeWins?c.hp:c.vp2,0.30*pulse(cl(wv*1.6,0,1))+0.10)});
+    o.push({k:"flash",a:pulse(seg(u,0.84,0.92))*0.28});
+    o.push({k:"word",t:"LOUDER",x:homeWins?0.25:0.75,y:0.50,h:0.085,
+            col:"#FFFFFF",fit:.40,track:.06,a:cl(wv*3,0,1)});
+  }
+  o.push({k:"vig",a:0.30});
+  return {layers:o,phase:"noise battle · "+(over?(homeWins?"home":"visitor")+" wins":"climbing")};
+};
+
+/* ── 7 · GUESS THE ATTENDANCE ────────────────────────────────────────────── */
+G.attend=function(u,C){
+  var T=C.T, o=[], i;
+  /* The counter has to DECELERATE into its number or it reads as a random
+     digit generator. eo on the approach and a hard lock at the end. */
+  var FINAL=92138, from=Math.floor(FINAL*0.55);
+  var climb=eo(cl(seg(u,0.14,0.72),0,1));
+  var val=Math.floor(mix(from,FINAL,climb));
+  var locked=u>=0.72;
+  var str=String(locked?FINAL:val).replace(/\B(?=(\d{3})+(?!\d))/g,",");
+
+  o.push({k:"fill",col:mixHex(T.p,"#000000",0.74)});
+  crowd(o,6,34,0.10,0.42,hexA("#8794AE",0.40),1,0);
+  o.push({k:"band",x:0,y:0.42,w:1,h:0.006,col:hexA("#FFFFFF",.14)});
+
+  plate(o,0.10,0.50,0.80,0.235,hexA("#080A10",.96),1,hexA(T.p,.95));
+  /* the digits sit at a FIXED size and only their content changes, which keeps
+     every frame after the first a glyph-cache hit */
+  o.push({k:"word",t:str,x:0.50,y:0.618,h:0.145,col:"#FFFFFF",fit:.66});
+  o.push({k:"word",t:locked?"OFFICIAL ATTENDANCE":"COUNTING",x:0.50,y:0.715,h:0.026,
+          col:hexA("#FFFFFF",locked?.85:.45),fit:.44,track:.20});
+
+  if(locked){
+    o.push({k:"flash",a:pulse(seg(u,0.72,0.82))*0.32});
+    o.push({k:"ring",x:0.5,y:0.618,r:0.10+eo(seg(u,0.72,1))*0.45,col:hexA(T.p,.6),
+            w:Math.max(1,8*(1-seg(u,0.72,1))),a:1-seg(u,0.72,1)});
+  }
+  o.push({k:"word",t:"TONIGHT AT "+T.venue.split(" · ")[0].toUpperCase(),
+          x:0.5,y:0.855,h:0.030,col:hexA("#FFFFFF",.55),fit:.66,track:.12});
+  o.push({k:"vig",a:0.32});
+  return {layers:o,phase:"attendance · "+(locked?"official":"counting")};
+};
+
+/* ── 8 · DEFENSE SIREN ───────────────────────────────────────────────────── */
+G.defsiren=function(u,C){
+  var T=C.T, o=[], i;
+  /* Third down. The loudest thing a board does, and the shortest -- it is a
+     strobe and one word, and anything else on screen is in the way. */
+  var STROBE=14, s=(u*STROBE)%1, on=s<0.42, hit=Math.pow(1-s,2.6);
+
+  o.push({k:"fill",col:"#12040A"});
+  o.push({k:"fill",col:hexA("#E23B2E",0.16+0.34*hit)});
+
+  /* the beacon: two arms sweeping from the centre. Rotation is applied in pixel
+     space by the renderer, so these trace a true circle rather than an ellipse. */
+  var ang=u*720;
+  for(i=0;i<2;i++)
+    o.push({k:"band",x:0.5,y:0.5,w:0.62,h:0.055,
+            col:hexA("#FFD1CC",0.10+0.14*hit),rot:ang+i*180});
+
+  /* chevrons driving inward from both edges, on the strobe */
+  for(i=0;i<7;i++){
+    var p=((u*1.8+i/7)%1);
+    o.push({k:"tri",x:mix(-0.05,0.42,p),y:0.42,w:0.055,h:0.16,
+            col:hexA("#FFFFFF",0.10*(1-p)),dir:"up",a:1});
+    o.push({k:"tri",x:mix(1.05,0.58,p),y:0.42,w:0.055,h:0.16,
+            col:hexA("#FFFFFF",0.10*(1-p)),dir:"up",a:1});
+  }
+
+  o.push({k:"word",t:"DEFENSE",x:0.5,y:0.47,h:0.24,col:on?"#FFFFFF":hexA("#FFFFFF",.55),
+          fit:.92,track:.02});
+  o.push({k:"band",x:0.20,y:0.655,w:0.60,h:0.010,col:hexA("#FFFFFF",.55)});
+  o.push({k:"word",t:"THIRD DOWN",x:0.5,y:0.735,h:0.062,col:"#FFE08A",fit:.46,track:.14});
+  o.push({k:"word",t:T.chant?T.chant.toUpperCase():T.call,x:0.5,y:0.875,h:0.036,
+          col:hexA("#FFFFFF",.60),fit:.56,track:.14});
+  o.push({k:"vig",a:0.40});
+  return {layers:o,phase:"defense · strobe "+(on?"on":"off")};
+};
+
+/* ── 9 · SPIN TO WIN ─────────────────────────────────────────────────────── */
+G.wheel=function(u,C){
+  var T=C.T, o=[], i;
+  /* The prize wheel. Spokes are bands rotated about the hub -- the renderer
+     rotates in PIXEL space, so a spoke of length 0.30 traces a true circle and
+     a `ring` of r 0.30 lands exactly on its tips. No trigonometry needed. */
+  var N=12, R=0.30;
+  var WEDGE=["#E23B2E","#0B57D0","#1F7A3A","#E8B23A","#7C4DFF","#00A6A6"];
+  /* four full turns, decelerating hard, landing on a wedge by construction */
+  var LAND=7;                                   /* which wedge the pointer takes */
+  var target=1440 + (360 - LAND*(360/N)) - (360/N)/2;
+  var spin=mix(0,target,eo(cl(u/0.80,0,1)));
+  var done=u>=0.80;
+
+  o.push({k:"fill",col:"#080A12"});
+  o.push({k:"glow",x:0.5,y:0.46,r:0.42,col:hexA(T.p,.22),a:1});
+
   for(i=0;i<N;i++){
-    /* each tick has its own window inside the draw, which is the stagger */
-    var t=cl((draw*N)-i,0,1);
-    if(t<=0) break;
-    var w=gain[i]*eb(t);
-    o.push({k:"band",x:x,y:0.475,w:w,h:0.05,col:own[i]?c.hp:c.vp2,a:0.95});
-    o.push({k:"band",x:x,y:0.475,w:0.0022,h:0.05,col:hexA("#FFFFFF",.45)});
-    /* the leading tick throws a pip above the line as it lands */
-    if(t<1) o.push({k:"tri",x:x+w,y:0.40,w:0.022,h:0.038,
-                    col:hexA("#FFFFFF",1-t),dir:"down"});
-    x+=w+0.004; tot+=Math.round(gain[i]*820);
+    o.push({k:"band",x:0.5,y:0.46,w:R,h:0.052,
+            col:WEDGE[i%WEDGE.length],rot:spin+i*(360/N)});
   }
-  /* the goal line, and the chain reaching it */
-  o.push({k:"band",x:0.94,y:0.42,w:0.004,h:0.16,col:hexA("#FFFFFF",.6)});
-  if(draw>=1){
-    o.push({k:"flash",a:pulse(seg(u,0.72,0.86))*0.35});
-    o.push({k:"word",t:c.H.call,x:0.5,y:0.30,h:0.11,col:"#FFFFFF",fit:0.66,track:0.03,
-            a:seg(u,0.74,0.88)});
+  o.push({k:"ring",x:0.5,y:0.46,r:R,col:hexA("#FFFFFF",.85),w:5});
+  o.push({k:"dot",x:0.5,y:0.46,r:0.045,col:"#0A0D14"});
+  o.push({k:"dot",x:0.5,y:0.46,r:0.030,col:hexA("#FFFFFF",.85)});
+  /* the pointer, top, fixed -- the wheel moves, the pointer never does */
+  o.push({k:"tri",x:0.5,y:0.46-R-0.055,w:0.050,h:0.070,col:"#FFE08A",dir:"down"});
+
+  if(done){
+    o.push({k:"flash",a:pulse(seg(u,0.80,0.90))*0.40});
+    o.push({k:"ring",x:0.5,y:0.46,r:R+eo(seg(u,0.80,1))*0.30,col:"#FFE08A",
+            w:Math.max(1,9*(1-seg(u,0.80,1))),a:1-seg(u,0.80,1)});
+    for(i=0;i<20;i++){
+      var fy=((seg(u,0.80,1)*1.1+det(i+810))%1);
+      o.push({k:"band",x:det(i+820),y:fy,w:0.006,h:0.020,
+              col:i%2?"#FFFFFF":"#FFE08A",a:0.7*(1-fy*0.6),rot:det(i+830)*360});
+    }
   }
-  o.push({k:"word",t:tot+" YARDS · "+N+" PLAYS",x:0.5,y:0.66,h:0.038,
-          col:hexA("#FFFFFF",.72),fit:0.60,track:0.12,a:cl(draw*1.6,0,1)});
-  o.push({k:"word",t:B.name,x:0.5,y:0.955,h:0.026,col:hexA("#FFFFFF",.38),
-          fit:0.50,track:0.18});
-  o.push({k:"vig",a:0.28});
-  return {layers:o,phase:"chain · "+(draw>=1?"drive over":"drawing")};
+  o.push({k:"word",t:done?"WE HAVE A WINNER":"SPIN TO WIN",x:0.5,y:0.855,h:0.070,
+          col:"#FFFFFF",fit:.68,track:.06});
+  o.push({k:"word",t:"SECTION 114 · ROW 12 · SEAT 4",x:0.5,y:0.935,h:0.026,
+          col:hexA("#FFFFFF",done?.85:.40),fit:.52,track:.16});
+  o.push({k:"vig",a:0.30});
+  return {layers:o,phase:"wheel · "+(done?"landed":"spinning")};
 };
 
-/* ── 8 · THE PYLON POP ───────────────────────────────────────────────────── */
-G.bpylon=function(u,C){
-  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), o=[], i;
-  /* There is no camera in this renderer, and this move does not need one. What
-     makes a pylon shot legible in a hundredth of a second is not lens geometry,
-     it is a SIGNATURE: the horizon shoved to the top, converging lines, and a
-     vignette heavy enough to be a lens. Reproduce the signature and the room
-     reads "goal line camera" without any perspective maths at all.
+/* ── 10 · FIREWORKS ──────────────────────────────────────────────────────── */
+G.pyro=function(u,C){
+  var c=rivColors(C), T=C.T, o=[], i, j;
+  /* The payoff. Four shells on a stagger, each one a rise, a burst and a fall,
+     in the school's colours because that is the entire point of doing it at a
+     stadium rather than at a fairground.
 
-     The cut is hard on purpose. Every other move here eases; a camera change
-     does not ease, and easing it is the one thing that would give it away. */
-  var IN=0.30, OUT=0.82, inPylon=(u>=IN&&u<OUT);
-  var t=inPylon?seg(u,IN,OUT):0;
+     Every particle is a `dot` and consecutive same-coloured dots batch in the
+     renderer, so a sky full of them is a handful of draw calls. */
+  var SHELL=[{t:0.02,x:0.26,col:T.p},      {t:0.20,x:0.72,col:"#FFFFFF"},
+             {t:0.38,x:0.46,col:T.p},      {t:0.54,x:0.84,col:"#FFE08A"},
+             {t:0.62,x:0.14,col:T.p}];
+  o.push({k:"fill",col:"#04060C"});
+  /* a skyline so the sky has a bottom */
+  for(i=0;i<16;i++)
+    o.push({k:"band",x:i*0.0625,y:0.80+det(i+901)*0.09,w:0.0625,h:0.30,
+            col:hexA("#0A0F1A",1)});
 
-  if(!inPylon){
-    /* the wide shot we cut away from and back to */
-    o.push({k:"fill",col:mixHex(c.hp,"#000000",0.55)});
-    for(i=0;i<=10;i++)
-      o.push({k:"band",x:0.04+i*0.092,y:0.30,w:0.0018,h:0.44,col:hexA("#FFFFFF",.14)});
-    o.push({k:"word",t:u<IN?"FOURTH AND GOAL":B.name,x:0.5,y:0.50,h:0.10,
-            col:"#FFFFFF",fit:0.80,track:0.05});
-    o.push({k:"vig",a:0.30});
-    return {layers:o,phase:"pylon · "+(u<IN?"wide":"back to wide")};
+  var live=0;
+  for(i=0;i<SHELL.length;i++){
+    var s=SHELL[i], lt=(u-s.t)/0.34;               /* this shell's own clock */
+    if(lt<=0||lt>=1) continue;
+    live++;
+    var apex=0.30+det(i+911)*0.14;
+    if(lt<0.34){
+      /* the rise, with a tail */
+      var rp=lt/0.34, ry=mix(0.86,apex,eo(rp));
+      for(j=0;j<6;j++)
+        o.push({k:"dot",x:s.x,y:ry+j*0.020,r:0.008-j*0.001,
+                col:hexA("#FFD9A0",0.7*(1-j/6))});
+      o.push({k:"dot",x:s.x,y:ry,r:0.011,col:"#FFFFFF"});
+    }else{
+      /* the burst: a radial spray that expands, slows and falls */
+      var bp=(lt-0.34)/0.66, e=eo(bp), fade=1-bp;
+      o.push({k:"glow",x:s.x,y:apex,r:0.06+e*0.16,col:hexA(s.col,0.30*fade),a:1});
+      for(j=0;j<26;j++){
+        var a0=(j/26)*6.2832+det(i*13+j)*0.22;
+        var rr=e*(0.10+det(i*17+j)*0.10);
+        o.push({k:"dot",
+                x:s.x+Math.cos(a0)*rr,
+                y:apex+Math.sin(a0)*rr*1.75+bp*bp*0.20,   /* gravity */
+                r:0.0055*fade+0.001,col:hexA(s.col,fade)});
+      }
+    }
   }
-
-  /* low, wide, and lying on the grass */
-  o.push({k:"fill",col:"#0A1408"});
-  o.push({k:"band",x:0,y:0,w:1,h:0.22,col:mixHex(c.vd||c.vp2,"#000000",0.60)});
-  /* converging yard lines: a fan from a vanishing point above the frame, which
-     is what a lens on the turf actually gives you */
-  for(i=-7;i<=7;i++){
-    var top=0.5+i*0.030, bot=0.5+i*0.155;
-    o.push({k:"band",x:top,y:0.22,w:Math.max(0.0016,0.010*Math.abs(i)/7+0.002),
-            h:0.78,col:hexA("#FFFFFF",.10+0.04*(1-Math.abs(i)/7)),
-            skew:(bot-top)*46});
-  }
-  /* the goal line across, and the pylon itself, close enough to be furniture */
-  o.push({k:"band",x:0,y:0.60,w:1,h:0.022,col:hexA("#FFFFFF",.72)});
-  o.push({k:"band",x:0.055,y:0.44,w:0.055,h:0.30,col:"#F58220"});
-  o.push({k:"band",x:0.055,y:0.44,w:0.055,h:0.030,col:hexA("#FFFFFF",.55)});
-  o.push({k:"band",x:0.890,y:0.44,w:0.055,h:0.30,col:"#F58220"});
-  o.push({k:"band",x:0.890,y:0.44,w:0.055,h:0.030,col:hexA("#FFFFFF",.55)});
-
-  /* the ball crossing, and the flash when it does */
-  var bx=mix(0.18,0.62,eo(t)), by=mix(0.86,0.63,eo(t));
-  for(i=1;i<=5;i++)
-    o.push({k:"dot",x:bx-i*0.028,y:by+i*0.014,r:0.020-i*0.002,
-            col:hexA("#6B3A16",0.5*(1-i/6))});
-  o.push({k:"dot",x:bx,y:by,r:0.026,col:"#8B4A1C"});
-  o.push({k:"dot",x:bx,y:by,r:0.026,col:hexA("#FFFFFF",.18)});
-  if(t>0.62) o.push({k:"flash",a:pulse(seg(t,0.62,0.80))*0.5});
-  if(t>0.70)
-    o.push({k:"word",t:"TOUCHDOWN",x:0.5,y:0.30,h:0.13,col:"#FFFFFF",fit:0.88,track:0.04,
-            a:seg(t,0.70,0.82)});
-
-  /* a lens is a lens because of its edges */
-  o.push({k:"vig",a:0.62});
-  return {layers:o,phase:"pylon · goal line camera"};
-};
-
-/* ── 9 · THE ODOMETER ────────────────────────────────────────────────────── */
-G.broll=function(u,C){
-  var c=rivColors(C), B=beefOf(C.ev.team,C.ev.opp), ev=C.ev, o=[];
-  /* The detail nobody notices until it is missing: a score does not cut from 14
-     to 21, it ROLLS, and the side that scored flashes behind it.
-
-     There is no clip in this layer model, so the digits leaving and arriving are
-     faded against the plate rather than masked by it. At thirty feet that is the
-     same picture and it costs two word layers instead of a canvas. */
-  var to=(ev.hs|0)||21, from=Math.max(0,to-7);
-  var roll=eio(seg(u,0.30,0.52));
-
-  o.push({k:"fill",col:"#07090E"});
-  o.push({k:"band",x:0,y:0.30,w:1,h:0.44,col:"#0C2A16",a:0.8});
-
-  /* the bar, both schools, home on the left because it is home */
-  var by=0.40, bh=0.24;
-  plate(o,0.10,by,0.80,bh,hexA("#0A0D14",.97),1,hexA("#FFFFFF",.20));
-  /* the scoring side floods its own colour behind the roll and decays */
-  var flood=pulse(cl(seg(u,0.28,0.62),0,1));
-  o.push({k:"band",x:0.11,y:by+0.012,w:0.38,h:bh-0.024,col:hexA(c.hp,.30+0.65*flood)});
-  o.push({k:"band",x:0.51,y:by+0.012,w:0.38,h:bh-0.024,col:hexA(c.vp2,.30)});
-
-  o.push({k:"word",t:c.H.ab,x:0.20,y:by+0.06,h:0.045,col:"#FFFFFF",fit:0.14,track:0.04});
-  o.push({k:"word",t:c.V.ab,x:0.60,y:by+0.06,h:0.045,col:"#FFFFFF",fit:0.14,track:0.04});
-
-  /* the roll: outgoing digit up and out, incoming up and in */
-  var dh=0.13, cy=by+0.165;
-  if(roll<1){
-    o.push({k:"word",t:String(from),x:0.40,y:cy-dh*roll*1.15,h:dh,
-            col:hexA("#FFFFFF",1-roll*1.4),fit:0.16});
-    o.push({k:"word",t:String(to),x:0.40,y:cy+dh*(1-roll)*1.15,h:dh,
-            col:hexA("#FFFFFF",roll*1.4),fit:0.16});
-  }else{
-    o.push({k:"word",t:String(to),x:0.40,y:cy,h:dh,col:"#FFFFFF",fit:0.16});
-  }
-  o.push({k:"word",t:String(ev.as|0),x:0.80,y:cy,h:dh,
-          col:hexA("#FFFFFF",.80),fit:0.16});
-
-  /* the flash the moment the number lands, and nothing else */
-  o.push({k:"flash",a:pulse(seg(u,0.46,0.58))*0.30});
-  o.push({k:"word",t:B.name,x:0.5,y:0.80,h:0.036,col:hexA("#FFFFFF",.66),
-          fit:0.70,track:0.14,a:seg(u,0.55,0.70)});
-  specular(o,((u*1.4)%1)*1.3-0.15,0.7,0.05);
-  o.push({k:"vig",a:0.26});
-  return {layers:o,phase:"odometer · "+(roll<=0?"held":(roll<1?"rolling":from+" → "+to))};
+  /* the ground answers the sky */
+  o.push({k:"fill",col:hexA(T.p,0.05+0.10*Math.min(1,live/2))});
+  o.push({k:"word",t:T.call,x:0.5,y:0.905,h:0.085,col:"#FFFFFF",fit:.80,track:.03,
+          a:seg(u,0.10,0.26)});
+  o.push({k:"vig",a:0.34});
+  return {layers:o,phase:"fireworks · "+live+" in the air"};
 };
 
 /* ══════════════════════════════════════════════════════════════════════════

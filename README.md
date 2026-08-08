@@ -18,17 +18,18 @@ Single file, no build step, no dependencies beyond Google Fonts (Anton + IBM Ple
 ## Two independent axes
 
 A push event has two axes: **what happened**, and **who it happened to**. They are selected
-separately, so all 61 cues are available for all 16 schools against any opponent.
+separately, so all 59 cues are available for all 16 schools against any opponent.
 
-**61 cues**
+**59 cues**
 
 | Group | Types |
 |---|---|
 | Custom message | **your own copy, on the touchdown animation** |
 | Music · play it with the record | **Welcome to the Jungle · 4:31** |
 | Shows · pick these by name | BarBoards College GameDay · the origin crawl · **BarBoards Sports open** · BarBoards Saturday open |
-| Rivalry · two teams, one wall | the versus screen · tale of the tape · the trophy · the collision · tug of war · the rip · the mash · the staredown |
-| **Broadcast moves · rivalry edition** | **the colour wipe · the matchup collision · the speed ramp · the whip · the light sweep · bug becomes the card · the drive chain · the pylon pop · the odometer** |
+| Rivalry · two teams, one wall | the versus screen · tug of war |
+| Broadcast moves · off the telecast | the colour wipe · the whip · the light sweep |
+| **Stadium screen · the big board** | **kiss cam · the race · the shell game · dance cam · trivia · noise battle · guess the attendance · defense siren · spin to win · fireworks** |
 | Scoring | touchdown · two-point conversion · safety |
 | Kicking | field goal 50+ · walk-off field goal |
 | Return touchdowns | pick six · scoop and score · kick return TD · blocked kick returned |
@@ -41,39 +42,74 @@ separately, so all 61 cues are available for all 16 schools against any opponent
 | Broadcast furniture | score bug · lower third · replay wipe |
 | Benchmark | ladder × 4 · stadium flyover · stadium flyover 3D |
 
-## Broadcast moves — the rivalry edition
+## Broadcast moves — off the telecast
 
 The furniture group is what a broadcast **puts on screen**. This group is what a broadcast
-**does** — the wipes, the collisions, the ramps, the whips. It is the verbs rather than the
-nouns, and it is most of why a telecast reads as televised rather than as a screensaver.
-
-Three things decided what made the cut.
-
-**1 · What the silicon charges for.** Measured on the QCS6490, not guessed: 89 full-canvas
-translucent layers cost 0.5 ms, while 341 text layers cost 26.6 ms at p99. Overdraw is free
-on that tiler and type has a six-times tail. So every move here is built out of floods, bands
-and triangles, and spends its whole text budget on a rivalry name and a word. Peak cost across
-the nine is **46 layers and 8 words** in a frame.
-
-**2 · Thirty feet.** The genuinely coolest things on a telecast — the SkyCam glide, the drone
-orbit, the freeze-and-orbit — are slow and carried by detail, and detail loses to contrast at
-the distance that matters. That is why the flyover is filed under `bench` and not under a group
-anybody is meant to call on a Saturday. Nothing here asks the room to squint.
-
-**3 · Two colours.** A rivalry cue that renders one school is a cue with a bug in it. Every
-move takes both, on `rivColors` and `beefOf`, so all 240 orderings get a real rivalry name.
+**does**. It is the verbs rather than the nouns, and it is most of why a telecast reads as
+televised rather than as a screensaver.
 
 | Move | What it is on air | What it is here |
 |---|---|---|
 | The colour wipe | a chamfered edge crossing in a team colour | three crossings; the type is revealed **by** the edge, not faded up beside it |
-| The matchup collision | two marks colliding, flash, shockwave | shake at 0.9% of frame — broadcast's 3 px is invisible at thirty feet |
-| The speed ramp | real speed, slam to slow, ramp out | a remap of the cue's own clock; see below |
 | The whip | a camera panning faster than the shutter | ten offset copies of the same card — overdraw, therefore free |
 | The light sweep | the specular that makes a lockup read as metal | three skewed bands, not a gradient — no save/restore, no pattern lookup |
-| Bug becomes the card | the bug **grows** into the full-screen stat | one rect interpolated between two geometries; the colour chips travel rather than crossfade, which is what sells it as the same object |
-| The drive chain | a timeline drawing left to right | twelve ticks on a stagger, colour carrying the meaning so the labels stay off |
-| The pylon pop | the goal-line camera | no camera — the *signature* of one: horizon shoved up, converging lines, vignette heavy enough to be a lens |
-| The odometer | a score rolling rather than cutting | outgoing digit up and out, incoming up and in, scoring side flooding its colour behind |
+
+All three are also **primitives**. `wipeAt` / `carried`, `smear` and `specular` are exported
+for any cue in the file to call, because a wipe is something you do *to* something rather than
+something you watch on its own. Each is additionally registered as a cue so it can be seen,
+timed and measured alone.
+
+There is no clip in the layer model and none of this needs one: the ground an edge has covered
+is just a band, and an element's alpha is a function of how far the edge has passed it.
+
+## The big board — ten bits off the stadium screen
+
+Everything above is taken off the **telecast**. This group is taken off the **video board**,
+which is a different job for a different audience: a telecast is watched, a board is
+**answered**. A kiss cam nobody reacts to has failed in a way a lower third cannot.
+
+Researched rather than invented. The [kiss cam](https://en.wikipedia.org/wiki/Kiss_cam) dates
+to the early 1980s in California and exists to fill dead air between plays; the
+[mascot race](https://en.wikipedia.org/wiki/Mascot_race) has been computer-generated at some
+venues since the late 2000s; the [three-shell game](https://www.mantrahouse.com/our-services/jumbotron/)
+is built for exactly three winning outcomes so a sponsor can own one; trivia, noise meters and
+prize spots turn up in
+[venue after venue](https://www.rossvideo.com/blog/how-to-engage-your-fans-like-an-nfl-stadium/)
+because they all do the same thing — give a crowd something to do while nothing is happening.
+
+Three things that fell out of the research and changed the build:
+
+**1 · Half the famous bits are camera bits.** A bar wall has no crowd camera, so the kiss cam
+and the dance cam are rendered as the **frame and the treatment** — the thing the board puts
+*around* the feed. In a room that knows the bit, the frame alone is the whole joke. The crowd
+in them is drawn, not shot.
+
+**2 · The rest translate exactly.** The race, the shell game, the wheel and the fireworks are
+the same cue on a board as on a wall, which is why they carry most of this group's weight.
+
+**3 · A board bit has a result.** Each of these resolves — a winner, a reveal, a landed wedge,
+an official number — because a segment that fades out without answering itself trains a room
+to stop looking.
+
+| Cue | What it is | What it costs |
+|---|---|---|
+| Kiss cam | a hunting frame that settles, hearts climbing out of it | 254 layers → **49 draw calls** |
+| The race | three contenders, two lead changes, a photo finish | carries the `ramp`, below |
+| The shell game | three helmets, one ball, adjacent-slot shuffle, lift and reveal | 29 layers |
+| Dance cam | mirror ball, light rig and a crowd bouncing on the cue's own beat grid | 173 → **17 calls** |
+| Trivia | question, three staggered answers, draining clock, reveal | keyed to the real `beefOf` founding year |
+| Noise battle | two 16-segment meters, peak holds, the winning half floods | distinct from the existing single decibel meter |
+| Guess the attendance | a counter decelerating into its number, then a hard lock | 219 → **16 calls** |
+| Defense siren | a 14 Hz strobe, a sweeping beacon and one enormous word | 26 layers |
+| Spin to win | twelve wedges, four turns, decelerating onto a wedge by construction | 48 layers |
+| Fireworks | five shells on a stagger — rise, burst, gravity | 84 layers |
+
+### Dots are close to free, if they are consecutive
+
+The crowd cues look expensive and are not. The renderer batches a run of consecutive
+same-colour, same-alpha `dot` layers into one `drawDotRun`, so `crowd()` emits its rows in one
+colour at a time on purpose. Measured on the built file: **st-att 219 layers → 16 draw calls,
+st-dance 173 → 17**. For scale, the cost ladder measured 1685 rectangles at 6.8 ms p99.
 
 ### The ramp is a field, not a cue
 
@@ -81,23 +117,42 @@ move takes both, on `rivColors` and `beefOf`, so all 240 orderings get a real ri
 different read. It is applied in `frameAt` before the grammar ever runs, so **any** registry
 entry can have one for the cost of one field:
 
-    {id:"bx-pylon", …, ramp:[0.52, 0.74, 0.28]}
+    {id:"st-race", …, ramp:[0.72, 0.88, 0.30]}
 
 `[a, b, rate]` brackets the slow window in input time and says how slow. The velocity step is
 deliberately hard rather than eased: the slam *is* the move, and a shoulder on it reads as a
 dropped frame rather than as an intention. Monotonic and exactly onto [0,1] by construction,
 so a ramped cue still ends when its duration says it does and the rest lockup still lands on
-time. Verified: identity on every cue without the field, and on `bx-pylon` cue time advances
-**0.079 across a window worth 0.22** of wall clock.
+time. Verified: **identity on every cue without the field**, and inside the window cue time
+advances 0.079 across a window worth 0.22 of wall clock.
 
-### The first five are primitives
+### Two things the build got wrong first
 
-`wipeAt` / `carried`, `smear`, `specular` and `rampU` are exported for any cue in the file to
-call, because a wipe is something you do *to* something rather than something you watch on its
-own. Each is additionally registered as a cue so it can be seen, timed and measured alone.
+Worth writing down because both are traps in this layer model specifically.
 
-There is no clip in the layer model and none of this needs one: the ground an edge has covered
-is just a band, and an element's alpha is a function of how far the edge has passed it.
+**Units are not interchangeable.** `dot` takes its radius as a fraction of **W**; `band` takes
+`h` as a fraction of **H**. On a 16:9 output that is a 1.78× difference, so a dome and a jaw
+written with the same number are not the same size — the first shell game read as three plain
+circles for exactly that reason. The fix was to stop trying to draw a helmet and instead give
+the white facemask cage all the contrast, since that is the only part a room resolves at thirty
+feet.
+
+**The shuffle swapped helmets, not slots.** `SWAPS` originally held helmet indices, so a swap
+between the two outer helmets travelled straight through the middle slot — and the helmet
+parked in it. Measured minimum centre separation was 0.047 against a dome radius of 0.085.
+Restricting the sequence to **adjacent slot pairs** puts the third helmet at the far end of the
+table every time; separation is now **0.262**. Any permutation is still reachable from adjacent
+transpositions, so nothing was lost.
+
+### `word` does honour `a`
+
+A note in the rivalry section claimed `word` has no `a` field and that alpha on type had to go
+through `hexA()` on the colour. That is not true, and it is worth being exact because believing
+it costs an afternoon: `drawLayer` reads `var a=(l.a===undefined?1:l.a)` before its switch and
+the `word` case applies it as `ctx.globalAlpha=a*s.a`. Measured on this build — asked alpha
+`0 / .19 / .38 / .56 / .75 / 1` renders at luma `72 / 93 / 112 / 141 / 163 / 191`, which is a
+ramp, not a step. What *is* true is the glyph-cache point: it is **size** that must not vary.
+Animate position and alpha freely; leave `h` alone.
 
 ## Welcome to the Jungle — 4:31, cut to the record
 
