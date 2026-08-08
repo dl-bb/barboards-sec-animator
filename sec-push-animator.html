@@ -585,7 +585,7 @@ var DPR_FORCE = Q.has("dpr") ? Math.max(0.5, Math.min(3, +Q.get("dpr")||1)) : nu
 
 /* Bumped with every commit, shown in the control room and on every output's
    diagnostics, so a wall of screens can be confirmed to be running the same build. */
-var VERSION = "v1.0054";
+var VERSION = "v1.0055";
 
 /* ══════════════════════════════════════════════════════════════════════════
    0a · THE ROOM'S CLOCK
@@ -1787,6 +1787,41 @@ var TYPES=[
 
 /* ── benchmark ─────────────────────────────────────────────────────────
    Deliberately heavy. Not for a wall on a Saturday; for finding the knee. */
+{id:"riv-clash", grp:"rivalry", label:"The collision", cue:"clash", d:10000, house:true,
+ amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "HEAD ON · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Rivalry — The collision"; }, sr:{}},
+
+{id:"riv-tug", grp:"rivalry", label:"Tug of war", cue:"tug", d:11000, house:true,
+ amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "TERRITORY · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Rivalry — Tug of war"; }, sr:{}},
+
+{id:"riv-rip", grp:"rivalry", label:"The rip", cue:"rip", d:9000, house:true,
+ amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "TEAR IT OPEN · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Rivalry — The rip"; }, sr:{}},
+
+{id:"riv-mash", grp:"rivalry", label:"The mash", cue:"mash", d:10000, house:true,
+ amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "VORTEX · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Rivalry — The mash"; }, sr:{}},
+
+{id:"riv-standoff", grp:"rivalry", label:"The staredown", cue:"standoff", d:11000, house:true,
+ amp:96,win:0,tier:3,reg:"celebratory", cat:"house",type:null,play:null,yards:0,
+ period:4,clock:"0:00",hs:0,as:0,
+ name:function(T,O){ return beefOf(T.ab,O.ab).name; },
+ sub:function(T,O){ return "EYE TO EYE · "+T.ab+" vs "+O.ab; },
+ desc:function(c){ return "Rivalry — The staredown"; }, sr:{}},
+
 {id:"lad-calls", grp:"bench", label:"Ladder · draw calls", cue:"probe", d:12000, house:true,
  amp:1,win:0,tier:0,reg:"celebratory", cat:"benchmark",type:null,play:null,yards:0,
  period:1,clock:"15:00",hs:0,as:0, probe:"calls",
@@ -1976,10 +2011,64 @@ var TYPE_BY_ID={}; TYPES.forEach(function(t){ TYPE_BY_ID[t.id]=t; });
    the feed-driven ones follow in the order a game produces them. */
 var TYPE_GROUPS=[["custom","Custom message · your copy"],
   ["music","Music · play it with the record"],
-  ["show","Shows · pick these by name"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
+  ["show","Shows · pick these by name"],
+  ["rivalry","Rivalry · two teams, one wall"],["score","Scoring"],["kick","Kicking"],["return","Return touchdowns"],
   ["turnover","Turnovers"],["big","Big plays"],["state","States & stoppages"],
   ["ritual","Ritual"],["house","House cues · no push event"],
   ["patron","Patron · interactive"],["tv","Broadcast furniture"],["bench","Benchmark"]];
+/* ══════════════════════════════════════════════════════════════════════════
+   THE BEEF
+
+   Real rivalries, with what they are actually called and why they are sore.
+   Keyed on the unordered pair, because a rivalry does not care who is at home.
+   Anything not listed still works -- it falls back to a generated line -- so
+   the cues run for all 240 orderings rather than only the famous ones. */
+var BEEF={
+  "TAMU|TEX": {name:"LONE STAR SHOWDOWN", since:1894,
+               line:"THIRTEEN YEARS OF SILENCE. NOT ANY MORE."},
+  "ALA|AUB":  {name:"THE IRON BOWL", since:1893,
+               line:"THEY POISONED THE TREES OVER THIS."},
+  "FLA|UGA":  {name:"THE COCKTAIL PARTY", since:1915,
+               line:"NEUTRAL SITE. NOTHING NEUTRAL ABOUT IT."},
+  "MISS|MSST":{name:"THE EGG BOWL", since:1901,
+               line:"IT STARTED WITH A BRAWL AND A GOLDEN EGG."},
+  "ALA|TENN": {name:"THIRD SATURDAY IN OCTOBER", since:1901,
+               line:"THE WINNER LIGHTS A CIGAR."},
+  "OU|TEX":   {name:"RED RIVER", since:1900,
+               line:"A STATE FAIR, A GOLDEN HAT, AND NO FRIENDS."},
+  "ARK|LSU":  {name:"THE GOLDEN BOOT", since:1906,
+               line:"TWO STATES, ONE BOOT, NO MANNERS."},
+  "ARK|MIZ":  {name:"THE BATTLE LINE", since:1906,
+               line:"THE BORDER IS THE WHOLE ARGUMENT."},
+  "AUB|UGA":  {name:"THE DEEP SOUTH'S OLDEST", since:1892,
+               line:"OLDER THAN EVERY OTHER GRUDGE DOWN HERE."},
+  "LSU|MISS": {name:"THE MAGNOLIA BOWL", since:1894,
+               line:"ONE FLOWER. TWO STATES. ZERO SHARING."},
+  "ALA|LSU":  {name:"SATURDAY NIGHT IN DEATH VALLEY", since:1895,
+               line:"THEY MOVED IT TO NIGHT ON PURPOSE."},
+  "TENN|VAN": {name:"THE IN-STATE", since:1892,
+               line:"ONE STATE. TWO VERY DIFFERENT OPINIONS."},
+  "FLA|TENN": {name:"THE THIRD WEEK", since:1916,
+               line:"DECIDED THE EAST FOR A DECADE."},
+  "LSU|TAMU": {name:"THE THANKSGIVING GAME", since:1899,
+               line:"THE TURKEY GETS COLD. NOBODY CARES."},
+  "TENN|UK":  {name:"THE BEER BARREL", since:1893,
+               line:"THE OLDEST ARGUMENT IN THE CONFERENCE."},
+  "MISS|TAMU":{name:"THE GROVE VS KYLE", since:1902,
+               line:"TWO TAILGATES THAT REFUSE TO END."},
+  "SCAR|UGA": {name:"THE BORDER GAME", since:1894,
+               line:"SANDSTORM MEETS THE HEDGES."},
+  "MSST|OU":  {name:"COWBELLS VS SCHOONER", since:1970,
+               line:"NOISE AGAINST HORSEPOWER."}
+};
+function beefOf(a,b){
+  var k=[a,b].sort().join("|"), e=BEEF[k];
+  if(e) return e;
+  /* not a listed grudge -- build one rather than showing nothing */
+  var A=TEAMS[a], B=TEAMS[b];
+  return {name:(A?A.ab:a)+" VS "+(B?B.ab:b), since:null,
+          line:"SOMEBODY IS GOING HOME UNHAPPY."};
+}
 var TEAMKEYS=Object.keys(TEAMS);
 
 /* Cross a type with a school. Everything downstream — grammars, payload, timing
@@ -3887,6 +3976,256 @@ G.runacross=function(u,C){
             fit:.4,track:.2,a:cl(v3*4,0,1)});
   }
   return {layers:o,phase:ph};
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RIVALRY — five ways for two colours to go at each other
+
+   Authored against what the QCS6490 actually charges for, measured this
+   session: 89 full-canvas translucent layers cost 0.5 ms, while 341 text
+   layers hit 26.6 ms at p99. Colour and geometry are nearly free on that
+   tiler; type is the thing with the tail.
+
+   So these are built out of the cheap stuff -- floods, bands, triangles, rings
+   -- and spend their whole text budget on one rivalry name and one line. That
+   is also the right creative answer: a rivalry reads as two colours refusing to
+   share a screen, not as a paragraph about it.
+
+   H is the home school, V the visitor. Both are always on screen and neither
+   is decoration. */
+function rivColors(C){
+  var H=C.T, V=TEAMS[C.ev.opp]||C.T;
+  return {H:H, V:V, hp:H.p, vp:V.p,
+          hd:H.deep, vd:V.deep,
+          /* if the two primaries are close, push the visitor darker so the
+             seam stays legible -- Alabama vs Arkansas is two reds */
+          vp2:(Math.abs(rgbOf(H.p)[0]-rgbOf(V.p)[0])+
+               Math.abs(rgbOf(H.p)[1]-rgbOf(V.p)[1])+
+               Math.abs(rgbOf(H.p)[2]-rgbOf(V.p)[2])<90)
+               ? mixHex(V.p,"#000000",0.45) : V.p};
+}
+
+/* ── 1 · THE COLLISION ─────────────────────────────────────────────────── */
+G.clash=function(u,C){
+  var c=rivColors(C), o=[], i, ph="", B=beefOf(C.ev.team,C.ev.opp);
+  o.push({k:"fill",col:"#05070B"});
+  var hit=0.46, seam=0.5;
+  if(u<hit){
+    /* the charge: both walls accelerate toward the middle */
+    ph="the charge";
+    var v=eio(seg(u,0,hit));
+    var lw=v*0.5, rw=v*0.5;
+    o.push({k:"band",x:0,y:0,w:lw,h:1,col:c.hp});
+    o.push({k:"band",x:1-rw,y:0,w:rw,h:1,col:c.vp2});
+    /* speed lines ahead of each wall */
+    for(i=0;i<10;i++){
+      var sy=0.05+i*0.095;
+      o.push({k:"band",x:lw,y:sy,w:0.06*v,h:0.006,col:hexA(c.hp,0.5)});
+      o.push({k:"band",x:1-rw-0.06*v,y:sy+0.045,w:0.06*v,h:0.006,col:hexA(c.vp2,0.5)});
+    }
+    o.push({k:"glow",x:lw,y:0.5,r:0.10+0.10*v,col:hexA(c.hp,0.35),a:1});
+    o.push({k:"glow",x:1-rw,y:0.5,r:0.10+0.10*v,col:hexA(c.vp2,0.35),a:1});
+  }
+  else if(u<0.60){
+    /* IMPACT */
+    ph="impact";
+    var iv=seg(u,hit,0.60);
+    o.push({k:"band",x:0,y:0,w:0.5,h:1,col:c.hp});
+    o.push({k:"band",x:0.5,y:0,w:0.5,h:1,col:c.vp2});
+    o.push({k:"flash",a:(1-iv)*0.9});
+    for(i=0;i<4;i++)
+      o.push({k:"ring",x:0.5,y:0.5,r:0.05+iv*(0.5+i*0.18),col:"#FFFFFF",
+              w:Math.max(1,9*(1-iv)),a:(1-iv)*0.5});
+    /* shards thrown from the seam, each side keeping its own colour */
+    for(i=0;i<26;i++){
+      var dir=(i%2)?1:-1, sp=0.05+det(i+1301)*0.55;
+      o.push({k:"tri",x:0.5+dir*sp*iv,y:0.08+det(i+1311)*0.84,
+              w:0.02+det(i+1321)*0.05,h:0.03+det(i+1331)*0.07,
+              col:hexA(dir>0?c.vp2:c.hp,1-iv*0.6),dir:(i%3)?"up":"down"});
+    }
+  }
+  else if(u<0.86){
+    /* the seam fights */
+    ph="the seam";
+    var sv=seg(u,0.60,0.86);
+    seam=0.5+Math.sin(sv*14)*0.06*(1-sv)+sv*0.12;   /* home pushes through */
+    o.push({k:"band",x:0,y:0,w:seam,h:1,col:c.hp});
+    o.push({k:"band",x:seam,y:0,w:1-seam,h:1,col:c.vp2});
+    for(i=0;i<20;i++){
+      var jy=i/20;
+      o.push({k:"tri",x:seam,y:jy+0.025,w:0.03,h:0.05,
+              col:(i%2)?c.hp:c.vp2,dir:(i%2)?"down":"up"});
+    }
+    o.push({k:"band",x:seam-0.004,y:0,w:0.008,h:1,col:hexA("#FFFFFF",0.7)});
+    o.push({k:"word",t:B.name,x:0.5,y:0.46,h:0.10,col:"#FFFFFF",fit:0.86,track:0.06,
+            a:cl(sv*3,0,1)});
+  }
+  else{
+    ph="lockup";
+    var lv=seg(u,0.86,1);
+    o.push({k:"band",x:0,y:0,w:0.72,h:1,col:c.hp});
+    o.push({k:"band",x:0.72,y:0,w:0.28,h:1,col:c.vp2});
+    o.push({k:"word",t:c.H.word,x:0.36,y:0.44,h:0.20,col:"#FFFFFF",fit:0.62,track:0.02});
+    o.push({k:"word",t:B.name,x:0.36,y:0.62,h:0.045,col:hexA("#FFFFFF",0.75),
+            fit:0.56,track:0.16,a:cl(lv*3,0,1)});
+  }
+  o.push({k:"vig",a:0.28});
+  return {layers:o,phase:ph};
+};
+
+/* ── 2 · TUG OF WAR ────────────────────────────────────────────────────── */
+G.tug=function(u,C){
+  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
+  /* the seam lurches -- each lurch is one side winning a pull, and the steps
+     are discrete because a tug of war is not a smooth function */
+  /* Home holds 0..seam, so the sequence has to END HIGH. The first cut trended
+     down and finished at 0.08 -- a tug of war the home side loses in its own
+     building, which is not the cue anybody asked for. It still gives ground
+     three times, because a rope that only moves one way is not a contest. */
+  var pulls=[0.50,0.38,0.55,0.30,0.48,0.22,0.44,0.34,0.62,0.50,0.74,0.88];
+  var k=Math.min(pulls.length-1,Math.floor(u*pulls.length));
+  var kn=Math.min(pulls.length-1,k+1), fr=(u*pulls.length)%1;
+  var seam=mix(pulls[k],pulls[kn],eb(cl(fr*1.6,0,1)));
+  var jolt=Math.pow(1-fr,3);
+  o.push({k:"fill",col:c.vp2});
+  o.push({k:"band",x:0,y:0,w:seam,h:1,col:c.hp});
+  /* chevrons pushing from each side, marching toward the seam */
+  for(i=0;i<16;i++){
+    var cy=i/16+0.03;
+    var hx=((u*0.9+i*0.06)%1)*seam;
+    o.push({k:"tri",x:hx,y:cy,w:0.035,h:0.04,col:hexA("#FFFFFF",0.10),dir:"down"});
+    var vx=1-((u*0.9+i*0.07)%1)*(1-seam);
+    o.push({k:"tri",x:vx,y:cy+0.03,w:0.035,h:0.04,col:hexA("#FFFFFF",0.10),dir:"up"});
+  }
+  /* the rope */
+  o.push({k:"band",x:0,y:0.495,w:1,h:0.01,col:hexA("#E8DFC8",0.55)});
+  o.push({k:"band",x:seam-0.010,y:0.44,w:0.020,h:0.12,col:"#FFFFFF"});
+  o.push({k:"glow",x:seam,y:0.5,r:0.10+0.12*jolt,col:hexA("#FFFFFF",0.30*jolt),a:1});
+  if(jolt>0.25) o.push({k:"flash",a:0.20*jolt});
+  /* territory, as a number nobody has to read twice */
+  o.push({k:"word",t:Math.round(seam*100)+"",x:0.5,y:0.20,h:0.13,col:"#FFFFFF",
+          fit:0.30,track:0.02,sc:1+0.12*jolt});
+  o.push({k:"word",t:B.name,x:0.5,y:0.86,h:0.045,col:hexA("#FFFFFF",0.7),
+          fit:0.70,track:0.16});
+  o.push({k:"vig",a:0.30});
+  return {layers:o,phase:"tug · "+Math.round(seam*100)+"/"+Math.round((1-seam)*100)};
+};
+
+/* ── 3 · THE RIP ───────────────────────────────────────────────────────── */
+G.rip=function(u,C){
+  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
+  o.push({k:"fill",col:c.vp2});
+  var open=(u<0.14)?0:eio(seg(u,0.14,0.72));
+  /* the tear: a jagged column that widens, home colour behind it */
+  var N=22;
+  if(open>0){
+    o.push({k:"band",x:0.5-open*0.55,y:0,w:open*1.10,h:1,col:c.hp});
+    for(i=0;i<N;i++){
+      var ty=i/N, w2=open*0.55, jag=det(i+1401)*0.05*open;
+      o.push({k:"tri",x:0.5-w2-jag,y:ty+0.5/N,w:0.045,h:1.0/N,
+              col:c.vp2,dir:(i%2)?"down":"up"});
+      o.push({k:"tri",x:0.5+w2+jag,y:ty+0.5/N,w:0.045,h:1.0/N,
+              col:c.vp2,dir:(i%2)?"up":"down"});
+    }
+    o.push({k:"band",x:0.5-open*0.55,y:0,w:0.005,h:1,col:hexA("#FFFFFF",0.6)});
+    o.push({k:"band",x:0.5+open*0.55,y:0,w:0.005,h:1,col:hexA("#FFFFFF",0.6)});
+  }
+  /* the crack, before it gives */
+  if(u<0.20){
+    var cv=seg(u,0,0.20);
+    for(i=0;i<14;i++)
+      o.push({k:"band",x:0.5+(det(i+1411)-0.5)*0.03*cv,y:i/14,w:0.004,h:1/14,
+              col:hexA("#FFFFFF",0.25+0.5*cv),rot:(det(i+1421)-0.5)*10});
+    if(cv>0.7) o.push({k:"flash",a:(cv-0.7)*1.6});
+  }
+  if(u>0.72){
+    var lv=seg(u,0.72,1);
+    o.push({k:"word",t:c.H.word,x:0.5,y:0.44,h:0.22,col:"#FFFFFF",fit:0.80,track:0.02,
+            a:cl(lv*4,0,1)});
+    o.push({k:"word",t:B.line,x:0.5,y:0.66,h:0.042,col:hexA("#FFFFFF",0.7*cl(lv*3,0,1)),
+            fit:0.74,track:0.14});
+  }
+  o.push({k:"vig",a:0.30});
+  return {layers:o,phase:u<0.20?"the crack":(u<0.72?"the rip":"lockup")};
+};
+
+/* ── 4 · THE MASH ──────────────────────────────────────────────────────── */
+G.mash=function(u,C){
+  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
+  o.push({k:"fill",col:"#05070B"});
+  var spin=u*5.2, tight=eio(cl(u/0.66,0,1));
+  /* A PINWHEEL, not a scatter. The first cut was 26 thin bands on black and
+     measured 67% empty -- it read as debris rather than as two colours fighting
+     for the same space. Wedges anchored at the centre and swept all the way out
+     fill the frame, and because they alternate every other wedge is the other
+     school, so the mash is structural rather than decorative. */
+  var arms=14;
+  for(i=0;i<arms;i++){
+    var ang=spin+(i/arms)*6.2832;
+    var len=0.62-0.16*tight;
+    o.push({k:"band",x:0.5,y:0.5,w:len,h:0.085+0.06*tight,
+            col:(i%2)?c.hp:c.vp2,rot:(ang*57.2958)%360});
+  }
+  /* a second, counter-rotating set so the two colours cross rather than fan */
+  for(i=0;i<arms;i++){
+    var ang2=-spin*0.7+(i/arms)*6.2832;
+    o.push({k:"band",x:0.5,y:0.5,w:0.46-0.12*tight,h:0.05+0.04*tight,
+            col:hexA((i%2)?c.vp2:c.hp,0.75),rot:(ang2*57.2958)%360});
+  }
+  /* the core stays small — it is an eye, not a wash */
+  o.push({k:"glow",x:0.5,y:0.5,r:0.05+0.10*tight,
+          col:hexA("#FFFFFF",0.25+0.35*tight),a:1});
+  if(u>0.66){
+    /* detonation: the two colours refuse to stay mixed */
+    var dv=seg(u,0.66,1);
+    o.push({k:"flash",a:cl((0.14-dv)*7,0,1)*0.9});
+    for(i=0;i<34;i++){
+      var a2=det(i+1501)*6.283, rr=dv*(0.20+det(i+1511)*0.70);
+      o.push({k:"dot",x:0.5+Math.cos(a2)*rr*0.58,y:0.5+Math.sin(a2)*rr,
+              r:(0.004+det(i+1521)*0.012)*(1-dv*0.7),
+              col:(i%2)?c.hp:c.vp2});
+    }
+    o.push({k:"word",t:B.name,x:0.5,y:0.46,h:0.11,col:"#FFFFFF",fit:0.86,track:0.06,
+            a:cl((dv-0.18)*4,0,1)});
+  }
+  o.push({k:"vig",a:0.34});
+  return {layers:o,phase:u<0.66?"the mash":"detonation"};
+};
+
+/* ── 5 · THE STAREDOWN ─────────────────────────────────────────────────── */
+G.standoff=function(u,C){
+  var c=rivColors(C), o=[], i, B=beefOf(C.ev.team,C.ev.opp);
+  /* alternating pulses, tightening, until both sides go at once */
+  var rate=2+Math.floor(u*7), ph2=(u*rate*4)%1;
+  var side=Math.floor(u*rate*4)%2;
+  var hb=(side===0)?Math.pow(1-ph2,2.4):0;
+  var vb=(side===1)?Math.pow(1-ph2,2.4):0;
+  o.push({k:"fill",col:"#05070B"});
+  var bulge=0.34+u*0.10;
+  o.push({k:"band",x:0,y:0,w:bulge+0.10*hb,h:1,col:c.hp});
+  o.push({k:"band",x:1-bulge-0.10*vb,y:0,w:bulge+0.10*vb,h:1,col:c.vp2});
+  /* the gap between them, crackling */
+  for(i=0;i<12;i++){
+    var gy=i/12+0.04;
+    var gw=(1-2*bulge)-0.10*(hb+vb);
+    o.push({k:"band",x:bulge+0.10*hb,y:gy,w:Math.max(0,gw),h:0.004,
+            col:hexA("#FFFFFF",0.06+0.26*Math.max(hb,vb)*det(i+1601))});
+  }
+  o.push({k:"glow",x:bulge+0.10*hb,y:0.5,r:0.12,col:hexA(c.hp,0.35*hb+0.08),a:1});
+  o.push({k:"glow",x:1-bulge-0.10*vb,y:0.5,r:0.12,col:hexA(c.vp2,0.35*vb+0.08),a:1});
+  o.push({k:"word",t:c.H.ab,x:bulge*0.5,y:0.5,h:0.16,col:"#FFFFFF",fit:0.22,track:0.02,
+          sc:1+0.10*hb});
+  o.push({k:"word",t:(TEAMS[C.ev.opp]||c.H).ab,x:1-bulge*0.5,y:0.5,h:0.16,col:"#FFFFFF",
+          fit:0.22,track:0.02,sc:1+0.10*vb});
+  if(u>0.88){
+    var ev2=seg(u,0.88,1);
+    o.push({k:"flash",a:cl((0.2-ev2)*5,0,1)*0.85});
+    o.push({k:"band",x:0,y:0,w:0.5,h:1,col:c.hp});
+    o.push({k:"band",x:0.5,y:0,w:0.5,h:1,col:c.vp2});
+    o.push({k:"word",t:B.name,x:0.5,y:0.46,h:0.095,col:"#FFFFFF",fit:0.86,track:0.06});
+  }
+  o.push({k:"vig",a:0.32});
+  return {layers:o,phase:u>0.88?"go":("staredown · "+(side?"visitor":"home"))};
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -6868,6 +7207,13 @@ var PHASES = {
   flyover3d:[[0,.20,"Approach","the bowl appears"],[.20,.40,"The bowl","tiers and roof"],
              [.40,.66,"Card stunt","the crowd spells it"],[.66,.86,"Pyro","3D shells"],
              [.86,1,"Lockup","school + venue"]],
+  clash:[[0,.46,"The charge","both walls accelerate"],[.46,.60,"Impact","shards and shockwave"],
+         [.60,.86,"The seam","it fights"],[.86,1,"Lockup","home takes it"]],
+  tug:[[0,1,"Pulls","twelve lurches, discrete on purpose"]],
+  rip:[[0,.20,"The crack","before it gives"],[.20,.72,"The rip","jagged, widening"],
+       [.72,1,"Lockup","through it"]],
+  mash:[[0,.66,"The mash","two spirals winding in"],[.66,1,"Detonation","they refuse to stay mixed"]],
+  standoff:[[0,.88,"Staredown","alternating, tightening"],[.88,1,"Go","both at once"]],
   probe:[[0,1,"Ladder","one axis at a time"]],
   flyover:[[0,.14,"Approach","starfield"],[.14,.30,"Exterior","floodlights"],
            [.30,.44,"The bowl","tiers"],[.44,.62,"Card stunt","the crowd spells it"],
